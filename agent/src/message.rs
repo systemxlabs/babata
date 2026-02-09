@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use serde_json::Value;
 
 pub struct Message {
     pub role: Role,
@@ -19,7 +19,7 @@ pub enum MessageKind {
     AssistantThoughts(String),
     ToolCall {
         tool_name: String,
-        args: HashMap<String, String>,
+        parameters: Value,
     },
     ToolResult {
         tool_name: String,
