@@ -49,6 +49,8 @@ impl Tool for BashTool {
     }
 
     async fn execute(&self, args: Value) -> BabataResult<String> {
+        debug!("Executing bash command: {args}",);
+
         let command = args["command"]
             .as_str()
             .ok_or_else(|| BabataError::tool("Missing command"))?;
@@ -56,11 +58,6 @@ impl Tool for BashTool {
         let timeout_ms = args["timeout_ms"]
             .as_u64()
             .unwrap_or(self.default_timeout_ms);
-
-        debug!(
-            "Executing bash command (timeout: {}ms): {}",
-            timeout_ms, command
-        );
 
         // Run command with timeout
         let timeout_duration = std::time::Duration::from_millis(timeout_ms);

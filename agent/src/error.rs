@@ -39,3 +39,9 @@ impl std::error::Error for BabataError {
         None
     }
 }
+
+impl From<serde_json::Error> for BabataError {
+    fn from(err: serde_json::Error) -> Self {
+        BabataError::Provider(err.to_string(), Location::caller())
+    }
+}

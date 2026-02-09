@@ -16,3 +16,4 @@ mime = { workspace = true }
 serde_json = { workspace = true }
 log = { workspace = true }
 tokio = { workspace = true }
+reqwest = { workspace = true }
