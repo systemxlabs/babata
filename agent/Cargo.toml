@@ -6,6 +6,10 @@ homepage.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[[bin]]
+name = "babata-cli"
+path = "src/bin/cli.rs"
+
 [dependencies]
 async-trait = { workspace = true }
 mime = { workspace = true }
