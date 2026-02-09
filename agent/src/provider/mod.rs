@@ -23,7 +23,9 @@ pub struct GenerationReqest<'a> {
     pub tools: &'a [ToolSpec],
 }
 
-pub struct GenerationResponse {}
+pub struct GenerationResponse {
+    pub message: Message,
+}
 
 pub struct InteractionRequest {}
 

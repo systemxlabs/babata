@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 use crate::{
     BabataResult,
     error::BabataError,
-    message::{Content, Message},
+    message::{Content, Message, ToolCall},
     provider::{
         GenerationReqest, GenerationResponse, InteractionRequest, InteractionResponse, Provider,
     },
@@ -155,7 +155,7 @@ impl Provider for OpenAIProvider {
 
         debug!("Sending OpenAI chat completions request: {body}");
 
-        let _response = self
+        let response = self
             .client
             .post(format!("{}/chat/completions", self.base_url))
             .header("Authorization", format!("Bearer {}", self.api_key))
@@ -167,7 +167,54 @@ impl Provider for OpenAIProvider {
                 BabataError::provider(format!("Failed to send request to OpenAI: {}", e))
             })?;
 
-        todo!()
+        let response_body: Value = response
+            .json()
+            .await
+            .map_err(|e| BabataError::provider(format!("Failed to parse response as json: {e}")))?;
+        debug!(
+            "OpenAI response: {}",
+            serde_json::to_string_pretty(&response_body)?
+        );
+
+        // Check for errors
+        if let Some(error) = response_body.get("error") {
+            return Err(BabataError::provider(format!(
+                "OpenAI API error: {}",
+                error
+            )));
+        }
+
+        let choice = response_body["choices"]
+            .get(0)
+            .ok_or_else(|| BabataError::provider("No choices in response"))?;
+
+        let message = &choice["message"];
+
+        // Check for tool calls
+        if let Some(tool_calls) = message.get("tool_calls")
+            && let Some(calls) = tool_calls.as_array()
+        {
+            let parsed_calls: Vec<ToolCall> = calls
+                .iter()
+                .map(|tc| ToolCall {
+                    call_id: tc["id"].as_str().unwrap_or("").to_string(),
+                    tool_name: tc["function"]["name"].as_str().unwrap_or("").to_string(),
+                    args: tc["function"]["arguments"].clone(),
+                })
+                .collect();
+
+            if !parsed_calls.is_empty() {
+                return Ok(GenerationResponse {
+                    message: Message::AssistantToolCalls(parsed_calls),
+                });
+            }
+        }
+
+        let content = message["content"].as_str().unwrap_or("").to_string();
+
+        Ok(GenerationResponse {
+            message: Message::AssistantResponse(vec![Content::Text(content)]),
+        })
     }
 
     async fn interact(&self, _request: InteractionRequest) -> BabataResult<InteractionResponse> {
