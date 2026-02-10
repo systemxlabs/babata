@@ -48,6 +48,23 @@ impl Config {
             }
         }
 
+        for (provider_name, provider_config) in &self.providers {
+            let parsed = reqwest::Url::parse(&provider_config.base_url).map_err(|err| {
+                BabataError::config(format!(
+                    "Provider '{}' has invalid base_url '{}': {}",
+                    provider_name, provider_config.base_url, err
+                ))
+            })?;
+
+            let scheme = parsed.scheme();
+            if scheme != "http" && scheme != "https" {
+                return Err(BabataError::config(format!(
+                    "Provider '{}' has unsupported base_url scheme '{}', only http/https are allowed",
+                    provider_name, scheme
+                )));
+            }
+        }
+
         let mut has_main_agent = false;
         for (agent_name, agent_config) in &self.agents {
             if agent_name == "main" {
@@ -139,5 +156,36 @@ mod tests {
         let parsed: Config = serde_json::from_str(&json).expect("deserialize config from json");
 
         assert_eq!(config, parsed);
+    }
+
+    #[test]
+    fn validate_rejects_invalid_provider_url() {
+        let config = Config {
+            default_system_prompt: "prompt".to_string(),
+            default_skills: vec![],
+            providers: HashMap::from([(
+                "bad-provider".to_string(),
+                ProviderConfig {
+                    base_url: "not-a-url".to_string(),
+                    api_key: "test-api-key".to_string(),
+                },
+            )]),
+            agents: HashMap::from([(
+                "main".to_string(),
+                AgentConfig {
+                    system_prompt: None,
+                    skills: None,
+                    provider: "bad-provider".to_string(),
+                    model: "test-model".to_string(),
+                },
+            )]),
+        };
+
+        let err = config
+            .validate()
+            .expect_err("invalid provider URL should fail");
+        let err_msg = err.to_string();
+        assert!(err_msg.contains("invalid base_url"));
+        assert!(err_msg.contains("bad-provider"));
     }
 }
