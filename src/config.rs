@@ -4,6 +4,34 @@ use crate::{BabataResult, error::BabataError};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
+pub struct AgentConfig {
+    // If None, use default system prompt
+    pub system_prompt: Option<String>,
+    // If None, use default skills
+    pub skills: Option<Vec<SkillConfig>>,
+    pub provider: String,
+    pub model: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
+pub struct ProviderConfig {
+    // The completed URL for the provider's API
+    pub base_url: String,
+    // The API key for authentication
+    pub api_key: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
+pub struct SkillConfig {
+    // Whether the skill is enabled
+    pub enabled: bool,
+    // Whether the whole skill.md is inlined in prompt
+    pub inlined: bool,
+    // Absolute path to the skill dir
+    pub path: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct Config {
     pub default_system_prompt: String,
     pub default_skills: Vec<SkillConfig>,
@@ -84,34 +112,6 @@ impl Config {
         }
         Ok(())
     }
-}
-
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
-pub struct AgentConfig {
-    // If None, use default system prompt
-    pub system_prompt: Option<String>,
-    // If None, use default skills
-    pub skills: Option<Vec<SkillConfig>>,
-    pub provider: String,
-    pub model: String,
-}
-
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
-pub struct ProviderConfig {
-    // The completed URL for the provider's API
-    pub base_url: String,
-    // The API key for authentication
-    pub api_key: String,
-}
-
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
-pub struct SkillConfig {
-    // Whether the skill is enabled
-    pub enabled: bool,
-    // Whether the whole skill.md is inlined in prompt
-    pub inlined: bool,
-    // Absolute path to the skill dir
-    pub path: String,
 }
 
 #[cfg(test)]
