@@ -1,40 +1,47 @@
+use std::collections::HashMap;
+
+use crate::{BabataResult, error::BabataError};
+
 pub struct Config {
-    pub system_prompt: String,
-    pub providers: Vec<ProviderConfig>,
-    pub skills: Vec<SkillConfig>,
+    pub default_system_prompt: String,
+    pub default_skills: Vec<SkillConfig>,
+    pub providers: HashMap<String, ProviderConfig>,
+    pub agents: HashMap<String, AgentConfig>,
+}
+
+impl Config {
+    pub fn validate(&self) -> BabataResult<()> {
+        for skill in &self.default_skills {
+            if std::fs::exists(&skill.path)? {
+                return Err(BabataError::config(format!(
+                    "Default skill path '{}' does not exist",
+                    skill.path
+                )));
+            }
+        }
+
+        for (agent_name, agent_config) in &self.agents {
+            if !self.providers.contains_key(&agent_config.provider) {
+                return Err(BabataError::config(format!(
+                    "Agent '{}' references unknown provider '{}'",
+                    agent_name, agent_config.provider
+                )));
+            }
+        }
+        Ok(())
+    }
+}
+
+pub struct AgentConfig {
+    // If None, use default system prompt
+    pub system_prompt: Option<String>,
+    // If None, use default skills
+    pub skills: Option<Vec<SkillConfig>>,
+    pub provider: String,
+    pub model: String,
 }
 
 pub struct ProviderConfig {
-    // Whether the provider is enabled
-    pub enabled: bool,
-    // The name of the provider, e.g., "azure", "openai", "custom"
-    pub name: String,
-
-    pub openai: Option<OpenAIProviderConfig>,
-    pub anthropic: Option<AnthropicProviderConfig>,
-}
-
-pub struct OpenAIProviderConfig {
-    // The model to use, e.g., "gpt-4", "gpt-3.5-turbo"
-    pub model: String,
-    // The API kind, e.g., "generate" for one-shot generation, "interact" for multi-turn interaction
-    pub api_kind: ApiKind,
-    // The completed URL for the provider's API
-    pub base_url: String,
-    // The API key for authentication
-    pub api_key: String,
-}
-
-pub enum ApiKind {
-    // One-shot
-    Generation,
-    // Multi-turn interaction
-    Interaction,
-}
-
-pub struct AnthropicProviderConfig {
-    // The model to use, e.g., "gpt-4", "gpt-3.5-turbo"
-    pub model: String,
     // The completed URL for the provider's API
     pub base_url: String,
     // The API key for authentication
