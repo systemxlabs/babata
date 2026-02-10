@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    channel::Channel, config::Config, memory::Memory, provider::Provider, message::MessageStore,
+    channel::Channel, config::Config, memory::Memory, message::MessageStore, provider::Provider,
     tool::Tool,
 };
 

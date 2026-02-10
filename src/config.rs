@@ -1,6 +1,6 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::collections::HashMap;
 
-use crate::{BabataResult, error::BabataError};
+use crate::{BabataResult, error::BabataError, utils::babata_dir};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
@@ -41,13 +41,7 @@ pub struct Config {
 
 impl Config {
     pub fn load() -> BabataResult<Self> {
-        let home_dir = std::env::var("HOME")
-            .or_else(|_| std::env::var("USERPROFILE"))
-            .map_err(|_| {
-                BabataError::config("Failed to resolve home directory from HOME or USERPROFILE")
-            })?;
-
-        let config_path = PathBuf::from(home_dir).join(".babata").join("config.json");
+        let config_path = babata_dir()?.join("config.json");
         let raw = std::fs::read_to_string(&config_path).map_err(|err| {
             BabataError::config(format!(
                 "Failed to read config file '{}': {}",

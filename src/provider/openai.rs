@@ -51,17 +51,17 @@ impl OpenAIProvider {
         let mut json_messages = Vec::with_capacity(messages.len());
         for message in messages {
             match message {
-                Message::UserPrompt(contents) => {
-                    let json_contents = contents
+                Message::UserPrompt { content } => {
+                    let json_contents = content
                         .iter()
                         .map(|content| match content {
-                            Content::Text(text) => {
+                            Content::Text { text } => {
                                 json!({
                                     "type": "text",
                                     "text": text
                                 })
                             }
-                            Content::ImageUrl(url) => {
+                            Content::ImageUrl { url } => {
                                 json!({
                                     "type": "image_url",
                                     "image_url": json!({ "url": url })
@@ -83,7 +83,7 @@ impl OpenAIProvider {
                         "content": json_contents
                     }));
                 }
-                Message::AssistantToolCalls(calls) => {
+                Message::AssistantToolCalls { calls } => {
                     json_messages.push(json!({
                         "role": "assistant",
                         "tool_calls": calls.iter().map(|call| {
@@ -98,17 +98,17 @@ impl OpenAIProvider {
                         }).collect::<Vec<_>>()
                     }));
                 }
-                Message::AssistantResponse(contents) => {
-                    let mut json_contents = Vec::with_capacity(contents.len());
-                    for content in contents {
-                        match content {
-                            Content::Text(text) => {
+                Message::AssistantResponse { content } => {
+                    let mut json_contents = Vec::with_capacity(content.len());
+                    for part in content {
+                        match part {
+                            Content::Text { text } => {
                                 json_contents.push(json!({
                                     "type": "text",
                                     "text": text
                                 }));
                             }
-                            Content::ImageUrl(_) | Content::ImageData { .. } => {
+                            Content::ImageUrl { .. } | Content::ImageData { .. } => {
                                 // This message might be created by other provider models
                                 warn!("OpenAI assistant responses do not support images yet");
                             }
@@ -205,7 +205,9 @@ impl Provider for OpenAIProvider {
 
             if !parsed_calls.is_empty() {
                 return Ok(GenerationResponse {
-                    message: Message::AssistantToolCalls(parsed_calls),
+                    message: Message::AssistantToolCalls {
+                        calls: parsed_calls,
+                    },
                 });
             }
         }
@@ -215,7 +217,9 @@ impl Provider for OpenAIProvider {
         };
 
         Ok(GenerationResponse {
-            message: Message::AssistantResponse(vec![Content::Text(content)]),
+            message: Message::AssistantResponse {
+                content: vec![Content::Text { text: content }],
+            },
         })
     }
 
