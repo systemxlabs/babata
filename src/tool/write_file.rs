@@ -76,7 +76,11 @@ impl Tool for WriteFileTool {
             .await
             .map_err(|e| BabataError::tool(format!("Failed to write file: {}", e)))?;
 
-        Ok(format!("Successfully wrote {} bytes to {}", content.len(), path))
+        Ok(format!(
+            "Successfully wrote {} bytes to {}",
+            content.len(),
+            path
+        ))
     }
 }
 
@@ -90,22 +94,22 @@ mod tests {
         let tool = WriteFileTool::new();
         let temp_dir = std::env::temp_dir();
         let test_file = temp_dir.join("babata_test_write.txt");
-        
+
         // Clean up before test
         let _ = std::fs::remove_file(&test_file);
-        
+
         let args = json!({
             "path": test_file.to_str().unwrap(),
             "content": "Hello, Babata!"
         });
-        
+
         let result = tool.execute(args).await;
         assert!(result.is_ok(), "Write operation should succeed");
-        
+
         // Verify file was created
         let content = std::fs::read_to_string(&test_file).expect("File should exist");
         assert_eq!(content, "Hello, Babata!");
-        
+
         // Clean up
         let _ = std::fs::remove_file(&test_file);
     }
@@ -117,26 +121,26 @@ mod tests {
         let test_dir = temp_dir.join("babata_test_dir");
         let test_subdir = test_dir.join("subdir");
         let test_file = test_subdir.join("test.txt");
-        
+
         // Clean up before test
         let _ = std::fs::remove_dir_all(&test_dir);
-        
+
         let args = json!({
             "path": test_file.to_str().unwrap(),
             "content": "Test content"
         });
-        
+
         let result = tool.execute(args).await;
         assert!(result.is_ok(), "Write operation should create directories");
-        
+
         // Verify directories and file were created
         assert!(test_dir.exists(), "Parent directory should exist");
         assert!(test_subdir.exists(), "Subdirectory should exist");
         assert!(test_file.exists(), "File should exist");
-        
+
         let content = std::fs::read_to_string(&test_file).expect("File should be readable");
         assert_eq!(content, "Test content");
-        
+
         // Clean up
         let _ = std::fs::remove_dir_all(&test_dir);
     }
@@ -147,10 +151,15 @@ mod tests {
         let args = json!({
             "content": "Some content"
         });
-        
+
         let result = tool.execute(args).await;
         assert!(result.is_err(), "Should fail when path is missing");
-        assert!(result.unwrap_err().to_string().contains("Missing required parameter: path"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Missing required parameter: path")
+        );
     }
 
     #[tokio::test]
@@ -159,9 +168,14 @@ mod tests {
         let args = json!({
             "path": "/tmp/test.txt"
         });
-        
+
         let result = tool.execute(args).await;
         assert!(result.is_err(), "Should fail when content is missing");
-        assert!(result.unwrap_err().to_string().contains("Missing required parameter: content"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Missing required parameter: content")
+        );
     }
 }
