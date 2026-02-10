@@ -16,6 +16,7 @@ repository = "https://github.com/systemxlabs/babata"
 [workspace.dependencies]
 async-trait = "0.1"
 mime = "0.3.17"
+serde = "1"
 serde_json = "1"
 log = "0.4"
 tokio = { version = "1", features = ["full"] }

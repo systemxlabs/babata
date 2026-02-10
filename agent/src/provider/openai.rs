@@ -1,5 +1,6 @@
 use log::{debug, warn};
-use reqwest::Client;
+use reqwest::{Client, StatusCode};
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::{
@@ -167,39 +168,38 @@ impl Provider for OpenAIProvider {
                 BabataError::provider(format!("Failed to send request to OpenAI: {}", e))
             })?;
 
-        let response_body: Value = response
+        // Check for errors
+        let status = response.status();
+        if response.status() != StatusCode::OK {
+            let body = response.text().await.unwrap_or_default();
+            return Err(BabataError::provider(format!(
+                "OpenAI API returned error status {status}: {body}",
+            )));
+        }
+
+        let mut response_body: ChatCompletionsResponse = response
             .json()
             .await
-            .map_err(|e| BabataError::provider(format!("Failed to parse response as json: {e}")))?;
+            .map_err(|e| BabataError::provider(format!("Failed to parse response body: {e}")))?;
         debug!(
             "OpenAI response: {}",
             serde_json::to_string_pretty(&response_body)?
         );
 
-        // Check for errors
-        if let Some(error) = response_body.get("error") {
-            return Err(BabataError::provider(format!(
-                "OpenAI API error: {}",
-                error
-            )));
+        if response_body.choices.is_empty() {
+            return Err(BabataError::provider("No choices in response"));
         }
 
-        let choice = response_body["choices"]
-            .get(0)
-            .ok_or_else(|| BabataError::provider("No choices in response"))?;
-
-        let message = &choice["message"];
+        let choice = response_body.choices.remove(0);
 
         // Check for tool calls
-        if let Some(tool_calls) = message.get("tool_calls")
-            && let Some(calls) = tool_calls.as_array()
-        {
-            let parsed_calls: Vec<ToolCall> = calls
+        if let Some(tool_calls) = choice.message.tool_calls {
+            let parsed_calls: Vec<ToolCall> = tool_calls
                 .iter()
                 .map(|tc| ToolCall {
-                    call_id: tc["id"].as_str().unwrap_or("").to_string(),
-                    tool_name: tc["function"]["name"].as_str().unwrap_or("").to_string(),
-                    args: tc["function"]["arguments"].clone(),
+                    call_id: tc.id.clone(),
+                    tool_name: tc.function.name.clone(),
+                    args: tc.function.arguments.clone(),
                 })
                 .collect();
 
@@ -210,7 +210,9 @@ impl Provider for OpenAIProvider {
             }
         }
 
-        let content = message["content"].as_str().unwrap_or("").to_string();
+        let Some(content) = choice.message.content else {
+            return Err(BabataError::provider("No content in assistant message"));
+        };
 
         Ok(GenerationResponse {
             message: Message::AssistantResponse(vec![Content::Text(content)]),
@@ -220,4 +222,41 @@ impl Provider for OpenAIProvider {
     async fn interact(&self, _request: InteractionRequest) -> BabataResult<InteractionResponse> {
         todo!()
     }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ChatCompletionsResponse {
+    pub id: String,
+    pub object: String,
+    pub created: u64,
+    pub model: String,
+    pub choices: Vec<ChatCompletionChoice>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ChatCompletionChoice {
+    pub index: u32,
+    pub message: ChatCompletionsMessage,
+    pub finish_reason: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ChatCompletionsMessage {
+    pub role: String,
+    pub content: Option<String>,
+    pub refusal: Option<String>,
+    pub tool_calls: Option<Vec<ChatCompletionsMessageToolCall>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ChatCompletionsMessageToolCall {
+    pub id: String,
+    pub r#type: String,
+    pub function: ChatCompletionsMessageToolCallFunction,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ChatCompletionsMessageToolCallFunction {
+    pub name: String,
+    pub arguments: Value,
 }
