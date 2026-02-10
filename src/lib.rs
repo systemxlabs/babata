@@ -1,4 +1,5 @@
 pub mod agent;
+pub mod channel;
 pub mod cli;
 pub mod config;
 pub mod error;
