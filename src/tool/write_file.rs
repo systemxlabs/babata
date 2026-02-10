@@ -53,11 +53,11 @@ impl Tool for WriteFileTool {
     async fn execute(&self, args: Value) -> BabataResult<String> {
         let path = args["path"]
             .as_str()
-            .ok_or_else(|| BabataError::tool("Missing path"))?;
+            .ok_or_else(|| BabataError::tool("Missing required parameter: path"))?;
 
         let content = args["content"]
             .as_str()
-            .ok_or_else(|| BabataError::tool("Missing content"))?;
+            .ok_or_else(|| BabataError::tool("Missing required parameter: content"))?;
 
         let path = shellexpand::tilde(path).to_string();
         debug!("Writing to file: {}", path);
@@ -150,7 +150,7 @@ mod tests {
         
         let result = tool.execute(args).await;
         assert!(result.is_err(), "Should fail when path is missing");
-        assert!(result.unwrap_err().to_string().contains("Missing path"));
+        assert!(result.unwrap_err().to_string().contains("Missing required parameter: path"));
     }
 
     #[tokio::test]
@@ -162,6 +162,6 @@ mod tests {
         
         let result = tool.execute(args).await;
         assert!(result.is_err(), "Should fail when content is missing");
-        assert!(result.unwrap_err().to_string().contains("Missing content"));
+        assert!(result.unwrap_err().to_string().contains("Missing required parameter: content"));
     }
 }
