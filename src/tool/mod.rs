@@ -8,7 +8,7 @@ pub use write_file::*;
 
 use crate::BabataResult;
 use serde_json::Value;
-use std::fmt::Debug;
+use std::{fmt::Debug, sync::Arc};
 
 #[async_trait::async_trait]
 pub trait Tool: Debug + Send + Sync {
@@ -21,4 +21,12 @@ pub struct ToolSpec {
     pub name: String,
     pub description: String,
     pub parameters: Value,
+}
+
+pub fn build_tools() -> Vec<Arc<dyn Tool>> {
+    vec![
+        Arc::new(BashTool::new()),
+        Arc::new(ReadFileTool::new()),
+        Arc::new(WriteFileTool::new()),
+    ]
 }

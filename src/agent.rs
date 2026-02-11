@@ -6,7 +6,7 @@ use crate::{
     memory::Memory,
     message::MessageStore,
     provider::{Provider, build_providers},
-    tool::{BashTool, ReadFileTool, Tool, WriteFileTool},
+    tool::{Tool, build_tools},
 };
 
 pub struct AgentLoop {
@@ -24,11 +24,7 @@ impl AgentLoop {
         let channels = Vec::new();
         let message_store = MessageStore::new().expect("Failed to initialize message store");
         let memory = Memory {};
-        let tools: Vec<Arc<dyn Tool>> = vec![
-            Arc::new(BashTool::new()),
-            Arc::new(ReadFileTool::new()),
-            Arc::new(WriteFileTool::new()),
-        ];
+        let tools = build_tools();
 
         Self {
             config,
