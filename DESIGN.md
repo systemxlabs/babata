@@ -17,7 +17,7 @@ enable: false
 ```
 
 ### Inline skill
-Add `inline: true` in skill.md yaml section.
+Add `inline: true` in skill.md yaml section. This will load the whole SKILL.md in system prompt.
 ```
 ---
 name: pdf-processing

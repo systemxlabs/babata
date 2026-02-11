@@ -1,0 +1,118 @@
+use std::path::{Path, PathBuf};
+
+use crate::{BabataResult, error::BabataError, utils::babata_dir};
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Skill {
+    pub path: PathBuf,
+    pub headers: serde_yaml::Value,
+    pub body: String,
+}
+
+pub fn load_skills() -> BabataResult<Vec<Skill>> {
+    let dir = babata_dir()?.join("skills");
+    load_skills_from_dir(&dir)
+}
+
+fn load_skills_from_dir(dir: &Path) -> BabataResult<Vec<Skill>> {
+    if !dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    if !dir.is_dir() {
+        return Err(BabataError::config(format!(
+            "Skills path '{}' is not a directory",
+            dir.display()
+        )));
+    }
+
+    let mut skills = Vec::new();
+    let entries = std::fs::read_dir(dir).map_err(|err| {
+        BabataError::config(format!(
+            "Failed to read skills directory '{}': {}",
+            dir.display(),
+            err
+        ))
+    })?;
+
+    for entry in entries {
+        let entry = entry.map_err(|err| {
+            BabataError::config(format!(
+                "Failed to read skills directory entry in '{}': {}",
+                dir.display(),
+                err
+            ))
+        })?;
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+
+        let skill_path = path.join("SKILL.md");
+        if !skill_path.is_file() {
+            continue;
+        }
+
+        let content = std::fs::read_to_string(&skill_path).map_err(|err| {
+            BabataError::config(format!(
+                "Failed to read skill file '{}': {}",
+                skill_path.display(),
+                err
+            ))
+        })?;
+        let (headers, body) = parse_skill_content(&content, &skill_path)?;
+        skills.push(Skill {
+            path: skill_path,
+            headers,
+            body,
+        });
+    }
+
+    skills.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(skills)
+}
+
+fn parse_skill_content(content: &str, path: &Path) -> BabataResult<(serde_yaml::Value, String)> {
+    let mut lines = content.lines();
+    let Some(first) = lines.next() else {
+        return Ok((serde_yaml::Value::Null, String::new()));
+    };
+    if first != "---" {
+        return Ok((serde_yaml::Value::Null, content.to_string()));
+    }
+
+    let mut header_lines = Vec::new();
+    let mut body_lines = Vec::new();
+    let mut in_headers = true;
+
+    for line in lines {
+        if in_headers {
+            if line == "---" {
+                in_headers = false;
+                continue;
+            }
+            header_lines.push(line);
+        } else {
+            body_lines.push(line);
+        }
+    }
+
+    if in_headers {
+        return Err(BabataError::config(format!(
+            "Skill file '{}' starts with '---' but has no closing '---'",
+            path.display()
+        )));
+    }
+
+    let header_raw = header_lines.join("\n");
+    let body = body_lines.join("\n");
+    let headers = serde_yaml::from_str::<serde_yaml::Value>(&header_raw).map_err(|err| {
+        BabataError::config(format!(
+            "Failed to parse skill headers in '{}': {}",
+            path.display(),
+            err
+        ))
+    })?;
+
+    Ok((headers, body))
+}
