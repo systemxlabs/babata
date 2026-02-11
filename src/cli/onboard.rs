@@ -136,13 +136,7 @@ fn prompt_provider_setup() -> BabataResult<Option<(String, ProviderConfig)>> {
     match selection.trim() {
         "1" | "openai" => {
             let api_key = prompt_line("API key")?;
-            Ok(Some((
-                "openai".to_string(),
-                ProviderConfig {
-                    base_url: "https://api.openai.com/v1".to_string(),
-                    api_key,
-                },
-            )))
+            Ok(Some(("openai".to_string(), ProviderConfig { api_key })))
         }
         "2" | "skip" => Ok(None),
         _ => Err(BabataError::config("Invalid provider selection")),

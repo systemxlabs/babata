@@ -22,13 +22,18 @@ pub struct OpenAIProvider {
 }
 
 impl OpenAIProvider {
-    pub fn new(api_key: &str, base_url: &str, model: &str) -> Self {
+    pub fn new(api_key: &str, model: &str) -> Self {
         Self {
             client: Client::new(),
             api_key: api_key.to_string(),
-            base_url: base_url.to_string(),
+            base_url: "https://api.openai.com/v1".to_string(),
             model: model.to_string(),
         }
+    }
+
+    pub fn with_base_url(mut self, base_url: &str) -> Self {
+        self.base_url = base_url.to_string();
+        self
     }
 
     fn format_tools(&self, tools: &[ToolSpec]) -> Vec<Value> {
@@ -133,7 +138,7 @@ impl OpenAIProvider {
 
 #[async_trait::async_trait]
 impl Provider for OpenAIProvider {
-    fn name(&self) -> &str {
+    fn name() -> &'static str {
         "OpenAI"
     }
 

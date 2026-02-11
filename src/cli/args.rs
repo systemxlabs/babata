@@ -40,8 +40,6 @@ pub enum ProviderAction {
         #[arg(long)]
         name: String,
         #[arg(long)]
-        base_url: String,
-        #[arg(long)]
         api_key: String,
     },
     Delete {

@@ -12,8 +12,6 @@ pub struct AgentConfig {
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct ProviderConfig {
-    // The completed URL for the provider's API
-    pub base_url: String,
     // The API key for authentication
     pub api_key: String,
 }
@@ -76,23 +74,6 @@ impl Config {
     }
 
     pub fn validate(&self) -> BabataResult<()> {
-        for (provider_name, provider_config) in &self.providers {
-            let parsed = reqwest::Url::parse(&provider_config.base_url).map_err(|err| {
-                BabataError::config(format!(
-                    "Provider '{}' has invalid base_url '{}': {}",
-                    provider_name, provider_config.base_url, err
-                ))
-            })?;
-
-            let scheme = parsed.scheme();
-            if scheme != "http" && scheme != "https" {
-                return Err(BabataError::config(format!(
-                    "Provider '{}' has unsupported base_url scheme '{}', only http/https are allowed",
-                    provider_name, scheme
-                )));
-            }
-        }
-
         let mut has_main_agent = false;
         for (agent_name, agent_config) in &self.agents {
             if agent_name == "main" {
@@ -124,7 +105,6 @@ mod tests {
             providers: HashMap::from([(
                 "openai".to_string(),
                 ProviderConfig {
-                    base_url: "https://api.openai.com/v1".to_string(),
                     api_key: "test-api-key".to_string(),
                 },
             )]),
@@ -149,7 +129,6 @@ mod tests {
             providers: HashMap::from([(
                 "bad-provider".to_string(),
                 ProviderConfig {
-                    base_url: "not-a-url".to_string(),
                     api_key: "test-api-key".to_string(),
                 },
             )]),
@@ -162,11 +141,6 @@ mod tests {
             )]),
         };
 
-        let err = config
-            .validate()
-            .expect_err("invalid provider URL should fail");
-        let err_msg = err.to_string();
-        assert!(err_msg.contains("invalid base_url"));
-        assert!(err_msg.contains("bad-provider"));
+        config.validate().expect("provider URL no longer validated");
     }
 }

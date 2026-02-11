@@ -13,11 +13,7 @@ pub fn handle(args: &Args) {
             ServerAction::Restart => server::restart(args),
         },
         Some(Command::Provider { action }) => match action {
-            ProviderAction::Add {
-                name,
-                base_url,
-                api_key,
-            } => provider::add(args, name, base_url, api_key),
+            ProviderAction::Add { name, api_key } => provider::add(args, name, api_key),
             ProviderAction::Delete { name } => provider::delete(args, name),
             ProviderAction::List => provider::list(args),
         },
