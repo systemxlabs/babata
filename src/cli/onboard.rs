@@ -130,7 +130,7 @@ fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> BabataResult<()
 
 fn prompt_provider_setup() -> BabataResult<Option<(String, ProviderConfig)>> {
     println!("Select provider:");
-    let providers = available_providers();
+    let providers = available_provider_names();
     for (idx, provider) in providers.iter().enumerate() {
         println!("{}. {}", idx + 1, provider);
     }
@@ -155,8 +155,11 @@ fn prompt_provider_setup() -> BabataResult<Option<(String, ProviderConfig)>> {
     Ok(Some((provider.to_string(), ProviderConfig { api_key })))
 }
 
-fn available_providers() -> Vec<&'static str> {
-    vec![OpenAIProvider::name(), MoonshotProvider::name()]
+fn available_provider_names() -> Vec<String> {
+    vec![
+        OpenAIProvider::name().to_string(),
+        MoonshotProvider::name().to_string(),
+    ]
 }
 
 fn prompt_main_agent_setup(config: &Config) -> BabataResult<Option<AgentConfig>> {

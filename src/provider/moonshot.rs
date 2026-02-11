@@ -13,8 +13,8 @@ pub struct MoonshotProvider {
 }
 
 impl MoonshotProvider {
-    pub fn new(api_key: &str, model: &str) -> Self {
-        let inner = OpenAIProvider::new(api_key, model).with_base_url("https://api.moonshot.cn/v1");
+    pub fn new(api_key: &str) -> Self {
+        let inner = OpenAIProvider::new(api_key).with_base_url("https://api.moonshot.cn/v1");
         Self { inner }
     }
 }
@@ -23,10 +23,6 @@ impl MoonshotProvider {
 impl Provider for MoonshotProvider {
     fn name() -> &'static str {
         "Moonshot"
-    }
-
-    fn model(&self) -> &str {
-        self.inner.model()
     }
 
     async fn generate<'a>(

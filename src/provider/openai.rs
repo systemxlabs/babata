@@ -18,16 +18,14 @@ pub struct OpenAIProvider {
     client: Client,
     api_key: String,
     base_url: String,
-    model: String,
 }
 
 impl OpenAIProvider {
-    pub fn new(api_key: &str, model: &str) -> Self {
+    pub fn new(api_key: &str) -> Self {
         Self {
             client: Client::new(),
             api_key: api_key.to_string(),
             base_url: "https://api.openai.com/v1".to_string(),
-            model: model.to_string(),
         }
     }
 
@@ -142,16 +140,12 @@ impl Provider for OpenAIProvider {
         "OpenAI"
     }
 
-    fn model(&self) -> &str {
-        &self.model
-    }
-
     async fn generate<'a>(
         &self,
         request: GenerationReqest<'a>,
     ) -> BabataResult<GenerationResponse> {
         let mut body = json!({
-            "model": self.model,
+            "model": request.model,
             "messages": self.format_messages(request.messages)?,
         });
 
