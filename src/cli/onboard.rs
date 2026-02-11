@@ -4,6 +4,7 @@ use crate::{
     BabataResult,
     config::{AgentConfig, Config, ProviderConfig},
     error::BabataError,
+    provider::{MoonshotProvider, OpenAIProvider, Provider},
 };
 
 use super::Args;
@@ -129,18 +130,33 @@ fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> BabataResult<()
 
 fn prompt_provider_setup() -> BabataResult<Option<(String, ProviderConfig)>> {
     println!("Select provider:");
-    println!("1. openai");
-    println!("2. skip");
-
-    let selection = prompt_line("Choice (1-2)")?;
-    match selection.trim() {
-        "1" | "openai" => {
-            let api_key = prompt_line("API key")?;
-            Ok(Some(("openai".to_string(), ProviderConfig { api_key })))
-        }
-        "2" | "skip" => Ok(None),
-        _ => Err(BabataError::config("Invalid provider selection")),
+    let providers = available_providers();
+    for (idx, provider) in providers.iter().enumerate() {
+        println!("{}. {}", idx + 1, provider);
     }
+    println!("{}. skip", providers.len() + 1);
+
+    let selection = prompt_line(&format!("Choice (1-{})", providers.len() + 1))?;
+    let selection = selection.trim();
+    if selection.eq_ignore_ascii_case("skip") {
+        return Ok(None);
+    }
+    let idx: usize = selection
+        .parse()
+        .map_err(|_| BabataError::config("Invalid provider selection"))?;
+    if idx == providers.len() + 1 {
+        return Ok(None);
+    }
+    let Some(provider) = providers.get(idx.saturating_sub(1)) else {
+        return Err(BabataError::config("Invalid provider selection"));
+    };
+
+    let api_key = prompt_line("API key")?;
+    Ok(Some((provider.to_string(), ProviderConfig { api_key })))
+}
+
+fn available_providers() -> Vec<&'static str> {
+    vec![OpenAIProvider::name(), MoonshotProvider::name()]
 }
 
 fn prompt_main_agent_setup(config: &Config) -> BabataResult<Option<AgentConfig>> {
