@@ -1,11 +1,26 @@
-use std::path::{Path, PathBuf};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
+
+use serde::Deserialize;
 
 use crate::{BabataResult, error::BabataError, utils::babata_dir};
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct SkillFrontmatter {
+    pub name: String,
+    pub description: String,
+    pub enable: Option<bool>,
+    pub inline: Option<bool>,
+    #[serde(flatten)]
+    pub others: HashMap<String, serde_yaml::Value>,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Skill {
     pub path: PathBuf,
-    pub headers: serde_yaml::Value,
+    pub frontmatter: SkillFrontmatter,
     pub body: String,
 }
 
@@ -60,10 +75,10 @@ fn load_skills_from_dir(dir: &Path) -> BabataResult<Vec<Skill>> {
                 err
             ))
         })?;
-        let (headers, body) = parse_skill_content(&content, &skill_path)?;
+        let (frontmatter, body) = parse_skill_content(&content, &skill_path)?;
         skills.push(Skill {
             path: skill_path,
-            headers,
+            frontmatter,
             body,
         });
     }
@@ -72,13 +87,19 @@ fn load_skills_from_dir(dir: &Path) -> BabataResult<Vec<Skill>> {
     Ok(skills)
 }
 
-fn parse_skill_content(content: &str, path: &Path) -> BabataResult<(serde_yaml::Value, String)> {
+fn parse_skill_content(content: &str, path: &Path) -> BabataResult<(SkillFrontmatter, String)> {
     let mut lines = content.lines();
     let Some(first) = lines.next() else {
-        return Ok((serde_yaml::Value::Null, String::new()));
+        return Err(BabataError::config(format!(
+            "Skill file '{}' is empty or missing headers",
+            path.display()
+        )));
     };
     if first != "---" {
-        return Ok((serde_yaml::Value::Null, content.to_string()));
+        return Err(BabataError::config(format!(
+            "Skill file '{}' is missing yaml headers (expected starting '---')",
+            path.display()
+        )));
     }
 
     let mut header_lines = Vec::new();
@@ -106,7 +127,7 @@ fn parse_skill_content(content: &str, path: &Path) -> BabataResult<(serde_yaml::
 
     let header_raw = header_lines.join("\n");
     let body = body_lines.join("\n");
-    let headers = serde_yaml::from_str::<serde_yaml::Value>(&header_raw).map_err(|err| {
+    let headers = serde_yaml::from_str::<SkillFrontmatter>(&header_raw).map_err(|err| {
         BabataError::config(format!(
             "Failed to parse skill headers in '{}': {}",
             path.display(),
