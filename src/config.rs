@@ -25,8 +25,12 @@ pub struct Config {
 }
 
 impl Config {
+    pub fn path() -> BabataResult<std::path::PathBuf> {
+        Ok(babata_dir()?.join("config.json"))
+    }
+
     pub fn load() -> BabataResult<Self> {
-        let config_path = babata_dir()?.join("config.json");
+        let config_path = Self::path()?;
         let raw = std::fs::read_to_string(&config_path).map_err(|err| {
             BabataError::config(format!(
                 "Failed to read config file '{}': {}",
@@ -43,6 +47,32 @@ impl Config {
         })?;
         config.validate()?;
         Ok(config)
+    }
+
+    pub fn save(&self) -> BabataResult<()> {
+        let config_path = Self::path()?;
+        if let Some(parent) = config_path.parent() {
+            std::fs::create_dir_all(parent).map_err(|err| {
+                BabataError::config(format!(
+                    "Failed to create config directory '{}': {}",
+                    parent.display(),
+                    err
+                ))
+            })?;
+        }
+
+        let payload = serde_json::to_string_pretty(self)
+            .map_err(|err| BabataError::config(format!("Failed to serialize config: {}", err)))?;
+
+        std::fs::write(&config_path, payload).map_err(|err| {
+            BabataError::config(format!(
+                "Failed to write config file '{}': {}",
+                config_path.display(),
+                err
+            ))
+        })?;
+
+        Ok(())
     }
 
     pub fn validate(&self) -> BabataResult<()> {
