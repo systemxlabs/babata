@@ -1,5 +1,7 @@
+mod moonshot;
 mod openai;
 
+pub use moonshot::*;
 pub use openai::*;
 
 use std::fmt::Debug;
