@@ -1,7 +1,6 @@
-use babata::cli::Args;
 use clap::Parser;
 
 fn main() {
-    let args = Args::parse();
-    println!("Hello, Args: {args:?}!");
+    let args = babata::cli::Args::parse();
+    babata::cli::handle(&args);
 }
