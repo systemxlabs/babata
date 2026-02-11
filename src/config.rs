@@ -5,10 +5,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct AgentConfig {
-    // If None, use default system prompt
-    pub system_prompt: Option<String>,
     // If None, use default skills
-    pub skills: Option<Vec<SkillConfig>>,
     pub provider: String,
     pub model: String,
 }
@@ -22,19 +19,7 @@ pub struct ProviderConfig {
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
-pub struct SkillConfig {
-    // Whether the skill is enabled
-    pub enabled: bool,
-    // Whether the whole skill.md is inlined in prompt
-    pub inlined: bool,
-    // Absolute path to the skill dir
-    pub path: String,
-}
-
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct Config {
-    pub default_system_prompt: String,
-    pub default_skills: Vec<SkillConfig>,
     pub providers: HashMap<String, ProviderConfig>,
     pub agents: HashMap<String, AgentConfig>,
 }
@@ -61,15 +46,6 @@ impl Config {
     }
 
     pub fn validate(&self) -> BabataResult<()> {
-        for skill in &self.default_skills {
-            if std::fs::exists(&skill.path)? {
-                return Err(BabataError::config(format!(
-                    "Default skill path '{}' does not exist",
-                    skill.path
-                )));
-            }
-        }
-
         for (provider_name, provider_config) in &self.providers {
             let parsed = reqwest::Url::parse(&provider_config.base_url).map_err(|err| {
                 BabataError::config(format!(
@@ -115,19 +91,6 @@ mod tests {
     #[test]
     fn config_json_roundtrip() {
         let config = Config {
-            default_system_prompt: "You are a helpful agent".to_string(),
-            default_skills: vec![
-                SkillConfig {
-                    enabled: true,
-                    inlined: false,
-                    path: "/tmp/skill-a".to_string(),
-                },
-                SkillConfig {
-                    enabled: false,
-                    inlined: true,
-                    path: "/tmp/skill-b".to_string(),
-                },
-            ],
             providers: HashMap::from([(
                 "openai".to_string(),
                 ProviderConfig {
@@ -138,8 +101,6 @@ mod tests {
             agents: HashMap::from([(
                 "main".to_string(),
                 AgentConfig {
-                    system_prompt: Some("Custom prompt".to_string()),
-                    skills: None,
                     provider: "openai".to_string(),
                     model: "gpt-4.1".to_string(),
                 },
@@ -155,8 +116,6 @@ mod tests {
     #[test]
     fn validate_rejects_invalid_provider_url() {
         let config = Config {
-            default_system_prompt: "prompt".to_string(),
-            default_skills: vec![],
             providers: HashMap::from([(
                 "bad-provider".to_string(),
                 ProviderConfig {
@@ -167,8 +126,6 @@ mod tests {
             agents: HashMap::from([(
                 "main".to_string(),
                 AgentConfig {
-                    system_prompt: None,
-                    skills: None,
                     provider: "bad-provider".to_string(),
                     model: "test-model".to_string(),
                 },
