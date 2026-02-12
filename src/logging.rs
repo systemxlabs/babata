@@ -17,7 +17,7 @@ pub fn init() -> BabataResult<()> {
             BabataError::internal(format!("Failed to build file appender for logger: {err}"))
         })?;
 
-    let filter = EnvFilterBuilder::from_default_env_or("info").build();
+    let filter = EnvFilterBuilder::from_default_env_or("debug").build();
 
     logforth::starter_log::builder()
         .dispatch(|d| d.filter(filter).append(file))
