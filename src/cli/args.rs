@@ -26,6 +26,7 @@ pub enum Command {
 
 #[derive(Subcommand, Debug)]
 pub enum ServerAction {
+    Serve,
     Start,
     Restart,
 }
