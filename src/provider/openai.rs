@@ -153,7 +153,10 @@ impl Provider for OpenAIProvider {
             body["tools"] = json!(self.format_tools(request.tools));
         }
 
-        debug!("Sending OpenAI chat completions request: {body}");
+        debug!(
+            "Sending chat completions request to {}: {body}",
+            self.base_url
+        );
 
         let response = self
             .client
@@ -164,7 +167,10 @@ impl Provider for OpenAIProvider {
             .send()
             .await
             .map_err(|e| {
-                BabataError::provider(format!("Failed to send request to OpenAI: {}", e))
+                BabataError::provider(format!(
+                    "Failed to send request to provider API ({}): {}",
+                    self.base_url, e
+                ))
             })?;
 
         // Check for errors
@@ -172,7 +178,8 @@ impl Provider for OpenAIProvider {
         if response.status() != StatusCode::OK {
             let body = response.text().await.unwrap_or_default();
             return Err(BabataError::provider(format!(
-                "OpenAI API returned error status {status}: {body}",
+                "Provider API ({}) returned error status {status}: {body}",
+                self.base_url
             )));
         }
 
