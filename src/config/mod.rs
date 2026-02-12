@@ -119,6 +119,33 @@ impl Config {
 
         Ok(())
     }
+
+    pub fn upsert_provider(&mut self, provider_config: ProviderConfig) {
+        if let Some(existing) = self
+            .providers
+            .iter_mut()
+            .find(|existing| existing.matches_name(provider_config.provider_name()))
+        {
+            *existing = provider_config;
+            return;
+        }
+
+        self.providers.push(provider_config);
+    }
+
+    pub fn upsert_channel(&mut self, channel_config: ChannelConfig) {
+        if let Some(existing) = self.channels.iter_mut().find(|existing| {
+            matches!(
+                (existing, &channel_config),
+                (ChannelConfig::Telegram(_), ChannelConfig::Telegram(_))
+            )
+        }) {
+            *existing = channel_config;
+            return;
+        }
+
+        self.channels.push(channel_config);
+    }
 }
 
 #[cfg(test)]

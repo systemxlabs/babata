@@ -26,7 +26,7 @@ fn run_onboard() -> BabataResult<()> {
     let mut config = load_or_init_config()?;
 
     if let Some(provider_config) = prompt_provider_setup()? {
-        upsert_provider_config(&mut config, provider_config);
+        config.upsert_provider(provider_config);
     }
 
     if let Some(agent_config) = prompt_main_agent_setup(&config)? {
@@ -34,7 +34,7 @@ fn run_onboard() -> BabataResult<()> {
     }
 
     if let Some(channel_config) = prompt_channel_setup()? {
-        upsert_channel_config(&mut config, channel_config);
+        config.upsert_channel(channel_config);
     }
 
     config.validate()?;
@@ -369,31 +369,4 @@ fn load_or_init_config() -> BabataResult<Config> {
             channels: Vec::new(),
         })
     }
-}
-
-fn upsert_provider_config(config: &mut Config, provider_config: ProviderConfig) {
-    if let Some(existing) = config
-        .providers
-        .iter_mut()
-        .find(|existing| existing.matches_name(provider_config.provider_name()))
-    {
-        *existing = provider_config;
-        return;
-    }
-
-    config.providers.push(provider_config);
-}
-
-fn upsert_channel_config(config: &mut Config, channel_config: ChannelConfig) {
-    if let Some(existing) = config.channels.iter_mut().find(|existing| {
-        matches!(
-            (existing, &channel_config),
-            (ChannelConfig::Telegram(_), ChannelConfig::Telegram(_))
-        )
-    }) {
-        *existing = channel_config;
-        return;
-    }
-
-    config.channels.push(channel_config);
 }
