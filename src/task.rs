@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     BabataResult,
@@ -14,7 +14,7 @@ pub struct AgentTask {
     pub messages: Vec<Message>,
     pub provider: Arc<dyn Provider>,
     pub model: String,
-    pub tools: Vec<Arc<dyn Tool>>,
+    pub tools: HashMap<String, Arc<dyn Tool>>,
     pub system_prompts: Vec<SystemPrompt>,
     pub skills: Vec<Skill>,
     pub max_steps: usize,
@@ -25,7 +25,7 @@ impl AgentTask {
         messages: Vec<Message>,
         provider: Arc<dyn Provider>,
         model: String,
-        tools: Vec<Arc<dyn Tool>>,
+        tools: HashMap<String, Arc<dyn Tool>>,
         system_prompts: Vec<SystemPrompt>,
         skills: Vec<Skill>,
     ) -> Self {
@@ -71,16 +71,12 @@ impl AgentTask {
                     }
 
                     for call in calls {
-                        let tool = self
-                            .tools
-                            .iter()
-                            .find(|tool| tool.spec().name == call.tool_name)
-                            .ok_or_else(|| {
-                                BabataError::tool(format!(
-                                    "Unknown tool requested by provider: {}",
-                                    call.tool_name
-                                ))
-                            })?;
+                        let tool = self.tools.get(&call.tool_name).ok_or_else(|| {
+                            BabataError::tool(format!(
+                                "Unknown tool requested by provider: {}",
+                                call.tool_name
+                            ))
+                        })?;
 
                         let result = tool.execute(call.args.clone()).await?;
                         messages.push(Message::ToolResult { call, result });
@@ -101,7 +97,13 @@ impl AgentTask {
     }
 
     fn collect_tool_specs(&self) -> Vec<ToolSpec> {
-        self.tools.iter().map(|tool| tool.spec().clone()).collect()
+        let mut specs: Vec<ToolSpec> = self
+            .tools
+            .values()
+            .map(|tool| tool.spec().clone())
+            .collect();
+        specs.sort_by(|a, b| a.name.cmp(&b.name));
+        specs
     }
 
     fn build_system_prompt(&self) -> String {

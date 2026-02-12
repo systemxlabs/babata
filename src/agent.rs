@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     channel::Channel,
@@ -17,7 +17,7 @@ pub struct AgentLoop {
     pub channels: Vec<Arc<dyn Channel>>,
     pub message_store: MessageStore,
     pub memory: Memory,
-    pub tools: Vec<Arc<dyn Tool>>,
+    pub tools: HashMap<String, Arc<dyn Tool>>,
     pub system_prompts: Vec<SystemPrompt>,
     pub skills: Vec<Skill>,
 }
