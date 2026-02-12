@@ -367,6 +367,7 @@ fn load_or_init_config() -> BabataResult<Config> {
             providers: Vec::new(),
             agents: HashMap::new(),
             channels: Vec::new(),
+            jobs: Vec::new(),
         })
     }
 }

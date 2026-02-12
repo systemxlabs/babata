@@ -1,7 +1,9 @@
 mod channel;
+mod job;
 mod provider;
 
 pub use channel::*;
+pub use job::*;
 pub use provider::*;
 
 use std::collections::HashMap;
@@ -23,6 +25,8 @@ pub struct Config {
     pub agents: HashMap<String, AgentConfig>,
     #[serde(default)]
     pub channels: Vec<ChannelConfig>,
+    #[serde(default)]
+    pub jobs: Vec<JobConfig>,
 }
 
 impl Config {
@@ -117,6 +121,23 @@ impl Config {
             }
         }
 
+        let mut job_names = HashSet::new();
+        for job in &self.jobs {
+            job.validate()?;
+            if !self.agents.contains_key(&job.agent_name) {
+                return Err(BabataError::config(format!(
+                    "Job '{}' references unknown agent '{}'",
+                    job.name, job.agent_name
+                )));
+            }
+            if !job_names.insert(job.name.clone()) {
+                return Err(BabataError::config(format!(
+                    "Duplicate job name '{}' found in configuration",
+                    job.name
+                )));
+            }
+        }
+
         Ok(())
     }
 
@@ -166,6 +187,7 @@ mod tests {
                 },
             )]),
             channels: Vec::new(),
+            jobs: Vec::new(),
         };
 
         let json = serde_json::to_string(&config).expect("serialize config to json");
@@ -188,8 +210,35 @@ mod tests {
                 },
             )]),
             channels: Vec::new(),
+            jobs: Vec::new(),
         };
 
         config.validate().expect("provider URL no longer validated");
+    }
+
+    #[test]
+    fn validate_rejects_job_with_unknown_agent() {
+        let config = Config {
+            providers: vec![ProviderConfig::OpenAI(OpenAIProviderConfig {
+                api_key: "test-api-key".to_string(),
+            })],
+            agents: HashMap::from([(
+                "main".to_string(),
+                AgentConfig {
+                    provider: "openai".to_string(),
+                    model: "test-model".to_string(),
+                },
+            )]),
+            channels: Vec::new(),
+            jobs: vec![JobConfig {
+                name: "daily-summary".to_string(),
+                agent_name: "non-existent-agent".to_string(),
+                enabled: true,
+                cron: "0 9 * * *".to_string(),
+                prompt: "Summarize today's progress".to_string(),
+            }],
+        };
+
+        assert!(config.validate().is_err());
     }
 }
