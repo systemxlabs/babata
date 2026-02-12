@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     BabataResult,
-    channel::Channel,
+    channel::{Channel, build_channels},
     config::Config,
     memory::Memory,
     message::MessageStore,
@@ -26,7 +26,7 @@ pub struct AgentLoop {
 impl AgentLoop {
     pub fn new(config: Config) -> BabataResult<Self> {
         let providers = build_providers(&config)?;
-        let channels = Vec::new();
+        let channels = build_channels(&config)?;
         let message_store = MessageStore::new()?;
         let memory = Memory {};
         let tools = build_tools();

@@ -1,3 +1,9 @@
+mod channel;
+mod provider;
+
+pub use channel::*;
+pub use provider::*;
+
 use std::collections::HashMap;
 
 use crate::{BabataResult, error::BabataError, utils::babata_dir};
@@ -11,15 +17,11 @@ pub struct AgentConfig {
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
-pub struct ProviderConfig {
-    // The API key for authentication
-    pub api_key: String,
-}
-
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct Config {
     pub providers: HashMap<String, ProviderConfig>,
     pub agents: HashMap<String, AgentConfig>,
+    #[serde(default)]
+    pub channels: Vec<ChannelConfig>,
 }
 
 impl Config {
@@ -91,6 +93,13 @@ impl Config {
                 "No 'main' agent defined in configuration",
             ));
         }
+
+        for channel in &self.channels {
+            match channel {
+                ChannelConfig::Telegram(telegram) => telegram.validate()?,
+            }
+        }
+
         Ok(())
     }
 }
@@ -115,6 +124,7 @@ mod tests {
                     model: "gpt-4.1".to_string(),
                 },
             )]),
+            channels: Vec::new(),
         };
 
         let json = serde_json::to_string(&config).expect("serialize config to json");
@@ -139,6 +149,7 @@ mod tests {
                     model: "test-model".to_string(),
                 },
             )]),
+            channels: Vec::new(),
         };
 
         config.validate().expect("provider URL no longer validated");
