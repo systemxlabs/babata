@@ -1,0 +1,15 @@
+[Unit]
+Description=Babata Server
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/Users/lewis/.babata
+ExecStart=/Users/lewis/.babata/bin/babata server serve
+StandardOutput=append:/Users/lewis/.babata/logs/server.stdout.log
+StandardError=append:/Users/lewis/.babata/logs/server.stderr.log
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target

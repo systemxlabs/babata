@@ -338,9 +338,8 @@ fn prompt_telegram_channel_config() -> BabataResult<TelegramChannelConfig> {
         )
     };
 
-    let allowed_user_ids_raw = prompt_line(
-        "Telegram allowed user IDs (comma separated, required, e.g. 123456789)",
-    )?;
+    let allowed_user_ids_raw =
+        prompt_line("Telegram allowed user IDs (comma separated, required, e.g. 123456789)")?;
     let allowed_user_ids = parse_allowed_user_ids(&allowed_user_ids_raw)?;
 
     Ok(TelegramChannelConfig {
