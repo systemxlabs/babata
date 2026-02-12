@@ -4,7 +4,7 @@ mod openai;
 pub use moonshot::*;
 pub use openai::*;
 
-use std::{fmt::Debug, sync::Arc};
+use std::{collections::HashMap, fmt::Debug, sync::Arc};
 
 use crate::{
     BabataResult,
@@ -55,13 +55,13 @@ pub fn create_provider(
     }
 }
 
-pub fn build_providers(config: &Config) -> BabataResult<Vec<Arc<dyn Provider>>> {
-    let mut providers: Vec<Arc<dyn Provider>> = Vec::new();
+pub fn build_providers(config: &Config) -> BabataResult<HashMap<String, Arc<dyn Provider>>> {
+    let mut providers: HashMap<String, Arc<dyn Provider>> =
+        HashMap::with_capacity(config.providers.len());
 
     for (provider_name, provider_config) in &config.providers {
         let provider = create_provider(provider_name, provider_config)?;
-
-        providers.push(provider);
+        providers.insert(provider_name.clone(), provider);
     }
 
     Ok(providers)

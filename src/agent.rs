@@ -14,7 +14,7 @@ use crate::{
 
 pub struct AgentLoop {
     pub config: Config,
-    pub providers: Vec<Arc<dyn Provider>>,
+    pub providers: HashMap<String, Arc<dyn Provider>>,
     pub channels: Vec<Arc<dyn Channel>>,
     pub message_store: MessageStore,
     pub memory: Memory,
