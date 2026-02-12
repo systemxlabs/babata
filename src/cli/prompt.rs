@@ -29,7 +29,11 @@ fn run_prompt(args: &Args) -> BabataResult<()> {
         ))
     })?;
 
-    let Some(provider_config) = config.providers.get(&agent_config.provider) else {
+    let Some(provider_config) = config
+        .providers
+        .iter()
+        .find(|provider| provider.matches_name(&agent_config.provider))
+    else {
         return Err(BabataError::config(format!(
             "Provider '{}' not found in config",
             agent_config.provider

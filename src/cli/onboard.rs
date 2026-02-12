@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     BabataResult,
-    config::{AgentConfig, Config, ProviderConfig},
+    config::{AgentConfig, Config, MoonshotProviderConfig, OpenAIProviderConfig, ProviderConfig},
     error::BabataError,
     provider::{MoonshotProvider, OpenAIProvider, Provider},
 };
@@ -21,10 +21,8 @@ fn run_onboard() -> BabataResult<()> {
 
     let mut config = load_or_init_config()?;
 
-    if let Some((provider_name, provider_config)) = prompt_provider_setup()? {
-        config
-            .providers
-            .insert(provider_name.clone(), provider_config);
+    if let Some(provider_config) = prompt_provider_setup()? {
+        upsert_provider_config(&mut config, provider_config);
     }
 
     if let Some(agent_config) = prompt_main_agent_setup(&config)? {
@@ -128,7 +126,7 @@ fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> BabataResult<()
     Ok(())
 }
 
-fn prompt_provider_setup() -> BabataResult<Option<(String, ProviderConfig)>> {
+fn prompt_provider_setup() -> BabataResult<Option<ProviderConfig>> {
     println!("Select provider:");
     let providers = available_provider_names();
     for (idx, provider) in providers.iter().enumerate() {
@@ -147,12 +145,12 @@ fn prompt_provider_setup() -> BabataResult<Option<(String, ProviderConfig)>> {
     if idx == providers.len() + 1 {
         return Ok(None);
     }
-    let Some(provider) = providers.get(idx.saturating_sub(1)) else {
+    let Some(provider_name) = providers.get(idx.saturating_sub(1)) else {
         return Err(BabataError::config("Invalid provider selection"));
     };
 
     let api_key = prompt_line("API key")?;
-    Ok(Some((provider.to_string(), ProviderConfig { api_key })))
+    Ok(Some(build_provider_config(provider_name, api_key)?))
 }
 
 fn available_provider_names() -> Vec<String> {
@@ -181,7 +179,11 @@ fn prompt_main_agent_setup(config: &Config) -> BabataResult<Option<AgentConfig>>
     }
 
     println!("Select provider for main agent:");
-    let mut provider_names: Vec<&String> = config.providers.keys().collect();
+    let mut provider_names: Vec<String> = config
+        .providers
+        .iter()
+        .map(|provider| provider.provider_name().to_string())
+        .collect();
     provider_names.sort();
     for (idx, name) in provider_names.iter().enumerate() {
         println!("{}. {}", idx + 1, name);
@@ -195,20 +197,22 @@ fn prompt_main_agent_setup(config: &Config) -> BabataResult<Option<AgentConfig>>
         return Err(BabataError::config("Invalid provider choice"));
     };
 
-    let model = prompt_model_setup(provider_name)?;
+    let provider_config = config.providers.iter().find(|provider| {
+        provider.matches_name(provider_name)
+    }).ok_or_else(|| {
+        BabataError::config(format!("Provider '{}' not found in config", provider_name))
+    })?;
+    let model = prompt_model_setup(provider_config)?;
     Ok(Some(AgentConfig {
-        provider: (*provider_name).clone(),
+        provider: provider_name.to_string(),
         model,
     }))
 }
 
-fn prompt_model_setup(provider_name: &str) -> BabataResult<String> {
-    let supported_models = supported_models_for_provider(provider_name)?;
+fn prompt_model_setup(provider_config: &ProviderConfig) -> BabataResult<String> {
+    let supported_models = supported_models_for_provider(provider_config);
     if supported_models.is_empty() {
-        return Err(BabataError::config(format!(
-            "Provider '{}' has no supported models",
-            provider_name
-        )));
+        return Err(BabataError::config("Provider has no supported models"));
     }
 
     println!("Select model for main agent:");
@@ -228,21 +232,28 @@ fn prompt_model_setup(provider_name: &str) -> BabataResult<String> {
     Ok((*model).to_string())
 }
 
-fn supported_models_for_provider(provider_name: &str) -> BabataResult<&'static [&'static str]> {
+fn supported_models_for_provider(provider_config: &ProviderConfig) -> &'static [&'static str] {
+    match provider_config {
+        ProviderConfig::OpenAI(_) => OpenAIProvider::supported_models(),
+        ProviderConfig::Moonshot(_) => MoonshotProvider::supported_models(),
+    }
+}
+
+fn build_provider_config(provider_name: &str, api_key: String) -> BabataResult<ProviderConfig> {
     if provider_name.eq_ignore_ascii_case(OpenAIProvider::name())
         || provider_name.eq_ignore_ascii_case("openai")
     {
-        return Ok(OpenAIProvider::supported_models());
+        return Ok(ProviderConfig::OpenAI(OpenAIProviderConfig { api_key }));
     }
 
     if provider_name.eq_ignore_ascii_case(MoonshotProvider::name())
         || provider_name.eq_ignore_ascii_case("moonshot")
     {
-        return Ok(MoonshotProvider::supported_models());
+        return Ok(ProviderConfig::Moonshot(MoonshotProviderConfig { api_key }));
     }
 
     Err(BabataError::config(format!(
-        "Unsupported provider '{}' for model selection",
+        "Unsupported provider '{}'",
         provider_name
     )))
 }
@@ -266,9 +277,22 @@ fn load_or_init_config() -> BabataResult<Config> {
         Config::load()
     } else {
         Ok(Config {
-            providers: HashMap::new(),
+            providers: Vec::new(),
             agents: HashMap::new(),
             channels: Vec::new(),
         })
     }
+}
+
+fn upsert_provider_config(config: &mut Config, provider_config: ProviderConfig) {
+    if let Some(existing) = config
+        .providers
+        .iter_mut()
+        .find(|existing| existing.matches_name(provider_config.provider_name()))
+    {
+        *existing = provider_config;
+        return;
+    }
+
+    config.providers.push(provider_config);
 }

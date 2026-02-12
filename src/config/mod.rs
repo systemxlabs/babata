@@ -5,6 +5,7 @@ pub use channel::*;
 pub use provider::*;
 
 use std::collections::HashMap;
+use std::collections::HashSet;
 
 use crate::{BabataResult, error::BabataError, utils::babata_dir};
 use serde::{Deserialize, Serialize};
@@ -18,7 +19,7 @@ pub struct AgentConfig {
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct Config {
-    pub providers: HashMap<String, ProviderConfig>,
+    pub providers: Vec<ProviderConfig>,
     pub agents: HashMap<String, AgentConfig>,
     #[serde(default)]
     pub channels: Vec<ChannelConfig>,
@@ -76,12 +77,28 @@ impl Config {
     }
 
     pub fn validate(&self) -> BabataResult<()> {
+        let mut provider_names = HashSet::new();
+        for provider in &self.providers {
+            provider.validate()?;
+            let normalized_name = provider.provider_name().to_string();
+            if !provider_names.insert(normalized_name) {
+                return Err(BabataError::config(format!(
+                    "Duplicate provider type '{}' found in configuration",
+                    provider.provider_name()
+                )));
+            }
+        }
+
         let mut has_main_agent = false;
         for (agent_name, agent_config) in &self.agents {
             if agent_name == "main" {
                 has_main_agent = true;
             }
-            if !self.providers.contains_key(&agent_config.provider) {
+            if !self
+                .providers
+                .iter()
+                .any(|provider| provider.matches_name(&agent_config.provider))
+            {
                 return Err(BabataError::config(format!(
                     "Agent '{}' references unknown provider '{}'",
                     agent_name, agent_config.provider
@@ -111,12 +128,9 @@ mod tests {
     #[test]
     fn config_json_roundtrip() {
         let config = Config {
-            providers: HashMap::from([(
-                "openai".to_string(),
-                ProviderConfig {
-                    api_key: "test-api-key".to_string(),
-                },
-            )]),
+            providers: vec![ProviderConfig::OpenAI(OpenAIProviderConfig {
+                api_key: "test-api-key".to_string(),
+            })],
             agents: HashMap::from([(
                 "main".to_string(),
                 AgentConfig {
@@ -136,16 +150,13 @@ mod tests {
     #[test]
     fn validate_rejects_invalid_provider_url() {
         let config = Config {
-            providers: HashMap::from([(
-                "bad-provider".to_string(),
-                ProviderConfig {
-                    api_key: "test-api-key".to_string(),
-                },
-            )]),
+            providers: vec![ProviderConfig::OpenAI(OpenAIProviderConfig {
+                api_key: "test-api-key".to_string(),
+            })],
             agents: HashMap::from([(
                 "main".to_string(),
                 AgentConfig {
-                    provider: "bad-provider".to_string(),
+                    provider: "openai".to_string(),
                     model: "test-model".to_string(),
                 },
             )]),

@@ -9,7 +9,6 @@ use std::{collections::HashMap, fmt::Debug, sync::Arc};
 use crate::{
     BabataResult,
     config::{Config, ProviderConfig},
-    error::BabataError,
     message::Message,
     tool::ToolSpec,
 };
@@ -46,16 +45,12 @@ pub struct InteractionRequest {}
 pub struct InteractionResponse {}
 
 pub fn create_provider(
-    provider_name: &str,
+    _provider_name: &str,
     provider_config: &ProviderConfig,
 ) -> BabataResult<Arc<dyn Provider>> {
-    match provider_name.to_ascii_lowercase().as_str() {
-        "openai" => Ok(Arc::new(OpenAIProvider::new(&provider_config.api_key))),
-        "moonshot" => Ok(Arc::new(MoonshotProvider::new(&provider_config.api_key))),
-        _ => Err(BabataError::config(format!(
-            "Unsupported provider '{}'",
-            provider_name
-        ))),
+    match provider_config {
+        ProviderConfig::OpenAI(config) => Ok(Arc::new(OpenAIProvider::new(&config.api_key))),
+        ProviderConfig::Moonshot(config) => Ok(Arc::new(MoonshotProvider::new(&config.api_key))),
     }
 }
 
@@ -63,9 +58,10 @@ pub fn build_providers(config: &Config) -> BabataResult<HashMap<String, Arc<dyn 
     let mut providers: HashMap<String, Arc<dyn Provider>> =
         HashMap::with_capacity(config.providers.len());
 
-    for (provider_name, provider_config) in &config.providers {
+    for provider_config in &config.providers {
+        let provider_name = provider_config.provider_name();
         let provider = create_provider(provider_name, provider_config)?;
-        providers.insert(provider_name.clone(), provider);
+        providers.insert(provider_name.to_string(), provider);
     }
 
     Ok(providers)
