@@ -195,11 +195,56 @@ fn prompt_main_agent_setup(config: &Config) -> BabataResult<Option<AgentConfig>>
         return Err(BabataError::config("Invalid provider choice"));
     };
 
-    let model = prompt_line("Model")?;
+    let model = prompt_model_setup(provider_name)?;
     Ok(Some(AgentConfig {
         provider: (*provider_name).clone(),
         model,
     }))
+}
+
+fn prompt_model_setup(provider_name: &str) -> BabataResult<String> {
+    let supported_models = supported_models_for_provider(provider_name)?;
+    if supported_models.is_empty() {
+        return Err(BabataError::config(format!(
+            "Provider '{}' has no supported models",
+            provider_name
+        )));
+    }
+
+    println!("Select model for main agent:");
+    for (idx, model) in supported_models.iter().enumerate() {
+        println!("{}. {}", idx + 1, model);
+    }
+
+    let choice = prompt_line(&format!("Choice (1-{})", supported_models.len()))?;
+    let idx: usize = choice
+        .trim()
+        .parse()
+        .map_err(|_| BabataError::config("Invalid model choice"))?;
+    let Some(model) = supported_models.get(idx.saturating_sub(1)) else {
+        return Err(BabataError::config("Invalid model choice"));
+    };
+
+    Ok((*model).to_string())
+}
+
+fn supported_models_for_provider(provider_name: &str) -> BabataResult<&'static [&'static str]> {
+    if provider_name.eq_ignore_ascii_case(OpenAIProvider::name())
+        || provider_name.eq_ignore_ascii_case("openai")
+    {
+        return Ok(OpenAIProvider::supported_models());
+    }
+
+    if provider_name.eq_ignore_ascii_case(MoonshotProvider::name())
+        || provider_name.eq_ignore_ascii_case("moonshot")
+    {
+        return Ok(MoonshotProvider::supported_models());
+    }
+
+    Err(BabataError::config(format!(
+        "Unsupported provider '{}' for model selection",
+        provider_name
+    )))
 }
 
 fn prompt_line(label: &str) -> BabataResult<String> {

@@ -21,6 +21,10 @@ pub trait Provider: Debug + Send + Sync {
     where
         Self: Sized;
 
+    fn supported_models() -> &'static [&'static str]
+    where
+        Self: Sized;
+
     async fn generate<'a>(&self, request: GenerationReqest<'a>)
     -> BabataResult<GenerationResponse>;
     async fn interact(&self, request: InteractionRequest) -> BabataResult<InteractionResponse>;

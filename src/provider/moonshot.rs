@@ -25,6 +25,10 @@ impl Provider for MoonshotProvider {
         "Moonshot"
     }
 
+    fn supported_models() -> &'static [&'static str] {
+        &["kimi-k2.5"]
+    }
+
     async fn generate<'a>(
         &self,
         request: GenerationReqest<'a>,

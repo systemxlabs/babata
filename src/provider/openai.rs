@@ -140,6 +140,10 @@ impl Provider for OpenAIProvider {
         "OpenAI"
     }
 
+    fn supported_models() -> &'static [&'static str] {
+        &["gpt-4.1"]
+    }
+
     async fn generate<'a>(
         &self,
         request: GenerationReqest<'a>,
