@@ -6,7 +6,13 @@ pub use openai::*;
 
 use std::{fmt::Debug, sync::Arc};
 
-use crate::{BabataResult, config::Config, message::Message, tool::ToolSpec};
+use crate::{
+    BabataResult,
+    config::{Config, ProviderConfig},
+    error::BabataError,
+    message::Message,
+    tool::ToolSpec,
+};
 
 #[async_trait::async_trait]
 pub trait Provider: Debug + Send + Sync {
@@ -35,18 +41,28 @@ pub struct InteractionRequest {}
 
 pub struct InteractionResponse {}
 
-pub fn build_providers(config: &Config) -> Vec<Arc<dyn Provider>> {
+pub fn create_provider(
+    provider_name: &str,
+    provider_config: &ProviderConfig,
+) -> BabataResult<Arc<dyn Provider>> {
+    match provider_name.to_ascii_lowercase().as_str() {
+        "openai" => Ok(Arc::new(OpenAIProvider::new(&provider_config.api_key))),
+        "moonshot" => Ok(Arc::new(MoonshotProvider::new(&provider_config.api_key))),
+        _ => Err(BabataError::config(format!(
+            "Unsupported provider '{}'",
+            provider_name
+        ))),
+    }
+}
+
+pub fn build_providers(config: &Config) -> BabataResult<Vec<Arc<dyn Provider>>> {
     let mut providers: Vec<Arc<dyn Provider>> = Vec::new();
 
     for (provider_name, provider_config) in &config.providers {
-        let provider: Arc<dyn Provider> = match provider_name.as_str() {
-            "openai" => Arc::new(OpenAIProvider::new(&provider_config.api_key)),
-            "moonshot" => Arc::new(MoonshotProvider::new(&provider_config.api_key)),
-            name => panic!("Unknown provider '{}'", name),
-        };
+        let provider = create_provider(provider_name, provider_config)?;
 
         providers.push(provider);
     }
 
-    providers
+    Ok(providers)
 }

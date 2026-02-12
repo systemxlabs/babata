@@ -5,10 +5,6 @@ use clap::{Parser, Subcommand};
 pub struct Args {
     #[arg(long, default_value = "main")]
     pub agent: String,
-    #[arg(long)]
-    pub provider: Option<String>,
-    #[arg(long)]
-    pub model: Option<String>,
     #[arg()]
     pub prompt: Option<String>,
     #[command(subcommand)]

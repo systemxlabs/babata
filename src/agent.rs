@@ -1,6 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{
+    BabataResult,
     channel::Channel,
     config::Config,
     memory::Memory,
@@ -23,20 +24,16 @@ pub struct AgentLoop {
 }
 
 impl AgentLoop {
-    pub fn new(config: Config) -> Self {
-        let providers = build_providers(&config);
+    pub fn new(config: Config) -> BabataResult<Self> {
+        let providers = build_providers(&config)?;
         let channels = Vec::new();
-        let message_store = MessageStore::new().expect("Failed to initialize message store");
+        let message_store = MessageStore::new()?;
         let memory = Memory {};
         let tools = build_tools();
-        let system_prompts = load_system_prompts().unwrap_or_else(|err| {
-            panic!("Failed to load system prompts: {err}");
-        });
-        let skills = load_skills().unwrap_or_else(|err| {
-            panic!("Failed to load skills: {err}");
-        });
+        let system_prompts = load_system_prompts()?;
+        let skills = load_skills()?;
 
-        Self {
+        Ok(Self {
             config,
             providers,
             channels,
@@ -45,6 +42,6 @@ impl AgentLoop {
             tools,
             system_prompts,
             skills,
-        }
+        })
     }
 }
