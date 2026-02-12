@@ -1,7 +1,8 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use crate::{
     BabataResult,
+    error::BabataError,
     channel::{Channel, build_channels},
     config::Config,
     memory::Memory,
@@ -9,6 +10,7 @@ use crate::{
     provider::{Provider, build_providers},
     skill::{Skill, load_skills},
     system_prompt::{SystemPrompt, load_system_prompts},
+    task::AgentTask,
     tool::{Tool, build_tools},
 };
 
@@ -43,5 +45,65 @@ impl AgentLoop {
             system_prompts,
             skills,
         })
+    }
+
+    pub async fn run(&self) -> BabataResult<()> {
+        if self.channels.is_empty() {
+            return Err(BabataError::config(
+                "No channels configured; cannot start agent loop",
+            ));
+        }
+
+        let agent_config = self.config.agents.get("main").ok_or_else(|| {
+            BabataError::config("No 'main' agent found in config; run onboarding first")
+        })?;
+
+        let provider = self
+            .providers
+            .iter()
+            .find_map(|(provider_name, provider)| {
+                provider_name
+                    .eq_ignore_ascii_case(&agent_config.provider)
+                    .then(|| Arc::clone(provider))
+            })
+            .ok_or_else(|| {
+                BabataError::config(format!(
+                    "Provider '{}' for main agent not found",
+                    agent_config.provider
+                ))
+            })?;
+
+        loop {
+            let mut handled_message = false;
+
+            for channel in &self.channels {
+                let Some(messages) = channel.try_receive().await? else {
+                    continue;
+                };
+                if messages.is_empty() {
+                    continue;
+                }
+
+                handled_message = true;
+                self.message_store.insert_messages(&messages)?;
+
+                let task = AgentTask::new(
+                    messages,
+                    Arc::clone(&provider),
+                    agent_config.model.clone(),
+                    self.tools.clone(),
+                    self.system_prompts.clone(),
+                    self.skills.clone(),
+                );
+                let response = task.run().await?;
+
+                self.message_store.insert_messages(std::slice::from_ref(&response))?;
+                channel.send(std::slice::from_ref(&response)).await?;
+            }
+
+            if !handled_message {
+                tokio::time::sleep(Duration::from_millis(200)).await;
+            }
+        }
     }
 }
