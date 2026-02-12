@@ -12,6 +12,11 @@ use crate::{
 
 #[async_trait::async_trait]
 pub trait Channel: Debug + Send + Sync {
+    // Channel name, e.g. "telegram"
+    fn name() -> &'static str
+    where
+        Self: Sized;
+
     // Send messages to the channel
     async fn send(&self, messages: &[Message]) -> BabataResult<()>;
     // Receive messages, blocking until messages are available

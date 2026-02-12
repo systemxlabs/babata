@@ -178,6 +178,10 @@ impl TelegramChannel {
 
 #[async_trait::async_trait]
 impl super::Channel for TelegramChannel {
+    fn name() -> &'static str {
+        "Telegram"
+    }
+
     async fn send(&self, messages: &[Message]) -> BabataResult<()> {
         // Outbound messages are sent only to the active DM chat.
         let chat_id = (*self.active_private_chat_id.lock().await).ok_or_else(|| {

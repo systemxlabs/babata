@@ -2,7 +2,11 @@ use std::collections::HashMap;
 
 use crate::{
     BabataResult,
-    config::{AgentConfig, Config, MoonshotProviderConfig, OpenAIProviderConfig, ProviderConfig},
+    channel::{Channel, TelegramChannel},
+    config::{
+        AgentConfig, ChannelConfig, Config, MoonshotProviderConfig, OpenAIProviderConfig,
+        ProviderConfig, TelegramChannelConfig,
+    },
     error::BabataError,
     provider::{MoonshotProvider, OpenAIProvider, Provider},
 };
@@ -27,6 +31,10 @@ fn run_onboard() -> BabataResult<()> {
 
     if let Some(agent_config) = prompt_main_agent_setup(&config)? {
         config.agents.insert("main".to_string(), agent_config);
+    }
+
+    if let Some(channel_config) = prompt_channel_setup()? {
+        upsert_channel_config(&mut config, channel_config);
     }
 
     config.validate()?;
@@ -258,6 +266,84 @@ fn build_provider_config(provider_name: &str, api_key: String) -> BabataResult<P
     )))
 }
 
+fn prompt_channel_setup() -> BabataResult<Option<ChannelConfig>> {
+    println!("Configure channel:");
+    let channel_names = available_channel_names();
+    for (idx, channel_name) in channel_names.iter().enumerate() {
+        println!("{}. {}", idx + 1, channel_name);
+    }
+    println!("{}. skip", channel_names.len() + 1);
+
+    let selection = prompt_line(&format!("Choice (1-{})", channel_names.len() + 1))?;
+    let selection = selection.trim();
+    if selection.eq_ignore_ascii_case("skip") {
+        return Ok(None);
+    }
+
+    let idx: usize = selection
+        .parse()
+        .map_err(|_| BabataError::config("Invalid channel selection"))?;
+    if idx == channel_names.len() + 1 {
+        return Ok(None);
+    }
+
+    let Some(channel_name) = channel_names.get(idx.saturating_sub(1)) else {
+        return Err(BabataError::config("Invalid channel selection"));
+    };
+
+    Ok(Some(build_channel_config(channel_name)?))
+}
+
+fn available_channel_names() -> Vec<String> {
+    vec![TelegramChannel::name().to_string()]
+}
+
+fn build_channel_config(channel_name: &str) -> BabataResult<ChannelConfig> {
+    if channel_name.eq_ignore_ascii_case(TelegramChannel::name())
+        || channel_name.eq_ignore_ascii_case("telegram")
+    {
+        return Ok(ChannelConfig::Telegram(prompt_telegram_channel_config()?));
+    }
+
+    Err(BabataError::config(format!(
+        "Unsupported channel '{}'",
+        channel_name
+    )))
+}
+
+fn prompt_telegram_channel_config() -> BabataResult<TelegramChannelConfig> {
+    let bot_token = prompt_line("Telegram bot token")?;
+
+    let base_url = prompt_line(
+        "Telegram base url (optional, press Enter to use default https://api.telegram.org)",
+    )?;
+    let base_url = if base_url.trim().is_empty() {
+        None
+    } else {
+        Some(base_url)
+    };
+
+    let polling_timeout_secs_raw = prompt_line(
+        "Telegram polling timeout seconds (optional, press Enter to use default 30)",
+    )?;
+    let polling_timeout_secs = if polling_timeout_secs_raw.trim().is_empty() {
+        None
+    } else {
+        Some(
+            polling_timeout_secs_raw
+                .trim()
+                .parse::<u64>()
+                .map_err(|_| BabataError::config("Invalid polling timeout seconds"))?,
+        )
+    };
+
+    Ok(TelegramChannelConfig {
+        bot_token,
+        base_url,
+        polling_timeout_secs,
+    })
+}
+
 fn prompt_line(label: &str) -> BabataResult<String> {
     use std::io::{self, Write};
     print!("{label}: ");
@@ -295,4 +381,18 @@ fn upsert_provider_config(config: &mut Config, provider_config: ProviderConfig) 
     }
 
     config.providers.push(provider_config);
+}
+
+fn upsert_channel_config(config: &mut Config, channel_config: ChannelConfig) {
+    if let Some(existing) = config.channels.iter_mut().find(|existing| {
+        matches!(
+            (existing, &channel_config),
+            (ChannelConfig::Telegram(_), ChannelConfig::Telegram(_))
+        )
+    }) {
+        *existing = channel_config;
+        return;
+    }
+
+    config.channels.push(channel_config);
 }
