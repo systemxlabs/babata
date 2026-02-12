@@ -22,7 +22,7 @@ impl MoonshotProvider {
 #[async_trait::async_trait]
 impl Provider for MoonshotProvider {
     fn name() -> &'static str {
-        "Moonshot"
+        "moonshot"
     }
 
     fn supported_models() -> &'static [&'static str] {

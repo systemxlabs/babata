@@ -205,11 +205,13 @@ fn prompt_main_agent_setup(config: &Config) -> BabataResult<Option<AgentConfig>>
         return Err(BabataError::config("Invalid provider choice"));
     };
 
-    let provider_config = config.providers.iter().find(|provider| {
-        provider.matches_name(provider_name)
-    }).ok_or_else(|| {
-        BabataError::config(format!("Provider '{}' not found in config", provider_name))
-    })?;
+    let provider_config = config
+        .providers
+        .iter()
+        .find(|provider| provider.matches_name(provider_name))
+        .ok_or_else(|| {
+            BabataError::config(format!("Provider '{}' not found in config", provider_name))
+        })?;
     let model = prompt_model_setup(provider_config)?;
     Ok(Some(AgentConfig {
         provider: provider_name.to_string(),
@@ -323,9 +325,8 @@ fn prompt_telegram_channel_config() -> BabataResult<TelegramChannelConfig> {
         Some(base_url)
     };
 
-    let polling_timeout_secs_raw = prompt_line(
-        "Telegram polling timeout seconds (optional, press Enter to use default 30)",
-    )?;
+    let polling_timeout_secs_raw =
+        prompt_line("Telegram polling timeout seconds (optional, press Enter to use default 30)")?;
     let polling_timeout_secs = if polling_timeout_secs_raw.trim().is_empty() {
         None
     } else {

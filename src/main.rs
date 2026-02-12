@@ -17,7 +17,9 @@ fn main() {
             babata::cli::ProviderAction::Add { name, api_key } => {
                 babata::cli::provider::add(&args, name, api_key)
             }
-            babata::cli::ProviderAction::Delete { name } => babata::cli::provider::delete(&args, name),
+            babata::cli::ProviderAction::Delete { name } => {
+                babata::cli::provider::delete(&args, name)
+            }
             babata::cli::ProviderAction::List => babata::cli::provider::list(&args),
         },
         Some(babata::cli::Command::Onboard) => babata::cli::onboard::run(&args),

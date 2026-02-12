@@ -137,7 +137,7 @@ impl OpenAIProvider {
 #[async_trait::async_trait]
 impl Provider for OpenAIProvider {
     fn name() -> &'static str {
-        "OpenAI"
+        "openai"
     }
 
     fn supported_models() -> &'static [&'static str] {

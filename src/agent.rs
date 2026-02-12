@@ -2,9 +2,9 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use crate::{
     BabataResult,
-    error::BabataError,
     channel::{Channel, build_channels},
     config::Config,
+    error::BabataError,
     memory::Memory,
     message::MessageStore,
     provider::{Provider, build_providers},
@@ -97,7 +97,8 @@ impl AgentLoop {
                 );
                 let response = task.run().await?;
 
-                self.message_store.insert_messages(std::slice::from_ref(&response))?;
+                self.message_store
+                    .insert_messages(std::slice::from_ref(&response))?;
                 channel.send(std::slice::from_ref(&response)).await?;
             }
 
