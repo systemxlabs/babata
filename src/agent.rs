@@ -6,6 +6,8 @@ use crate::{
     memory::Memory,
     message::MessageStore,
     provider::{Provider, build_providers},
+    skill::{Skill, load_skills},
+    system_prompt::{SystemPrompt, load_system_prompts},
     tool::{Tool, build_tools},
 };
 
@@ -16,6 +18,8 @@ pub struct AgentLoop {
     pub message_store: MessageStore,
     pub memory: Memory,
     pub tools: Vec<Arc<dyn Tool>>,
+    pub system_prompts: Vec<SystemPrompt>,
+    pub skills: Vec<Skill>,
 }
 
 impl AgentLoop {
@@ -25,6 +29,12 @@ impl AgentLoop {
         let message_store = MessageStore::new().expect("Failed to initialize message store");
         let memory = Memory {};
         let tools = build_tools();
+        let system_prompts = load_system_prompts().unwrap_or_else(|err| {
+            panic!("Failed to load system prompts: {err}");
+        });
+        let skills = load_skills().unwrap_or_else(|err| {
+            panic!("Failed to load skills: {err}");
+        });
 
         Self {
             config,
@@ -33,6 +43,8 @@ impl AgentLoop {
             message_store,
             memory,
             tools,
+            system_prompts,
+            skills,
         }
     }
 }
