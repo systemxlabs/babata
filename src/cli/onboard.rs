@@ -338,11 +338,38 @@ fn prompt_telegram_channel_config() -> BabataResult<TelegramChannelConfig> {
         )
     };
 
+    let allowed_user_ids_raw = prompt_line(
+        "Telegram allowed user IDs (comma separated, required, e.g. 123456789)",
+    )?;
+    let allowed_user_ids = parse_allowed_user_ids(&allowed_user_ids_raw)?;
+
     Ok(TelegramChannelConfig {
         bot_token,
         base_url,
         polling_timeout_secs,
+        allowed_user_ids,
     })
+}
+
+fn parse_allowed_user_ids(raw: &str) -> BabataResult<Vec<i64>> {
+    let values = raw
+        .split(',')
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| {
+            value
+                .parse::<i64>()
+                .map_err(|_| BabataError::config("Invalid Telegram allowed user id"))
+        })
+        .collect::<BabataResult<Vec<_>>>()?;
+
+    if values.is_empty() {
+        return Err(BabataError::config(
+            "Telegram allowed user IDs cannot be empty",
+        ));
+    }
+
+    Ok(values)
 }
 
 fn prompt_line(label: &str) -> BabataResult<String> {

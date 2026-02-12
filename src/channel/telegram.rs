@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use reqwest::{Client, StatusCode};
 use serde::Deserialize;
 use serde_json::json;
@@ -20,6 +22,8 @@ pub struct TelegramChannel {
     last_update_id: Mutex<Option<i64>>,
     // The current DM chat to reply to; group chats are intentionally unsupported.
     active_private_chat_id: Mutex<Option<i64>>,
+    // Allowed DM user ids; messages from others are ignored.
+    allowed_user_ids: HashSet<i64>,
 }
 
 impl TelegramChannel {
@@ -31,6 +35,7 @@ impl TelegramChannel {
             polling_timeout_secs: 30,
             last_update_id: Mutex::new(None),
             active_private_chat_id: Mutex::new(None),
+            allowed_user_ids: HashSet::new(),
         }
     }
 
@@ -41,6 +46,11 @@ impl TelegramChannel {
 
     pub fn with_polling_timeout_secs(mut self, polling_timeout_secs: u64) -> Self {
         self.polling_timeout_secs = polling_timeout_secs;
+        self
+    }
+
+    pub fn with_allowed_user_ids(mut self, allowed_user_ids: Vec<i64>) -> Self {
+        self.allowed_user_ids = allowed_user_ids.into_iter().collect();
         self
     }
 
@@ -95,7 +105,7 @@ impl TelegramChannel {
 
         let updates = payload.result.unwrap_or_default();
         // Keep only DM messages and return the max update_id for cursor advancing.
-        let (max_update_id, messages) = extract_private_messages(updates);
+        let (max_update_id, messages) = extract_private_messages(updates, &self.allowed_user_ids);
 
         if let Some(max_update_id) = max_update_id {
             *self.last_update_id.lock().await = Some(max_update_id);
@@ -247,6 +257,7 @@ struct TelegramChat {
 
 fn extract_private_messages(
     updates: Vec<TelegramUpdate>,
+    allowed_user_ids: &HashSet<i64>,
 ) -> (Option<i64>, Vec<IncomingPrivateMessage>) {
     let mut max_update_id = None;
     let mut messages = Vec::new();
@@ -260,6 +271,9 @@ fn extract_private_messages(
         };
         // DM-only: ignore group/supergroup/channel updates.
         if message.chat.chat_type != "private" {
+            continue;
+        }
+        if !allowed_user_ids.contains(&message.chat.id) {
             continue;
         }
         let Some(text) = message.text else {
@@ -328,11 +342,43 @@ mod tests {
         let updates: Vec<TelegramUpdate> =
             serde_json::from_value(updates_json).expect("parse updates json");
 
-        let (max_id, private_messages) = extract_private_messages(updates);
+        let allowed_user_ids = HashSet::from([1001]);
+        let (max_id, private_messages) = extract_private_messages(updates, &allowed_user_ids);
         assert_eq!(max_id, Some(2));
         assert_eq!(private_messages.len(), 1);
         assert_eq!(private_messages[0].chat_id, 1001);
         assert_eq!(private_messages[0].text, "hello");
+    }
+
+    #[test]
+    fn extract_private_messages_filters_disallowed_users() {
+        let updates_json = serde_json::json!([
+            {
+                "update_id": 1,
+                "message": {
+                    "chat": { "id": 1001, "type": "private" },
+                    "text": "allow"
+                }
+            },
+            {
+                "update_id": 2,
+                "message": {
+                    "chat": { "id": 2002, "type": "private" },
+                    "text": "deny"
+                }
+            }
+        ]);
+
+        let updates: Vec<TelegramUpdate> =
+            serde_json::from_value(updates_json).expect("parse updates json");
+
+        let allowed_user_ids = HashSet::from([1001]);
+        let (max_id, private_messages) = extract_private_messages(updates, &allowed_user_ids);
+
+        assert_eq!(max_id, Some(2));
+        assert_eq!(private_messages.len(), 1);
+        assert_eq!(private_messages[0].chat_id, 1001);
+        assert_eq!(private_messages[0].text, "allow");
     }
 
     #[test]

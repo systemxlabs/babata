@@ -15,6 +15,8 @@ pub struct TelegramChannelConfig {
     pub base_url: Option<String>,
     #[serde(default)]
     pub polling_timeout_secs: Option<u64>,
+    #[serde(default)]
+    pub allowed_user_ids: Vec<i64>,
 }
 
 impl TelegramChannelConfig {
@@ -55,6 +57,18 @@ impl TelegramChannelConfig {
             ));
         }
 
+        if self.allowed_user_ids.is_empty() {
+            return Err(BabataError::config(
+                "Telegram channel allowed_user_ids cannot be empty",
+            ));
+        }
+
+        if self.allowed_user_ids.iter().any(|id| *id <= 0) {
+            return Err(BabataError::config(
+                "Telegram channel allowed_user_ids must contain positive user id values",
+            ));
+        }
+
         Ok(())
     }
 }
@@ -69,6 +83,7 @@ mod tests {
             bot_token: "token".to_string(),
             base_url: None,
             polling_timeout_secs: None,
+            allowed_user_ids: vec![12345],
         };
 
         assert_eq!(config.base_url(), TelegramChannelConfig::DEFAULT_BASE_URL);
@@ -84,6 +99,19 @@ mod tests {
             bot_token: "   ".to_string(),
             base_url: None,
             polling_timeout_secs: None,
+            allowed_user_ids: vec![12345],
+        };
+
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn telegram_config_rejects_empty_allowed_user_ids() {
+        let config = TelegramChannelConfig {
+            bot_token: "token".to_string(),
+            base_url: None,
+            polling_timeout_secs: None,
+            allowed_user_ids: Vec::new(),
         };
 
         assert!(config.validate().is_err());
