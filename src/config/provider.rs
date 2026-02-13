@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::{BabataResult, error::BabataError};
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
-#[serde(tag = "type")]
+#[serde(tag = "name")]
 pub enum ProviderConfig {
     #[serde(rename = "openai")]
     OpenAI(OpenAIProviderConfig),
