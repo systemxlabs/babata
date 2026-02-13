@@ -50,8 +50,17 @@ impl OpenAIProvider {
             .collect()
     }
 
-    fn format_messages(&self, messages: &[Message]) -> BabataResult<Vec<Value>> {
-        let mut json_messages = Vec::with_capacity(messages.len());
+    fn format_messages(&self, system_prompt: &str, messages: &[Message]) -> BabataResult<Vec<Value>> {
+        let mut json_messages = Vec::with_capacity(messages.len() + 1);
+
+        let system_prompt = system_prompt.trim();
+        if !system_prompt.is_empty() {
+            json_messages.push(json!({
+                "role": "system",
+                "content": system_prompt
+            }));
+        }
+
         for message in messages {
             match message {
                 Message::UserPrompt { content } => {
@@ -129,7 +138,6 @@ impl OpenAIProvider {
                 })),
             }
         }
-        // TODO push system messages
         Ok(json_messages)
     }
 }
@@ -150,7 +158,7 @@ impl Provider for OpenAIProvider {
     ) -> BabataResult<GenerationResponse> {
         let mut body = json!({
             "model": request.model,
-            "messages": self.format_messages(request.messages)?,
+            "messages": self.format_messages(request.system_prompt, request.messages)?,
         });
 
         if !request.tools.is_empty() {
