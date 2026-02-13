@@ -18,7 +18,10 @@ pub fn delete(_args: &Args, _name: &str) {
 }
 
 pub fn list(_args: &Args) {
-    // TODO: implement provider list flow.
+    if let Err(err) = run_list() {
+        eprintln!("{err}");
+        std::process::exit(1);
+    }
 }
 
 fn run_add(provider_config_json: &str) -> BabataResult<()> {
@@ -38,5 +41,22 @@ fn run_add(provider_config_json: &str) -> BabataResult<()> {
     config.save()?;
 
     println!("Added/updated provider '{}' in config", provider_name);
+    Ok(())
+}
+
+fn run_list() -> BabataResult<()> {
+    let config = Config::load()?;
+
+    for provider_config in &config.providers {
+        let payload = serde_json::to_string(provider_config).map_err(|err| {
+            BabataError::internal(format!(
+                "Failed to serialize provider '{}' config to JSON: {}",
+                provider_config.provider_name(),
+                err
+            ))
+        })?;
+        println!("{payload}");
+    }
+
     Ok(())
 }
