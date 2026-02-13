@@ -167,6 +167,19 @@ impl Config {
 
         self.channels.push(channel_config);
     }
+
+    pub fn upsert_job(&mut self, job_config: JobConfig) {
+        if let Some(existing) = self
+            .jobs
+            .iter_mut()
+            .find(|existing| existing.name == job_config.name)
+        {
+            *existing = job_config;
+            return;
+        }
+
+        self.jobs.push(job_config);
+    }
 }
 
 #[cfg(test)]

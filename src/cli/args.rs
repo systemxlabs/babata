@@ -21,6 +21,10 @@ pub enum Command {
         #[command(subcommand)]
         action: ProviderAction,
     },
+    Job {
+        #[command(subcommand)]
+        action: JobAction,
+    },
     Onboard,
 }
 
@@ -39,6 +43,19 @@ pub enum ProviderAction {
     },
     Delete {
         #[arg(value_name = "PROVIDER_NAME")]
+        name: String,
+    },
+    List,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum JobAction {
+    Add {
+        #[arg(value_name = "JOB_CONFIG_JSON")]
+        job_config_json: String,
+    },
+    Delete {
+        #[arg(value_name = "JOB_NAME")]
         name: String,
     },
     List,

@@ -22,6 +22,13 @@ fn main() {
             }
             babata::cli::ProviderAction::List => babata::cli::provider::list(&args),
         },
+        Some(babata::cli::Command::Job { action }) => match action {
+            babata::cli::JobAction::Add { job_config_json } => {
+                babata::cli::job::add(&args, job_config_json)
+            }
+            babata::cli::JobAction::Delete { name } => babata::cli::job::delete(&args, name),
+            babata::cli::JobAction::List => babata::cli::job::list(&args),
+        },
         Some(babata::cli::Command::Onboard) => babata::cli::onboard::run(&args),
         None => babata::cli::prompt::run(&args),
     }
