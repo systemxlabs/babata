@@ -411,8 +411,8 @@ fn configure_service_from_template() -> BabataResult<()> {
                 .join("LaunchAgents"),
         ),
         "linux" => (
-            "babata.service.template",
-            "babata.service",
+            "babata.server.service.template",
+            "babata.server.service",
             crate::utils::babata_dir()?.join("services"),
         ),
         _ => {

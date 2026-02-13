@@ -5,7 +5,7 @@ use crate::{BabataResult, agent::AgentLoop, config::Config, error::BabataError};
 use super::Args;
 
 const MACOS_LAUNCHD_LABEL: &str = "babata.server";
-const LINUX_SYSTEMD_SERVICE: &str = "babata.service";
+const LINUX_SYSTEMD_SERVICE: &str = "babata.server.service";
 
 pub fn serve(args: &Args) {
     if let Err(err) = run_serve(args) {
