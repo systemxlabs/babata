@@ -1,11 +1,15 @@
 use clap::{Parser, Subcommand};
 
 #[derive(Parser, Debug)]
-#[command(version)]
+#[command(version, about = "Babata agent CLI", long_about = None)]
 pub struct Args {
-    #[arg(long, default_value = "main")]
+    #[arg(
+        long,
+        default_value = "main",
+        help = "Agent name to use (default: main)"
+    )]
     pub agent: String,
-    #[arg()]
+    #[arg(help = "Prompt text sent to the agent")]
     pub prompt: Option<String>,
     #[command(subcommand)]
     pub command: Option<Command>,
@@ -13,50 +17,72 @@ pub struct Args {
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
+    #[command(about = "Server management commands (serve/start/restart)")]
     Server {
         #[command(subcommand)]
         action: ServerAction,
     },
+    #[command(about = "Provider config management (add/delete/list)")]
     Provider {
         #[command(subcommand)]
         action: ProviderAction,
     },
+    #[command(about = "Job config management (add/delete/list)")]
     Job {
         #[command(subcommand)]
         action: JobAction,
     },
+    #[command(about = "Interactive setup (provider/agent/channel/service)")]
     Onboard,
 }
 
 #[derive(Subcommand, Debug)]
 pub enum ServerAction {
+    #[command(about = "Run the server loop in foreground")]
     Serve,
+    #[command(about = "Start background service on current platform")]
     Start,
+    #[command(about = "Restart background service on current platform")]
     Restart,
 }
 
 #[derive(Subcommand, Debug)]
 pub enum ProviderAction {
+    #[command(about = "Add or update provider config (JSON)")]
     Add {
-        #[arg(value_name = "PROVIDER_CONFIG_JSON")]
+        #[arg(
+            value_name = "PROVIDER_CONFIG_JSON",
+            help = "Provider config JSON, e.g. {\"name\":\"openai\",\"api_key\":\"sk-...\"}"
+        )]
         provider_config_json: String,
     },
+    #[command(about = "Delete a provider by name")]
     Delete {
-        #[arg(value_name = "PROVIDER_NAME")]
+        #[arg(
+            value_name = "PROVIDER_NAME",
+            help = "Provider name, e.g. openai or moonshot"
+        )]
         name: String,
     },
+    #[command(about = "List all provider configs (one JSON per line)")]
     List,
 }
 
 #[derive(Subcommand, Debug)]
 pub enum JobAction {
+    #[command(about = "Add or update job config (JSON)")]
     Add {
-        #[arg(value_name = "JOB_CONFIG_JSON")]
+        #[arg(
+            value_name = "JOB_CONFIG_JSON",
+            help = "Job config JSON, e.g. {\"name\":\"daily\",\"agent_name\":\"main\",\"enabled\":true,\"cron\":\"0 9 * * *\",\"prompt\":\"...\"}"
+        )]
         job_config_json: String,
     },
+    #[command(about = "Delete a job by name")]
     Delete {
-        #[arg(value_name = "JOB_NAME")]
+        #[arg(value_name = "JOB_NAME", help = "Job name")]
         name: String,
     },
+    #[command(about = "List all job configs (one JSON per line)")]
     List,
 }

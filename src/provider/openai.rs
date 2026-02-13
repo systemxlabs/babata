@@ -50,7 +50,11 @@ impl OpenAIProvider {
             .collect()
     }
 
-    fn format_messages(&self, system_prompt: &str, messages: &[Message]) -> BabataResult<Vec<Value>> {
+    fn format_messages(
+        &self,
+        system_prompt: &str,
+        messages: &[Message],
+    ) -> BabataResult<Vec<Value>> {
         let mut json_messages = Vec::with_capacity(messages.len() + 1);
 
         let system_prompt = system_prompt.trim();
