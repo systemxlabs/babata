@@ -14,9 +14,9 @@ fn main() {
             babata::cli::ServerAction::Restart => babata::cli::server::restart(&args),
         },
         Some(babata::cli::Command::Provider { action }) => match action {
-            babata::cli::ProviderAction::Add { name, api_key } => {
-                babata::cli::provider::add(&args, name, api_key)
-            }
+            babata::cli::ProviderAction::Add {
+                provider_config_json,
+            } => babata::cli::provider::add(&args, provider_config_json),
             babata::cli::ProviderAction::Delete { name } => {
                 babata::cli::provider::delete(&args, name)
             }

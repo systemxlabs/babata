@@ -34,10 +34,8 @@ pub enum ServerAction {
 #[derive(Subcommand, Debug)]
 pub enum ProviderAction {
     Add {
-        #[arg(long)]
-        name: String,
-        #[arg(long)]
-        api_key: String,
+        #[arg(value_name = "PROVIDER_CONFIG_JSON")]
+        provider_config_json: String,
     },
     Delete {
         #[arg(long)]
