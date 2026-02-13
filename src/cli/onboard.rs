@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::Path};
 
 use crate::{
     BabataResult,
@@ -43,6 +43,9 @@ fn run_onboard() -> BabataResult<()> {
     let config_json = serde_json::to_string_pretty(&config)
         .map_err(|err| BabataError::config(format!("Failed to serialize config: {}", err)))?;
     println!("{config_json}");
+
+    configure_service_from_template()?;
+
     Ok(())
 }
 
@@ -396,4 +399,72 @@ fn load_or_init_config() -> BabataResult<Config> {
             jobs: Vec::new(),
         })
     }
+}
+
+fn configure_service_from_template() -> BabataResult<()> {
+    let (template_name, output_name, output_dir) = match std::env::consts::OS {
+        "macos" => (
+            "babata.server.plist.template",
+            "babata.server.plist",
+            crate::utils::resolve_home_dir()?
+                .join("Library")
+                .join("LaunchAgents"),
+        ),
+        "linux" => (
+            "babata.service.template",
+            "babata.service",
+            crate::utils::babata_dir()?.join("services"),
+        ),
+        _ => {
+            return Ok(());
+        }
+    };
+
+    let project_root = std::env::current_dir().map_err(|err| {
+        BabataError::internal(format!("Failed to resolve current directory: {err}"))
+    })?;
+    let template_path = project_root.join("services").join(template_name);
+    std::fs::create_dir_all(&output_dir).map_err(|err| {
+        BabataError::config(format!(
+            "Failed to create service output directory '{}': {}",
+            output_dir.display(),
+            err
+        ))
+    })?;
+    let output_path = output_dir.join(output_name);
+
+    render_service_template(&template_path, &output_path)?;
+
+    println!("Generated service file: {}", output_path.display());
+    Ok(())
+}
+
+fn render_service_template(template_path: &Path, output_path: &Path) -> BabataResult<()> {
+    let template = std::fs::read_to_string(template_path).map_err(|err| {
+        BabataError::config(format!(
+            "Failed to read service template '{}': {}",
+            template_path.display(),
+            err
+        ))
+    })?;
+
+    if !template.contains("{{HOME_DIR}}") {
+        return Err(BabataError::config(format!(
+            "Service template '{}' is missing '{{{{HOME_DIR}}}}' placeholder",
+            template_path.display()
+        )));
+    }
+
+    let home_dir = crate::utils::resolve_home_dir()?;
+    let rendered = template.replace("{{HOME_DIR}}", &home_dir.to_string_lossy());
+
+    std::fs::write(output_path, rendered).map_err(|err| {
+        BabataError::config(format!(
+            "Failed to write rendered service file '{}': {}",
+            output_path.display(),
+            err
+        ))
+    })?;
+
+    Ok(())
 }

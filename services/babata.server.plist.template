@@ -7,13 +7,13 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/lewis/.cargo/bin/babata</string>
+        <string>{{HOME_DIR}}/.cargo/bin/babata</string>
         <string>server</string>
         <string>serve</string>
     </array>
 
     <key>WorkingDirectory</key>
-    <string>/Users/lewis/.babata</string>
+    <string>{{HOME_DIR}}/.babata</string>
 
     <key>RunAtLoad</key>
     <true/>
@@ -22,9 +22,9 @@
     <true/>
 
     <key>StandardOutPath</key>
-    <string>/Users/lewis/.babata/logs/server.stdout.log</string>
+    <string>{{HOME_DIR}}/.babata/logs/server.stdout.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/Users/lewis/.babata/logs/server.stderr.log</string>
+    <string>{{HOME_DIR}}/.babata/logs/server.stderr.log</string>
 </dict>
 </plist>
