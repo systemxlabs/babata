@@ -38,7 +38,7 @@ pub enum ProviderAction {
         provider_config_json: String,
     },
     Delete {
-        #[arg(long)]
+        #[arg(value_name = "PROVIDER_NAME")]
         name: String,
     },
     List,

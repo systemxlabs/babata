@@ -13,8 +13,11 @@ pub fn add(_args: &Args, provider_config_json: &str) {
     }
 }
 
-pub fn delete(_args: &Args, _name: &str) {
-    // TODO: implement provider delete flow.
+pub fn delete(_args: &Args, name: &str) {
+    if let Err(err) = run_delete(name) {
+        eprintln!("{err}");
+        std::process::exit(1);
+    }
 }
 
 pub fn list(_args: &Args) {
@@ -58,5 +61,22 @@ fn run_list() -> BabataResult<()> {
         println!("{payload}");
     }
 
+    Ok(())
+}
+
+fn run_delete(name: &str) -> BabataResult<()> {
+    let mut config = Config::load()?;
+
+    let index = config
+        .providers
+        .iter()
+        .position(|provider| provider.matches_name(name))
+        .ok_or_else(|| BabataError::config(format!("Provider '{}' not found in config", name)))?;
+
+    let deleted = config.providers.remove(index);
+    config.validate()?;
+    config.save()?;
+
+    println!("Deleted provider '{}'", deleted.provider_name());
     Ok(())
 }
