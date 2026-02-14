@@ -54,7 +54,7 @@ impl AgentLoop {
             ));
         }
 
-        let agent_config = self.config.agents.get("main").ok_or_else(|| {
+        let agent_config = self.config.get_agent("main").ok_or_else(|| {
             BabataError::config("No 'main' agent found in config; run onboarding first")
         })?;
 

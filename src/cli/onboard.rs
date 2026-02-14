@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::Path};
+use std::path::Path;
 
 use crate::{
     BabataResult,
@@ -30,7 +30,7 @@ fn run_onboard() -> BabataResult<()> {
     }
 
     if let Some(agent_config) = prompt_main_agent_setup(&config)? {
-        config.agents.insert("main".to_string(), agent_config);
+        config.upsert_agent(agent_config);
     }
 
     if let Some(channel_config) = prompt_channel_setup()? {
@@ -218,6 +218,7 @@ fn prompt_main_agent_setup(config: &Config) -> BabataResult<Option<AgentConfig>>
         })?;
     let model = prompt_model_setup(provider_config)?;
     Ok(Some(AgentConfig {
+        name: "main".to_string(),
         provider: provider_name.to_string(),
         model,
     }))
@@ -402,7 +403,7 @@ fn load_or_init_config() -> BabataResult<Config> {
     } else {
         Ok(Config {
             providers: Vec::new(),
-            agents: HashMap::new(),
+            agents: Vec::new(),
             channels: Vec::new(),
             jobs: Vec::new(),
         })

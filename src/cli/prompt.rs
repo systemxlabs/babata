@@ -22,7 +22,7 @@ pub fn run(args: &Args) {
 fn run_prompt(args: &Args) -> BabataResult<()> {
     let config = Config::load()?;
 
-    let agent_config = config.agents.get(&args.agent).ok_or_else(|| {
+    let agent_config = config.get_agent(&args.agent).ok_or_else(|| {
         BabataError::config(format!(
             "Agent '{}' not found in config; run \"babata onboard\" first",
             args.agent

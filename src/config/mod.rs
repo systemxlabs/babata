@@ -6,7 +6,6 @@ pub use channel::*;
 pub use job::*;
 pub use provider::*;
 
-use std::collections::HashMap;
 use std::collections::HashSet;
 
 use crate::{BabataResult, error::BabataError, utils::babata_dir};
@@ -14,6 +13,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct AgentConfig {
+    pub name: String,
     // If None, use default skills
     pub provider: String,
     pub model: String,
@@ -22,7 +22,7 @@ pub struct AgentConfig {
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct Config {
     pub providers: Vec<ProviderConfig>,
-    pub agents: HashMap<String, AgentConfig>,
+    pub agents: Vec<AgentConfig>,
     #[serde(default)]
     pub channels: Vec<ChannelConfig>,
     #[serde(default)]
@@ -93,9 +93,21 @@ impl Config {
             }
         }
 
+        let mut agent_names = HashSet::new();
         let mut has_main_agent = false;
-        for (agent_name, agent_config) in &self.agents {
-            if agent_name == "main" {
+        for agent_config in &self.agents {
+            if agent_config.name.trim().is_empty() {
+                return Err(BabataError::config("Agent name cannot be empty"));
+            }
+
+            if !agent_names.insert(agent_config.name.clone()) {
+                return Err(BabataError::config(format!(
+                    "Duplicate agent name '{}' found in configuration",
+                    agent_config.name
+                )));
+            }
+
+            if agent_config.name == "main" {
                 has_main_agent = true;
             }
             if !self
@@ -105,7 +117,7 @@ impl Config {
             {
                 return Err(BabataError::config(format!(
                     "Agent '{}' references unknown provider '{}'",
-                    agent_name, agent_config.provider
+                    agent_config.name, agent_config.provider
                 )));
             }
         }
@@ -124,7 +136,7 @@ impl Config {
         let mut job_names = HashSet::new();
         for job in &self.jobs {
             job.validate()?;
-            if !self.agents.contains_key(&job.agent_name) {
+            if !self.agents.iter().any(|agent| agent.name == job.agent_name) {
                 return Err(BabataError::config(format!(
                     "Job '{}' references unknown agent '{}'",
                     job.name, job.agent_name
@@ -180,6 +192,23 @@ impl Config {
 
         self.jobs.push(job_config);
     }
+
+    pub fn upsert_agent(&mut self, agent_config: AgentConfig) {
+        if let Some(existing) = self
+            .agents
+            .iter_mut()
+            .find(|existing| existing.name == agent_config.name)
+        {
+            *existing = agent_config;
+            return;
+        }
+
+        self.agents.push(agent_config);
+    }
+
+    pub fn get_agent(&self, agent_name: &str) -> Option<&AgentConfig> {
+        self.agents.iter().find(|agent| agent.name == agent_name)
+    }
 }
 
 #[cfg(test)]
@@ -192,13 +221,11 @@ mod tests {
             providers: vec![ProviderConfig::OpenAI(OpenAIProviderConfig {
                 api_key: "test-api-key".to_string(),
             })],
-            agents: HashMap::from([(
-                "main".to_string(),
-                AgentConfig {
-                    provider: "openai".to_string(),
-                    model: "gpt-4.1".to_string(),
-                },
-            )]),
+            agents: vec![AgentConfig {
+                name: "main".to_string(),
+                provider: "openai".to_string(),
+                model: "gpt-4.1".to_string(),
+            }],
             channels: Vec::new(),
             jobs: Vec::new(),
         };
@@ -215,13 +242,11 @@ mod tests {
             providers: vec![ProviderConfig::OpenAI(OpenAIProviderConfig {
                 api_key: "test-api-key".to_string(),
             })],
-            agents: HashMap::from([(
-                "main".to_string(),
-                AgentConfig {
-                    provider: "openai".to_string(),
-                    model: "test-model".to_string(),
-                },
-            )]),
+            agents: vec![AgentConfig {
+                name: "main".to_string(),
+                provider: "openai".to_string(),
+                model: "test-model".to_string(),
+            }],
             channels: Vec::new(),
             jobs: Vec::new(),
         };
@@ -235,13 +260,11 @@ mod tests {
             providers: vec![ProviderConfig::OpenAI(OpenAIProviderConfig {
                 api_key: "test-api-key".to_string(),
             })],
-            agents: HashMap::from([(
-                "main".to_string(),
-                AgentConfig {
-                    provider: "openai".to_string(),
-                    model: "test-model".to_string(),
-                },
-            )]),
+            agents: vec![AgentConfig {
+                name: "main".to_string(),
+                provider: "openai".to_string(),
+                model: "test-model".to_string(),
+            }],
             channels: Vec::new(),
             jobs: vec![JobConfig {
                 name: "daily-summary".to_string(),

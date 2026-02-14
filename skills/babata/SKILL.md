@@ -55,9 +55,9 @@ inline: true
     { "name": "openai", "api_key": "sk-..." },
     { "name": "moonshot", "api_key": "sk-..." }
   ],
-  "agents": {
-    "main": { "provider": "openai", "model": "gpt-4.1" }
-  },
+  "agents": [
+    { "name": "main", "provider": "openai", "model": "gpt-4.1" }
+  ],
   "channels": [
     {
       "type": "telegram",
@@ -82,7 +82,7 @@ inline: true
 
 ## 硬性约束
 
-1. 必须存在 `agents.main`
+1. 必须存在 `name = "main"` 的 agent
 2. 每个 agent 的 `provider` 必须在 `providers` 中存在
 3. `providers` 不能出现重复 provider 类型
 4. 每个 job 的 `name` 必须唯一
