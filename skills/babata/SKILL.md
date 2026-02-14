@@ -32,6 +32,10 @@ inline: true
   - `babata provider add <PROVIDER_CONFIG_JSON>`
   - `babata provider delete <PROVIDER_NAME>`
   - `babata provider list`
+- Agent CLI：
+  - `babata agent add <AGENT_CONFIG_JSON>`
+  - `babata agent delete <AGENT_NAME>`
+  - `babata agent list`
 - Job CLI：
   - `babata job add <JOB_CONFIG_JSON>`
   - `babata job delete <JOB_NAME>`
@@ -100,7 +104,7 @@ inline: true
 2. **读取现状**
    - 读取 `~/.babata/config.json`；不存在时优先执行 `babata onboard`。
 3. **优先走 CLI 子命令**
-   - provider/job 修改优先使用 `babata provider ...` / `babata job ...`。
+   - provider/agent/job 修改优先使用对应子命令。
 4. **最小化修改**
    - 只改用户要求字段；不要顺手重排无关内容。
 5. **一致性校验**
@@ -119,6 +123,12 @@ inline: true
   - `babata provider list`
 - 删除 provider：
   - `babata provider delete "openai"`
+- 新增 agent：
+  - `babata agent add '{"name":"main","provider":"openai","model":"gpt-4.1"}'`
+- 删除 agent：
+  - `babata agent delete "main"`
+- 列出 agent：
+  - `babata agent list`
 - 新增 job：
   - `babata job add '{"name":"daily","agent_name":"main","enabled":true,"cron":"0 9 * * *","description":"Daily summary","prompt":"..."}'`
 - 列出 job：

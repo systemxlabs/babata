@@ -1,3 +1,4 @@
+pub mod agent;
 mod args;
 pub mod job;
 pub mod onboard;
