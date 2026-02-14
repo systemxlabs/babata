@@ -74,7 +74,7 @@ pub enum JobAction {
     Add {
         #[arg(
             value_name = "JOB_CONFIG_JSON",
-            help = "Job config JSON, e.g. {\"name\":\"daily\",\"agent_name\":\"main\",\"enabled\":true,\"cron\":\"0 9 * * *\",\"prompt\":\"...\"}"
+            help = "Job config JSON, e.g. {\"name\":\"daily\",\"agent_name\":\"main\",\"enabled\":true,\"cron\":\"0 9 * * *\",\"description\":\"Daily summary\",\"prompt\":\"...\"}"
         )]
         job_config_json: String,
     },

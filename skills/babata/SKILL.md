@@ -73,6 +73,7 @@ inline: true
       "agent_name": "main",
       "enabled": true,
       "cron": "0 9 * * *",
+      "description": "每天 9 点产出日报",
       "prompt": "请总结今天进展"
     }
   ]
@@ -119,7 +120,7 @@ inline: true
 - 删除 provider：
   - `babata provider delete "openai"`
 - 新增 job：
-  - `babata job add '{"name":"daily","agent_name":"main","enabled":true,"cron":"0 9 * * *","prompt":"..."}'`
+  - `babata job add '{"name":"daily","agent_name":"main","enabled":true,"cron":"0 9 * * *","description":"Daily summary","prompt":"..."}'`
 - 列出 job：
   - `babata job list`
 - 删除 job：

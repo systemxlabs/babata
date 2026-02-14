@@ -248,6 +248,7 @@ mod tests {
                 agent_name: "non-existent-agent".to_string(),
                 enabled: true,
                 cron: "0 9 * * *".to_string(),
+                description: "Daily summary job".to_string(),
                 prompt: "Summarize today's progress".to_string(),
             }],
         };

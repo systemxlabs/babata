@@ -9,6 +9,8 @@ pub struct JobConfig {
     pub agent_name: String,
     pub enabled: bool,
     pub cron: String,
+    #[serde(default)]
+    pub description: String,
     pub prompt: String,
 }
 
