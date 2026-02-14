@@ -1,6 +1,8 @@
+mod deepseek;
 mod moonshot;
 mod openai;
 
+pub use deepseek::*;
 pub use moonshot::*;
 pub use openai::*;
 
@@ -51,6 +53,7 @@ pub fn create_provider(
     match provider_config {
         ProviderConfig::OpenAI(config) => Ok(Arc::new(OpenAIProvider::new(&config.api_key))),
         ProviderConfig::Moonshot(config) => Ok(Arc::new(MoonshotProvider::new(&config.api_key))),
+        ProviderConfig::DeepSeek(config) => Ok(Arc::new(DeepSeekProvider::new(&config.api_key))),
     }
 }
 
