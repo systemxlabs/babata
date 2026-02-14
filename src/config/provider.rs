@@ -9,6 +9,8 @@ pub enum ProviderConfig {
     OpenAI(OpenAIProviderConfig),
     #[serde(rename = "moonshot")]
     Moonshot(MoonshotProviderConfig),
+    #[serde(rename = "deepseek")]
+    DeepSeek(DeepSeekProviderConfig),
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
@@ -18,6 +20,11 @@ pub struct OpenAIProviderConfig {
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct MoonshotProviderConfig {
+    pub api_key: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
+pub struct DeepSeekProviderConfig {
     pub api_key: String,
 }
 
@@ -36,6 +43,7 @@ impl ProviderConfig {
         match self {
             ProviderConfig::OpenAI(config) => &config.api_key,
             ProviderConfig::Moonshot(config) => &config.api_key,
+            ProviderConfig::DeepSeek(config) => &config.api_key,
         }
     }
 
@@ -43,6 +51,7 @@ impl ProviderConfig {
         match self {
             ProviderConfig::OpenAI(_) => "openai",
             ProviderConfig::Moonshot(_) => "moonshot",
+            ProviderConfig::DeepSeek(_) => "deepseek",
         }
     }
 

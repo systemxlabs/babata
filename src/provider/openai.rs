@@ -216,14 +216,23 @@ impl Provider for OpenAIProvider {
 
         // Check for tool calls
         if let Some(tool_calls) = choice.message.tool_calls {
-            let parsed_calls: Vec<ToolCall> = tool_calls
+            let parsed_calls: BabataResult<Vec<ToolCall>> = tool_calls
                 .iter()
-                .map(|tc| ToolCall {
-                    call_id: tc.id.clone(),
-                    tool_name: tc.function.name.clone(),
-                    args: tc.function.arguments.clone(),
+                .map(|tc| {
+                    let args = match &tc.function.arguments {
+                        Value::String(s) => serde_json::from_str(s)
+                            .unwrap_or_else(|_| tc.function.arguments.clone()),
+                        other => other.clone(),
+                    };
+                    Ok(ToolCall {
+                        call_id: tc.id.clone(),
+                        tool_name: tc.function.name.clone(),
+                        args,
+                    })
                 })
                 .collect();
+
+            let parsed_calls = parsed_calls?;
 
             if !parsed_calls.is_empty() {
                 return Ok(GenerationResponse {
