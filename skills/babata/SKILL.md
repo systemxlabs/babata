@@ -36,6 +36,10 @@ inline: true
   - `babata agent add <AGENT_CONFIG_JSON>`
   - `babata agent delete <AGENT_NAME>`
   - `babata agent list`
+- Channel CLI：
+  - `babata channel add <CHANNEL_CONFIG_JSON>`
+  - `babata channel delete <CHANNEL_NAME>`
+  - `babata channel list`
 - Job CLI：
   - `babata job add <JOB_CONFIG_JSON>`
   - `babata job delete <JOB_NAME>`
@@ -64,7 +68,7 @@ inline: true
   ],
   "channels": [
     {
-      "type": "telegram",
+      "name": "telegram",
       "bot_token": "123456:ABC",
       "allowed_user_ids": [123456789],
       "base_url": "https://api.telegram.org",
@@ -129,6 +133,12 @@ inline: true
   - `babata agent delete "main"`
 - 列出 agent：
   - `babata agent list`
+- 新增 channel：
+  - `babata channel add '{"name":"telegram","bot_token":"123:abc","allowed_user_ids":[123456789]}'`
+- 删除 channel：
+  - `babata channel delete "telegram"`
+- 列出 channel：
+  - `babata channel list`
 - 新增 job：
   - `babata job add '{"name":"daily","agent_name":"main","enabled":true,"cron":"0 9 * * *","description":"Daily summary","prompt":"..."}'`
 - 列出 job：

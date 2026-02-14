@@ -22,6 +22,11 @@ pub enum Command {
         #[command(subcommand)]
         action: ServerAction,
     },
+    #[command(about = "Channel config management (add/delete/list)")]
+    Channel {
+        #[command(subcommand)]
+        action: ChannelAction,
+    },
     #[command(about = "Agent config management (add/delete/list)")]
     Agent {
         #[command(subcommand)]
@@ -70,6 +75,25 @@ pub enum ProviderAction {
         name: String,
     },
     #[command(about = "List all provider configs (one JSON per line)")]
+    List,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum ChannelAction {
+    #[command(about = "Add or update channel config (JSON)")]
+    Add {
+        #[arg(
+            value_name = "CHANNEL_CONFIG_JSON",
+            help = "Channel config JSON, e.g. {\"name\":\"telegram\",\"bot_token\":\"123:abc\",\"allowed_user_ids\":[123456789]}"
+        )]
+        channel_config_json: String,
+    },
+    #[command(about = "Delete a channel by name")]
+    Delete {
+        #[arg(value_name = "CHANNEL_NAME", help = "Channel name, e.g. telegram")]
+        name: String,
+    },
+    #[command(about = "List all channel configs (one JSON per line)")]
     List,
 }
 

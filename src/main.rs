@@ -13,6 +13,15 @@ fn main() {
             babata::cli::ServerAction::Start => babata::cli::server::start(&args),
             babata::cli::ServerAction::Restart => babata::cli::server::restart(&args),
         },
+        Some(babata::cli::Command::Channel { action }) => match action {
+            babata::cli::ChannelAction::Add {
+                channel_config_json,
+            } => babata::cli::channel::add(&args, channel_config_json),
+            babata::cli::ChannelAction::Delete { name } => {
+                babata::cli::channel::delete(&args, name)
+            }
+            babata::cli::ChannelAction::List => babata::cli::channel::list(&args),
+        },
         Some(babata::cli::Command::Agent { action }) => match action {
             babata::cli::AgentAction::Add { agent_config_json } => {
                 babata::cli::agent::add(&args, agent_config_json)
