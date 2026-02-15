@@ -1,4 +1,8 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+};
 
 use log::{error, info};
 use tokio::sync::Mutex;
@@ -17,9 +21,12 @@ use crate::{
     tool::{Tool, build_tools},
 };
 
+use super::{JobHistoryEntry, JobHistoryStore, JobRunStatus};
+
 pub struct JobManager {
     pub config: Config,
     pub job_scheduler: Mutex<Option<JobScheduler>>,
+    pub history_store: JobHistoryStore,
     pub channels: Vec<Arc<dyn Channel>>,
     pub tools: HashMap<String, Arc<dyn Tool>>,
     pub system_prompts: Vec<SystemPrompt>,
@@ -31,6 +38,7 @@ impl JobManager {
         Ok(Self {
             config,
             job_scheduler: Mutex::new(None),
+            history_store: JobHistoryStore::new()?,
             channels,
             tools: build_tools(),
             system_prompts: load_system_prompts()?,
@@ -104,6 +112,12 @@ impl JobManager {
         scheduler: &JobScheduler,
         job_config: &JobConfig,
     ) -> BabataResult<()> {
+        let job_config_payload = serde_json::to_string(job_config).map_err(|err| {
+            BabataError::internal(format!(
+                "Failed to serialize job config '{}' into JSON: {}",
+                job_config.name, err
+            ))
+        })?;
         let agent_config = self.require_agent(&job_config.agent_name)?;
         let provider_config = self.require_provider_config_for_agent(agent_config)?;
         let provider = create_provider(&agent_config.provider, provider_config)?;
@@ -114,6 +128,8 @@ impl JobManager {
         let agent_name = job_config.agent_name.clone();
         let prompt = job_config.prompt.clone();
         let model = agent_config.model.clone();
+        let job_config_payload = job_config_payload.clone();
+        let history_store = self.history_store.clone();
         let channels = self.channels.clone();
         let tools = self.tools.clone();
         let system_prompts = self.system_prompts.clone();
@@ -127,6 +143,8 @@ impl JobManager {
             let skills = skills.clone();
             let prompt = prompt.clone();
             let model = model.clone();
+            let job_config_payload = job_config_payload.clone();
+            let history_store = history_store.clone();
             let job_name = job_name.clone();
             let job_description = job_description.clone();
             let agent_name = agent_name.clone();
@@ -139,28 +157,62 @@ impl JobManager {
 
                 let task = AgentTask::new(
                     vec![Message::UserPrompt {
-                        content: vec![Content::Text { text: prompt }],
+                        content: vec![Content::Text {
+                            text: prompt.clone(),
+                        }],
                     }],
                     provider,
-                    model,
+                    model.clone(),
                     tools,
                     system_prompts,
                     skills,
                 );
+                let started_at_epoch = current_epoch_seconds();
+                let started_at = Instant::now();
 
                 match task.run().await {
                     Ok(response) => {
                         info!("Scheduled job '{}' completed", job_name);
                         broadcast_job_message(&channels, &job_name, &response).await;
+                        persist_job_history(
+                            &history_store,
+                            &JobHistoryEntry {
+                                job_name: job_name.clone(),
+                                job_config: job_config_payload.clone(),
+                                status: JobRunStatus::Success,
+                                response: serde_json::to_string(&response).ok(),
+                                error: None,
+                                started_at_epoch,
+                                finished_at_epoch: current_epoch_seconds(),
+                                duration_ms: elapsed_millis_i64(started_at.elapsed()),
+                            },
+                        );
                     }
                     Err(err) => {
-                        error!("Scheduled job '{}' failed: {}", job_name, err);
+                        let error_message = err.to_string();
+                        error!("Scheduled job '{}' failed: {}", job_name, error_message);
                         let failure_message = Message::AssistantResponse {
                             content: vec![Content::Text {
-                                text: format!("Scheduled job '{}' failed: {}", job_name, err),
+                                text: format!(
+                                    "Scheduled job '{}' failed: {}",
+                                    job_name, error_message
+                                ),
                             }],
                         };
                         broadcast_job_message(&channels, &job_name, &failure_message).await;
+                        persist_job_history(
+                            &history_store,
+                            &JobHistoryEntry {
+                                job_name: job_name.clone(),
+                                job_config: job_config_payload.clone(),
+                                status: JobRunStatus::Failed,
+                                response: None,
+                                error: Some(error_message),
+                                started_at_epoch,
+                                finished_at_epoch: current_epoch_seconds(),
+                                duration_ms: elapsed_millis_i64(started_at.elapsed()),
+                            },
+                        );
                     }
                 }
             })
@@ -184,6 +236,27 @@ impl JobManager {
             job_config.name, job_config.cron
         );
         Ok(())
+    }
+}
+
+fn current_epoch_seconds() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0)
+        .min(i64::MAX as u64) as i64
+}
+
+fn elapsed_millis_i64(duration: Duration) -> i64 {
+    duration.as_millis().min(i64::MAX as u128) as i64
+}
+
+fn persist_job_history(history_store: &JobHistoryStore, entry: &JobHistoryEntry) {
+    if let Err(err) = history_store.insert(entry) {
+        error!(
+            "Failed to persist job history for '{}' into sqlite: {}",
+            entry.job_name, err
+        );
     }
 }
 

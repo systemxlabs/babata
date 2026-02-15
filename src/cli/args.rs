@@ -37,7 +37,7 @@ pub enum Command {
         #[command(subcommand)]
         action: ProviderAction,
     },
-    #[command(about = "Job config management (add/delete/list)")]
+    #[command(about = "Job management (add/delete/list/history)")]
     Job {
         #[command(subcommand)]
         action: JobAction,
@@ -133,4 +133,16 @@ pub enum JobAction {
     },
     #[command(about = "List all job configs (one JSON per line)")]
     List,
+    #[command(about = "Query job execution history from sqlite")]
+    History {
+        #[arg(long, value_name = "JOB_NAME", help = "Filter by job name (optional)")]
+        name: Option<String>,
+        #[arg(
+            long,
+            default_value_t = 20,
+            value_name = "LIMIT",
+            help = "Maximum number of history rows to return"
+        )]
+        limit: usize,
+    },
 }

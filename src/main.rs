@@ -44,6 +44,9 @@ fn main() {
             }
             babata::cli::JobAction::Delete { name } => babata::cli::job::delete(&args, name),
             babata::cli::JobAction::List => babata::cli::job::list(&args),
+            babata::cli::JobAction::History { name, limit } => {
+                babata::cli::job::history(&args, name.as_deref(), *limit)
+            }
         },
         Some(babata::cli::Command::Onboard) => babata::cli::onboard::run(&args),
         None => babata::cli::prompt::run(&args),
