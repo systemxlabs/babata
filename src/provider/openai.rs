@@ -1,7 +1,7 @@
 use log::{debug, warn};
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use crate::{
     BabataResult,
@@ -37,13 +37,13 @@ impl OpenAIProvider {
     fn format_tools(&self, tools: &[ToolSpec]) -> Vec<ChatCompletionTool> {
         tools
             .iter()
-            .map(|t| {
-                ChatCompletionTool::Function(FunctionDefination {
+            .map(|t| ChatCompletionTool::Function {
+                function: FunctionDefination {
                     name: t.name.clone(),
                     description: t.description.clone(),
                     parameters: Some(t.parameters.clone()),
                     strict: None,
-                })
+                },
             })
             .collect()
     }
@@ -52,95 +52,85 @@ impl OpenAIProvider {
         &self,
         system_prompt: &str,
         messages: &[Message],
-    ) -> BabataResult<Vec<Value>> {
-        let mut json_messages = Vec::with_capacity(messages.len() + 1);
+    ) -> BabataResult<Vec<ChatCompletionMessageParam>> {
+        let mut request_messages = Vec::with_capacity(messages.len() + 1);
 
         let system_prompt = system_prompt.trim();
         if !system_prompt.is_empty() {
-            json_messages.push(json!({
-                "role": "system",
-                "content": system_prompt
-            }));
+            request_messages.push(ChatCompletionMessageParam::System {
+                content: system_prompt.to_string(),
+            });
         }
 
         for message in messages {
             match message {
                 Message::UserPrompt { content } => {
-                    let json_contents = content
+                    let parts = content
                         .iter()
-                        .map(|content| match content {
+                        .map(|part| match part {
                             Content::Text { text } => {
-                                json!({
-                                    "type": "text",
-                                    "text": text
-                                })
+                                ChatCompletionContentPart::Text { text: text.clone() }
                             }
-                            Content::ImageUrl { url } => {
-                                json!({
-                                    "type": "image_url",
-                                    "image_url": json!({ "url": url })
-                                })
-                            }
+                            Content::ImageUrl { url } => ChatCompletionContentPart::ImageUrl {
+                                image_url: ChatCompletionImageUrl { url: url.clone() },
+                            },
                             Content::ImageData { data, media_type } => {
-                                json!({
-                                    "type": "image_url",
-                                    "image_url": json!({
-
-                                        "url": format!("data:{media_type};base64,{data}")
-                                         })
-                                })
+                                ChatCompletionContentPart::ImageUrl {
+                                    image_url: ChatCompletionImageUrl {
+                                        url: format!("data:{media_type};base64,{data}"),
+                                    },
+                                }
                             }
                         })
                         .collect::<Vec<_>>();
-                    json_messages.push(json!({
-                        "role": "user",
-                        "content": json_contents
-                    }));
+
+                    request_messages.push(ChatCompletionMessageParam::User { content: parts });
                 }
                 Message::AssistantToolCalls { calls } => {
-                    json_messages.push(json!({
-                        "role": "assistant",
-                        "tool_calls": calls.iter().map(|call| {
-                            json!({
-                                "id": call.call_id,
-                                "type": "function",
-                                "function": json!({
-                                    "name": call.tool_name,
-                                    "arguments": call.args
-                                }),
-                            })
-                        }).collect::<Vec<_>>()
-                    }));
+                    let tool_calls = calls
+                        .iter()
+                        .map(|call| ChatCompletionMessageToolCall::Function {
+                            id: call.call_id.clone(),
+                            function: ChatCompletionsMessageToolCallFunction {
+                                name: call.tool_name.clone(),
+                                arguments: call.args.clone(),
+                            },
+                        })
+                        .collect::<Vec<_>>();
+
+                    request_messages.push(ChatCompletionMessageParam::Assistant {
+                        content: None,
+                        tool_calls: Some(tool_calls),
+                    });
                 }
                 Message::AssistantResponse { content } => {
-                    let mut json_contents = Vec::with_capacity(content.len());
+                    let mut parts = Vec::with_capacity(content.len());
                     for part in content {
                         match part {
                             Content::Text { text } => {
-                                json_contents.push(json!({
-                                    "type": "text",
-                                    "text": text
-                                }));
+                                parts.push(ChatCompletionContentPart::Text { text: text.clone() })
                             }
                             Content::ImageUrl { .. } | Content::ImageData { .. } => {
-                                // This message might be created by other provider models
                                 warn!("OpenAI assistant responses do not support images yet");
                             }
                         }
                     }
-                    json_messages.push(json!({
-                        "role": "assistant",
-                        "content": json_contents
-                    }));
+
+                    request_messages.push(ChatCompletionMessageParam::Assistant {
+                        content: Some(parts),
+                        tool_calls: None,
+                    });
                 }
-                Message::ToolResult { call, result } => json_messages.push(json!({
-                    "role": "tool",
-                    "tool_call_id": call.call_id,
-                    "content": result
-                })),
+                Message::ToolResult { call, result } => {
+                    request_messages.push(ChatCompletionMessageParam::Tool {
+                        tool_call_id: call.call_id.clone(),
+                        content: result.clone(),
+                    })
+                }
             }
         }
-        Ok(json_messages)
+
+        Ok(request_messages)
     }
 }
 
@@ -158,18 +148,16 @@ impl Provider for OpenAIProvider {
         &self,
         request: GenerationReqest<'a>,
     ) -> BabataResult<GenerationResponse> {
-        let mut body = json!({
-            "model": request.model,
-            "messages": self.format_messages(request.system_prompt, request.messages)?,
-        });
-
-        if !request.tools.is_empty() {
-            body["tools"] = json!(self.format_tools(request.tools));
-        }
+        let request_body = ChatCompletionRequest {
+            model: request.model.to_string(),
+            messages: self.format_messages(request.system_prompt, request.messages)?,
+            tools: (!request.tools.is_empty()).then(|| self.format_tools(request.tools)),
+        };
 
         debug!(
-            "Sending chat completions request to {}: {body}",
-            self.base_url
+            "Sending chat completions request to {}: {}",
+            self.base_url,
+            serde_json::to_string(&request_body)?
         );
 
         let response = self
@@ -177,7 +165,7 @@ impl Provider for OpenAIProvider {
             .post(format!("{}/chat/completions", self.base_url))
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("Content-Type", "application/json")
-            .json(&body)
+            .json(&request_body)
             .send()
             .await
             .map_err(|e| {
@@ -217,11 +205,11 @@ impl Provider for OpenAIProvider {
             let mut parsed_calls = Vec::with_capacity(tool_calls.len());
             for tool_call in tool_calls {
                 match tool_call {
-                    ChatCompletionMessageToolCall::Function(function_tool_call) => {
+                    ChatCompletionMessageToolCall::Function { id, function } => {
                         parsed_calls.push(ToolCall {
-                            call_id: function_tool_call.id.clone(),
-                            tool_name: function_tool_call.function.name.clone(),
-                            args: function_tool_call.function.arguments.clone(),
+                            call_id: id,
+                            tool_name: function.name,
+                            args: function.arguments,
                         });
                     }
                 }
@@ -256,64 +244,47 @@ impl Provider for OpenAIProvider {
 pub struct ChatCompletionRequest {
     pub model: String,
     pub messages: Vec<ChatCompletionMessageParam>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tools: Option<Vec<ChatCompletionTool>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "lowercase")]
+#[serde(tag = "role", rename_all = "lowercase")]
 pub enum ChatCompletionMessageParam {
-    Developer(ChatCompletionDeveloperMessageParam),
-    User(ChatCompletionUserMessageParam),
-    Assistant(ChatCompletionAssistantMessageParam),
-    Tool(ChatCompletionToolMessageParam),
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ChatCompletionDeveloperMessageParam {
-    name: Option<String>,
-    content: Vec<ChatCompletionContentPartText>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ChatCompletionUserMessageParam {
-    pub name: Option<String>,
-    pub content: Vec<ChatCompletionContentPart>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ChatCompletionAssistantMessageParam {
-    pub name: Option<String>,
-    pub content: Option<Vec<ChatCompletionContentPart>>,
-    pub refusal: Option<String>,
-    pub tool_calls: Option<Vec<ChatCompletionMessageToolCall>>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ChatCompletionToolMessageParam {
-    pub tool_call_id: String,
-    pub content: Vec<ChatCompletionContentPartText>,
+    System {
+        content: String,
+    },
+    User {
+        content: Vec<ChatCompletionContentPart>,
+    },
+    Assistant {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        content: Option<Vec<ChatCompletionContentPart>>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        tool_calls: Option<Vec<ChatCompletionMessageToolCall>>,
+    },
+    Tool {
+        tool_call_id: String,
+        content: String,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ChatCompletionContentPart {
-    Text(ChatCompletionContentPartText),
-    ImageUrl(ChatCompletionContentPartImage),
+    Text { text: String },
+    ImageUrl { image_url: ChatCompletionImageUrl },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ChatCompletionContentPartText {
-    pub text: String,
-    pub r#type: String,
+pub struct ChatCompletionImageUrl {
+    pub url: String,
 }
-
-#[derive(Debug, Serialize, Deserialize)]
-pub enum ChatCompletionContentPartImage {}
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum ChatCompletionTool {
-    Function(FunctionDefination),
+    Function { function: FunctionDefination },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -362,17 +333,46 @@ pub enum ChatCompletionMessageRole {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum ChatCompletionMessageToolCall {
-    Function(ChatCompletionMessageFunctionToolCall),
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ChatCompletionMessageFunctionToolCall {
-    id: String,
-    function: ChatCompletionsMessageToolCallFunction,
+    Function {
+        id: String,
+        function: ChatCompletionsMessageToolCallFunction,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ChatCompletionsMessageToolCallFunction {
     pub name: String,
     pub arguments: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use crate::tool::ToolSpec;
+
+    use super::OpenAIProvider;
+
+    #[test]
+    fn format_tools_uses_function_wrapper_shape() {
+        let provider = OpenAIProvider::new("test-key");
+        let tools = vec![ToolSpec {
+            name: "read_file".to_string(),
+            description: "Read file".to_string(),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string" }
+                },
+                "required": ["path"]
+            }),
+        }];
+
+        let payload =
+            serde_json::to_value(provider.format_tools(&tools)).expect("serialize formatted tools");
+
+        assert_eq!(payload[0]["type"], json!("function"));
+        assert_eq!(payload[0]["function"]["name"], json!("read_file"));
+        assert!(payload[0].get("name").is_none());
+    }
 }
