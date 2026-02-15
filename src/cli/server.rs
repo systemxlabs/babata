@@ -1,6 +1,6 @@
 use std::{path::Path, process::Command};
 
-use crate::{BabataResult, agent::AgentLoop, config::Config, error::BabataError};
+use crate::{BabataResult, agent::AgentLoop, config::Config, error::BabataError, job::JobManager};
 
 use super::Args;
 
@@ -30,7 +30,8 @@ pub fn restart(_args: &Args) {
 
 fn run_serve(_args: &Args) -> BabataResult<()> {
     let config = Config::load()?;
-    let agent_loop = AgentLoop::new(config)?;
+    let agent_loop = AgentLoop::new(config.clone())?;
+    let job_manager = JobManager::new(config, agent_loop.channels.clone())?;
 
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -39,7 +40,15 @@ fn run_serve(_args: &Args) -> BabataResult<()> {
             BabataError::internal(format!("Failed to initialize async runtime: {err}"))
         })?;
 
-    runtime.block_on(agent_loop.run())?;
+    runtime.block_on(async move {
+        let has_job_scheduler = job_manager.start_scheduler().await?;
+        if agent_loop.channels.is_empty() && !has_job_scheduler {
+            return Err(BabataError::config(
+                "No channels or enabled jobs configured; cannot start server",
+            ));
+        }
+        agent_loop.run().await
+    })?;
     Ok(())
 }
 

@@ -2,13 +2,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::{BabataResult, error::BabataError};
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "name", rename_all = "snake_case")]
 pub enum ChannelConfig {
     Telegram(TelegramChannelConfig),
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct TelegramChannelConfig {
     pub bot_token: String,
     #[serde(default)]

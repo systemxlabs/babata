@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{BabataResult, error::BabataError};
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct JobConfig {
     pub name: String,
     pub agent_name: String,

@@ -11,7 +11,7 @@ use std::collections::HashSet;
 use crate::{BabataResult, error::BabataError, utils::babata_dir};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct AgentConfig {
     pub name: String,
     // If None, use default skills
@@ -19,7 +19,7 @@ pub struct AgentConfig {
     pub model: String,
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct Config {
     pub providers: Vec<ProviderConfig>,
     pub agents: Vec<AgentConfig>,

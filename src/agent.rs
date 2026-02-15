@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 use crate::{
     BabataResult,
     channel::{Channel, build_channels},
-    config::Config,
+    config::{AgentConfig, Config},
     error::BabataError,
     memory::Memory,
     message::MessageStore,
@@ -48,30 +48,8 @@ impl AgentLoop {
     }
 
     pub async fn run(&self) -> BabataResult<()> {
-        if self.channels.is_empty() {
-            return Err(BabataError::config(
-                "No channels configured; cannot start agent loop",
-            ));
-        }
-
-        let agent_config = self.config.get_agent("main").ok_or_else(|| {
-            BabataError::config("No 'main' agent found in config; run onboarding first")
-        })?;
-
-        let provider = self
-            .providers
-            .iter()
-            .find_map(|(provider_name, provider)| {
-                provider_name
-                    .eq_ignore_ascii_case(&agent_config.provider)
-                    .then(|| Arc::clone(provider))
-            })
-            .ok_or_else(|| {
-                BabataError::config(format!(
-                    "Provider '{}' for main agent not found",
-                    agent_config.provider
-                ))
-            })?;
+        let agent_config = self.require_agent("main")?;
+        let provider = self.require_provider_for_agent(agent_config)?;
 
         loop {
             let mut handled_message = false;
@@ -106,5 +84,33 @@ impl AgentLoop {
                 tokio::time::sleep(Duration::from_millis(200)).await;
             }
         }
+    }
+
+    pub(crate) fn require_agent(&self, agent_name: &str) -> BabataResult<&AgentConfig> {
+        self.config.get_agent(agent_name).ok_or_else(|| {
+            BabataError::config(format!(
+                "Agent '{}' not found in config; run onboarding first",
+                agent_name
+            ))
+        })
+    }
+
+    pub(crate) fn require_provider_for_agent(
+        &self,
+        agent_config: &AgentConfig,
+    ) -> BabataResult<Arc<dyn Provider>> {
+        self.find_provider(&agent_config.provider).ok_or_else(|| {
+            BabataError::config(format!(
+                "Provider '{}' for agent '{}' not found",
+                agent_config.provider, agent_config.name
+            ))
+        })
+    }
+
+    pub(crate) fn find_provider(&self, provider_name: &str) -> Option<Arc<dyn Provider>> {
+        self.providers.iter().find_map(|(name, provider)| {
+            name.eq_ignore_ascii_case(provider_name)
+                .then(|| Arc::clone(provider))
+        })
     }
 }

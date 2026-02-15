@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{BabataResult, error::BabataError};
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "name")]
 pub enum ProviderConfig {
     #[serde(rename = "openai")]
@@ -13,17 +13,17 @@ pub enum ProviderConfig {
     DeepSeek(DeepSeekProviderConfig),
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct OpenAIProviderConfig {
     pub api_key: String,
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct MoonshotProviderConfig {
     pub api_key: String,
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct DeepSeekProviderConfig {
     pub api_key: String,
 }
