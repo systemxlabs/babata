@@ -297,7 +297,7 @@ fn extract_outgoing_texts(messages: &[Message]) -> Vec<String> {
     let mut outgoing = Vec::new();
 
     for message in messages {
-        if let Message::AssistantResponse { content } = message {
+        if let Message::AssistantResponse { content, .. } = message {
             let text = content
                 .iter()
                 .filter_map(|part| match part {
@@ -401,6 +401,7 @@ mod tests {
                         url: "https://example.com/image.png".to_string(),
                     },
                 ],
+                reasoning_content: None,
             },
         ];
 

@@ -163,6 +163,7 @@ mod tests {
                     tool_name: "read_file".to_string(),
                     args: r#"{"path": "README.md"}"#.to_string(),
                 }],
+                reasoning_content: None,
             },
             Message::ToolResult {
                 call: ToolCall {
@@ -182,6 +183,7 @@ mod tests {
                         media_type: "image/png".to_string(),
                     },
                 ],
+                reasoning_content: None,
             },
         ];
 

@@ -27,10 +27,21 @@ impl std::fmt::Display for Role {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Message {
-    UserPrompt { content: Vec<Content> },
-    AssistantResponse { content: Vec<Content> },
-    AssistantToolCalls { calls: Vec<ToolCall> },
-    ToolResult { call: ToolCall, result: String },
+    UserPrompt {
+        content: Vec<Content>,
+    },
+    AssistantResponse {
+        content: Vec<Content>,
+        reasoning_content: Option<String>,
+    },
+    AssistantToolCalls {
+        calls: Vec<ToolCall>,
+        reasoning_content: Option<String>,
+    },
+    ToolResult {
+        call: ToolCall,
+        result: String,
+    },
 }
 
 impl Message {

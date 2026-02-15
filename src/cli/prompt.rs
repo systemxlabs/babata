@@ -76,7 +76,7 @@ fn run_prompt(args: &Args) -> BabataResult<()> {
 
 fn print_final_message(message: &Message) -> BabataResult<()> {
     match message {
-        Message::AssistantResponse { content } => {
+        Message::AssistantResponse { content, .. } => {
             for part in content {
                 match part {
                     Content::Text { text } => println!("{text}"),

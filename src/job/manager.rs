@@ -198,6 +198,7 @@ impl JobManager {
                                     job_name, error_message
                                 ),
                             }],
+                            reasoning_content: None,
                         };
                         broadcast_job_message(&channels, &job_name, &failure_message).await;
                         persist_job_history(

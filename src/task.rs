@@ -65,7 +65,7 @@ impl AgentTask {
 
             match message {
                 Message::AssistantResponse { .. } => return Ok(message),
-                Message::AssistantToolCalls { calls } => {
+                Message::AssistantToolCalls { calls, .. } => {
                     if calls.is_empty() {
                         return Err(BabataError::provider("Provider returned empty tool calls"));
                     }

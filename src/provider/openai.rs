@@ -86,7 +86,10 @@ impl OpenAIProvider {
 
                     request_messages.push(ChatCompletionMessageParam::User { content: parts });
                 }
-                Message::AssistantToolCalls { calls } => {
+                Message::AssistantToolCalls {
+                    calls,
+                    reasoning_content,
+                } => {
                     let tool_calls = calls
                         .iter()
                         .map(|call| ChatCompletionMessageToolCall::Function {
@@ -100,10 +103,14 @@ impl OpenAIProvider {
 
                     request_messages.push(ChatCompletionMessageParam::Assistant {
                         content: None,
+                        reasoning_content: reasoning_content.clone(),
                         tool_calls: Some(tool_calls),
                     });
                 }
-                Message::AssistantResponse { content } => {
+                Message::AssistantResponse {
+                    content,
+                    reasoning_content,
+                } => {
                     let mut parts = Vec::with_capacity(content.len());
                     for part in content {
                         match part {
@@ -118,6 +125,7 @@ impl OpenAIProvider {
 
                     request_messages.push(ChatCompletionMessageParam::Assistant {
                         content: Some(parts),
+                        reasoning_content: reasoning_content.clone(),
                         tool_calls: None,
                     });
                 }
@@ -157,7 +165,7 @@ impl Provider for OpenAIProvider {
         debug!(
             "Sending chat completions request to {}: {}",
             self.base_url,
-            serde_json::to_string(&request_body)?
+            serde_json::to_string_pretty(&request_body)?
         );
 
         let response = self
@@ -219,6 +227,7 @@ impl Provider for OpenAIProvider {
                 return Ok(GenerationResponse {
                     message: Message::AssistantToolCalls {
                         calls: parsed_calls,
+                        reasoning_content: choice.message.reasoning_content,
                     },
                 });
             }
@@ -231,6 +240,7 @@ impl Provider for OpenAIProvider {
         Ok(GenerationResponse {
             message: Message::AssistantResponse {
                 content: vec![Content::Text { text: content }],
+                reasoning_content: choice.message.reasoning_content,
             },
         })
     }
@@ -260,6 +270,8 @@ pub enum ChatCompletionMessageParam {
     Assistant {
         #[serde(skip_serializing_if = "Option::is_none")]
         content: Option<Vec<ChatCompletionContentPart>>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        reasoning_content: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         tool_calls: Option<Vec<ChatCompletionMessageToolCall>>,
     },
@@ -315,6 +327,7 @@ pub struct ChatCompletionChoice {
 pub struct ChatCompletionMessage {
     pub role: ChatCompletionMessageRole,
     pub content: Option<String>,
+    pub reasoning_content: Option<String>,
     pub refusal: Option<String>,
     pub tool_calls: Option<Vec<ChatCompletionMessageToolCall>>,
 }
