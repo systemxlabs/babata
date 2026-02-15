@@ -140,11 +140,11 @@ inline: true
   - `babata channel delete "telegram"`
 - 列出 channel：
   - `babata channel list`
-- 新增 job：
+- 新增定时任务：
   - `babata job add '{"name":"daily","agent_name":"main","enabled":true,"cron":"0 9 * * *","description":"Daily summary","prompt":"..."}'`
-- 列出 job：
+- 列出定时任务：
   - `babata job list`
-- 删除 job：
+- 删除定时任务：
   - `babata job delete "daily"`
 
 ## 服务文件与平台行为
