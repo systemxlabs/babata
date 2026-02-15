@@ -13,7 +13,7 @@ use std::{collections::HashMap, fmt::Debug, sync::Arc};
 #[async_trait::async_trait]
 pub trait Tool: Debug + Send + Sync {
     fn spec(&self) -> &ToolSpec;
-    async fn execute(&self, args: Value) -> BabataResult<String>;
+    async fn execute(&self, args: &str) -> BabataResult<String>;
 }
 
 #[derive(Debug, Clone)]

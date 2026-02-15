@@ -137,7 +137,6 @@ impl MessageStore {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
     use uuid::Uuid;
 
     use crate::message::{Content, Message, ToolCall};
@@ -162,14 +161,14 @@ mod tests {
                 calls: vec![ToolCall {
                     call_id: "call-1".to_string(),
                     tool_name: "read_file".to_string(),
-                    args: json!({ "path": "README.md" }),
+                    args: r#"{"path": "README.md"}"#.to_string(),
                 }],
             },
             Message::ToolResult {
                 call: ToolCall {
                     call_id: "call-1".to_string(),
                     tool_name: "read_file".to_string(),
-                    args: json!({ "path": "README.md" }),
+                    args: r#"{ "path": "README.md" }"#.to_string(),
                 },
                 result: "file content".to_string(),
             },

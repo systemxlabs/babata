@@ -78,7 +78,7 @@ impl AgentTask {
                             ))
                         })?;
 
-                        let result = tool.execute(call.args.clone()).await?;
+                        let result = tool.execute(&call.args).await?;
                         messages.push(Message::ToolResult { call, result });
                     }
                 }

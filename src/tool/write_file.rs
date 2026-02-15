@@ -50,7 +50,8 @@ impl Tool for WriteFileTool {
         &self.spec
     }
 
-    async fn execute(&self, args: Value) -> BabataResult<String> {
+    async fn execute(&self, args: &str) -> BabataResult<String> {
+        let args: Value = serde_json::from_str(args)?;
         let path = args["path"]
             .as_str()
             .ok_or_else(|| BabataError::tool("Missing required parameter: path"))?;
@@ -102,8 +103,9 @@ mod tests {
             "path": test_file.to_str().unwrap(),
             "content": "Hello, Babata!"
         });
+        let args = args.to_string();
 
-        let result = tool.execute(args).await;
+        let result = tool.execute(&args).await;
         assert!(result.is_ok(), "Write operation should succeed");
 
         // Verify file was created
@@ -129,8 +131,9 @@ mod tests {
             "path": test_file.to_str().unwrap(),
             "content": "Test content"
         });
+        let args = args.to_string();
 
-        let result = tool.execute(args).await;
+        let result = tool.execute(&args).await;
         assert!(result.is_ok(), "Write operation should create directories");
 
         // Verify directories and file were created
@@ -151,8 +154,9 @@ mod tests {
         let args = json!({
             "content": "Some content"
         });
+        let args = args.to_string();
 
-        let result = tool.execute(args).await;
+        let result = tool.execute(&args).await;
         assert!(result.is_err(), "Should fail when path is missing");
         assert!(
             result
@@ -168,8 +172,9 @@ mod tests {
         let args = json!({
             "path": "/tmp/test.txt"
         });
+        let args = args.to_string();
 
-        let result = tool.execute(args).await;
+        let result = tool.execute(&args).await;
         assert!(result.is_err(), "Should fail when content is missing");
         assert!(
             result

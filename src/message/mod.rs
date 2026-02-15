@@ -3,7 +3,6 @@ mod store;
 pub use store::*;
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Role {
@@ -49,7 +48,7 @@ impl Message {
 pub struct ToolCall {
     pub call_id: String,
     pub tool_name: String,
-    pub args: Value,
+    pub args: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

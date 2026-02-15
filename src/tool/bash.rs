@@ -48,9 +48,10 @@ impl Tool for BashTool {
         &self.spec
     }
 
-    async fn execute(&self, args: Value) -> BabataResult<String> {
+    async fn execute(&self, args: &str) -> BabataResult<String> {
         debug!("Executing bash command: {args}",);
 
+        let args: Value = serde_json::from_str(args)?;
         let command = args["command"]
             .as_str()
             .ok_or_else(|| BabataError::tool("Missing command"))?;

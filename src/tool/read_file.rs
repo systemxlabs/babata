@@ -53,7 +53,8 @@ impl Tool for ReadFileTool {
         &self.spec
     }
 
-    async fn execute(&self, args: Value) -> BabataResult<String> {
+    async fn execute(&self, args: &str) -> BabataResult<String> {
+        let args: Value = serde_json::from_str(args)?;
         let path = args["path"]
             .as_str()
             .ok_or_else(|| BabataError::tool("Missing path"))?;

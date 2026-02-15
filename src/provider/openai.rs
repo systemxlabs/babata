@@ -199,7 +199,7 @@ impl Provider for OpenAIProvider {
             )));
         }
 
-        let mut response_body: ChatCompletionsResponse = response
+        let mut response_body: ChatCompletionResponse = response
             .json()
             .await
             .map_err(|e| BabataError::provider(format!("Failed to parse response body: {e}")))?;
@@ -216,23 +216,23 @@ impl Provider for OpenAIProvider {
 
         // Check for tool calls
         if let Some(tool_calls) = choice.message.tool_calls {
-            let parsed_calls: BabataResult<Vec<ToolCall>> = tool_calls
-                .iter()
-                .map(|tc| {
-                    let args = match &tc.function.arguments {
-                        Value::String(s) => serde_json::from_str(s)
-                            .unwrap_or_else(|_| tc.function.arguments.clone()),
-                        other => other.clone(),
-                    };
-                    Ok(ToolCall {
-                        call_id: tc.id.clone(),
-                        tool_name: tc.function.name.clone(),
-                        args,
-                    })
-                })
-                .collect();
-
-            let parsed_calls = parsed_calls?;
+            let mut parsed_calls = Vec::with_capacity(tool_calls.len());
+            for tool_call in tool_calls {
+                match tool_call {
+                    ChatCompletionMessageToolCall::Function(function_tool_call) => {
+                        parsed_calls.push(
+                            ToolCall {
+                                call_id: function_tool_call.id.clone(),
+                                tool_name: function_tool_call.function.name.clone(),
+                                args: function_tool_call.function.arguments.clone(),
+                            }
+                        );
+                    }
+                    ChatCompletionMessageToolCall::Custom(_) => {
+                        return Err(BabataError::provider("Unsupported custom tool call"));
+                    }
+                }
+            }
 
             if !parsed_calls.is_empty() {
                 return Ok(GenerationResponse {
@@ -260,7 +260,7 @@ impl Provider for OpenAIProvider {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ChatCompletionsResponse {
+pub struct ChatCompletionResponse {
     pub id: String,
     pub object: String,
     pub created: u64,
@@ -271,27 +271,56 @@ pub struct ChatCompletionsResponse {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ChatCompletionChoice {
     pub index: u32,
-    pub message: ChatCompletionsMessage,
+    pub message: ChatCompletionMessage,
     pub finish_reason: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ChatCompletionsMessage {
-    pub role: String,
+pub struct ChatCompletionMessage {
+    pub role: ChatCompletionMessageRole,
     pub content: Option<String>,
     pub refusal: Option<String>,
-    pub tool_calls: Option<Vec<ChatCompletionsMessageToolCall>>,
+    pub tool_calls: Option<Vec<ChatCompletionMessageToolCall>>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Copy, Eq, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum ChatCompletionMessageRole {
+    System,
+    User,
+    Assistant,
+    Function,
+    Tool,
+    Developer,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ChatCompletionsMessageToolCall {
-    pub id: String,
-    pub r#type: String,
-    pub function: ChatCompletionsMessageToolCallFunction,
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ChatCompletionMessageToolCall {
+    Function(ChatCompletionMessageFunctionToolCall),
+    Custom(ChatCompletionMessageCustomToolCall),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ChatCompletionMessageFunctionToolCall {
+    id: String,
+    function: ChatCompletionsMessageToolCallFunction
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ChatCompletionMessageCustomToolCall {
+    id: String,
+    custom: ChatCompletionsMessageToolCallCustom,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ChatCompletionsMessageToolCallFunction {
     pub name: String,
-    pub arguments: Value,
+    pub arguments: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ChatCompletionsMessageToolCallCustom {
+    pub input: String,
+    pub name: String,
 }
