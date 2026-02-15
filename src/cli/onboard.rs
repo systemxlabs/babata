@@ -51,6 +51,7 @@ fn run_onboard() -> BabataResult<()> {
 
 fn ensure_default_directories() -> BabataResult<()> {
     let base = crate::utils::babata_dir()?;
+    let workspace = base.join("workspace");
     let system_prompts = base.join("system_prompts");
     let skills = base.join("skills");
     let project_root = std::env::current_dir().map_err(|err| {
@@ -90,6 +91,17 @@ fn ensure_default_directories() -> BabataResult<()> {
             copy_dir_all(&project_skills, &skills)?;
             println!("Copied skills from {}", project_skills.display());
         }
+    }
+
+    if !workspace.exists() {
+        std::fs::create_dir_all(&workspace).map_err(|err| {
+            BabataError::config(format!(
+                "Failed to create workspace directory '{}': {}",
+                workspace.display(),
+                err
+            ))
+        })?;
+        println!("Created directory {}", workspace.display());
     }
 
     Ok(())
