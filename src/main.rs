@@ -11,6 +11,7 @@ fn main() {
         Some(babata::cli::Command::Server { action }) => match action {
             babata::cli::ServerAction::Serve => babata::cli::server::serve(&args),
             babata::cli::ServerAction::Start => babata::cli::server::start(&args),
+            babata::cli::ServerAction::Stop => babata::cli::server::stop(&args),
             babata::cli::ServerAction::Restart => babata::cli::server::restart(&args),
         },
         Some(babata::cli::Command::Channel { action }) => match action {

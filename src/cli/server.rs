@@ -21,6 +21,13 @@ pub fn start(_args: &Args) {
     }
 }
 
+pub fn stop(_args: &Args) {
+    if let Err(err) = run_stop() {
+        eprintln!("{err}");
+        std::process::exit(1);
+    }
+}
+
 pub fn restart(_args: &Args) {
     if let Err(err) = run_restart() {
         eprintln!("{err}");
@@ -63,6 +70,17 @@ fn run_start() -> BabataResult<()> {
     }
 }
 
+fn run_stop() -> BabataResult<()> {
+    match std::env::consts::OS {
+        "macos" => stop_macos(),
+        "linux" => stop_linux(),
+        os => Err(BabataError::config(format!(
+            "Server stop is not supported on '{}'",
+            os
+        ))),
+    }
+}
+
 fn run_restart() -> BabataResult<()> {
     match std::env::consts::OS {
         "macos" => restart_macos(),
@@ -97,6 +115,24 @@ fn restart_macos() -> BabataResult<()> {
     Ok(())
 }
 
+fn stop_macos() -> BabataResult<()> {
+    let uid = current_uid()?;
+    let service = format!("gui/{uid}/{MACOS_LAUNCHD_LABEL}");
+
+    // Try stopping by service label first.
+    if run_command("launchctl", &["bootout", &service]).is_ok() {
+        println!("Stopped server with launchd: {}", MACOS_LAUNCHD_LABEL);
+        return Ok(());
+    }
+
+    // Fallback to plist-based unload for older launchctl flows.
+    let plist_path = macos_plist_path()?;
+    let plist_path = plist_path.to_string_lossy().to_string();
+    run_command("launchctl", &["unload", &plist_path])?;
+    println!("Stopped server with launchd: {}", MACOS_LAUNCHD_LABEL);
+    Ok(())
+}
+
 fn start_linux() -> BabataResult<()> {
     let service_path = linux_systemd_service_path()?;
     ensure_file_exists(
@@ -119,6 +155,12 @@ fn start_linux() -> BabataResult<()> {
 fn restart_linux() -> BabataResult<()> {
     run_command("systemctl", &["--user", "restart", LINUX_SYSTEMD_SERVICE])?;
     println!("Restarted server with systemd: {}", LINUX_SYSTEMD_SERVICE);
+    Ok(())
+}
+
+fn stop_linux() -> BabataResult<()> {
+    run_command("systemctl", &["--user", "stop", LINUX_SYSTEMD_SERVICE])?;
+    println!("Stopped server with systemd: {}", LINUX_SYSTEMD_SERVICE);
     Ok(())
 }
 

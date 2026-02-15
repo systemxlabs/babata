@@ -17,7 +17,7 @@ pub struct Args {
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
-    #[command(about = "Server management commands (serve/start/restart)")]
+    #[command(about = "Server management commands (serve/start/stop/restart)")]
     Server {
         #[command(subcommand)]
         action: ServerAction,
@@ -52,6 +52,8 @@ pub enum ServerAction {
     Serve,
     #[command(about = "Start background service on current platform")]
     Start,
+    #[command(about = "Stop background service on current platform")]
+    Stop,
     #[command(about = "Restart background service on current platform")]
     Restart,
 }
