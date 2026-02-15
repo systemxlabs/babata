@@ -44,6 +44,7 @@ inline: true
   - `babata job add <JOB_CONFIG_JSON>`
   - `babata job delete <JOB_NAME>`
   - `babata job list`
+  - `babata server serve` 运行时会按 cron 自动执行已启用 job
 - Server CLI：
   - `babata server serve`
   - `babata server start`
@@ -160,7 +161,7 @@ inline: true
 
 ## 已知边界
 
-- `jobs` 目前提供配置管理能力（add/list/delete + 校验）；是否执行由运行时实现决定。
+- job 调度依赖 `babata server serve` 常驻运行。
 - channel 目前仅实现 Telegram DM 流程；群聊消息会被忽略。
 
 ## 结果回传要求
