@@ -110,7 +110,13 @@ fn start_macos() -> BabataResult<()> {
 fn restart_macos() -> BabataResult<()> {
     let uid = current_uid()?;
     let service = format!("gui/{uid}/{MACOS_LAUNCHD_LABEL}");
-    run_command("launchctl", &["kickstart", "-k", &service])?;
+    if let Err(err) = run_command("launchctl", &["kickstart", "-k", &service]) {
+        if is_macos_service_not_found_error(&err.to_string()) {
+            // Service has not been loaded yet; fall back to start semantics.
+            return start_macos();
+        }
+        return Err(err);
+    }
     println!("Restarted server with launchd: {}", MACOS_LAUNCHD_LABEL);
     Ok(())
 }
@@ -235,4 +241,27 @@ fn run_command(cmd: &str, args: &[&str]) -> BabataResult<()> {
         output.status,
         details
     )))
+}
+
+fn is_macos_service_not_found_error(message: &str) -> bool {
+    message.contains("Could not find service")
+        || message.contains("service not found")
+        || message.contains("No such process")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_macos_service_not_found_error;
+
+    #[test]
+    fn detects_launchctl_missing_service_error() {
+        let message = "Internal error: Command 'launchctl kickstart -k gui/501/babata.server' failed with status exit status: 113: Could not find service \"babata.server\" in domain for user gui: 501";
+        assert!(is_macos_service_not_found_error(message));
+    }
+
+    #[test]
+    fn does_not_misclassify_unrelated_launchctl_error() {
+        let message = "Internal error: Command 'launchctl kickstart -k gui/501/babata.server' failed: permission denied";
+        assert!(!is_macos_service_not_found_error(message));
+    }
 }
