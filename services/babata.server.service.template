@@ -5,6 +5,8 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory={{HOME_DIR}}/.babata
+Environment=HOME={{HOME_DIR}}
+Environment=PATH={{HOME_DIR}}/.cargo/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 ExecStart={{HOME_DIR}}/.cargo/bin/babata server serve
 StandardOutput=append:{{HOME_DIR}}/.babata/logs/server.stdout.log
 StandardError=append:{{HOME_DIR}}/.babata/logs/server.stderr.log
