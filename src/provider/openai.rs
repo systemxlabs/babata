@@ -220,16 +220,11 @@ impl Provider for OpenAIProvider {
             for tool_call in tool_calls {
                 match tool_call {
                     ChatCompletionMessageToolCall::Function(function_tool_call) => {
-                        parsed_calls.push(
-                            ToolCall {
-                                call_id: function_tool_call.id.clone(),
-                                tool_name: function_tool_call.function.name.clone(),
-                                args: function_tool_call.function.arguments.clone(),
-                            }
-                        );
-                    }
-                    ChatCompletionMessageToolCall::Custom(_) => {
-                        return Err(BabataError::provider("Unsupported custom tool call"));
+                        parsed_calls.push(ToolCall {
+                            call_id: function_tool_call.id.clone(),
+                            tool_name: function_tool_call.function.name.clone(),
+                            args: function_tool_call.function.arguments.clone(),
+                        });
                     }
                 }
             }
@@ -257,6 +252,78 @@ impl Provider for OpenAIProvider {
     async fn interact(&self, _request: InteractionRequest) -> BabataResult<InteractionResponse> {
         todo!()
     }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ChatCompletionRequest {
+    pub model: String,
+    pub messages: Vec<ChatCompletionMessageParam>,
+    pub tools: Option<Vec<ChatCompletionTool>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum ChatCompletionMessageParam {
+    Developer(ChatCompletionDeveloperMessageParam),
+    User(ChatCompletionUserMessageParam),
+    Assistant(ChatCompletionAssistantMessageParam),
+    Tool(ChatCompletionToolMessageParam),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ChatCompletionDeveloperMessageParam {
+    name: Option<String>,
+    content: Vec<ChatCompletionContentPartText>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ChatCompletionUserMessageParam {
+    pub name: Option<String>,
+    pub content: Vec<ChatCompletionContentPart>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ChatCompletionAssistantMessageParam {
+    pub name: Option<String>,
+    pub content: Option<Vec<ChatCompletionContentPart>>,
+    pub refusal: Option<String>,
+    pub tool_calls: Option<Vec<ChatCompletionMessageToolCall>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ChatCompletionToolMessageParam {
+    pub tool_call_id: String,
+    pub content: Vec<ChatCompletionContentPartText>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ChatCompletionContentPart {
+    Text(ChatCompletionContentPartText),
+    ImageUrl(ChatCompletionContentPartImage),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ChatCompletionContentPartText {
+    pub text: String,
+    pub r#type: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum ChatCompletionContentPartImage {}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum ChatCompletionTool {
+    Function(FunctionDefination),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FunctionDefination {
+    pub name: String,
+    pub description: String,
+    pub parameters: Option<String>,
+    pub strict: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -295,32 +362,19 @@ pub enum ChatCompletionMessageRole {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "lowercase")]
 pub enum ChatCompletionMessageToolCall {
     Function(ChatCompletionMessageFunctionToolCall),
-    Custom(ChatCompletionMessageCustomToolCall),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ChatCompletionMessageFunctionToolCall {
     id: String,
-    function: ChatCompletionsMessageToolCallFunction
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ChatCompletionMessageCustomToolCall {
-    id: String,
-    custom: ChatCompletionsMessageToolCallCustom,
+    function: ChatCompletionsMessageToolCallFunction,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ChatCompletionsMessageToolCallFunction {
     pub name: String,
     pub arguments: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ChatCompletionsMessageToolCallCustom {
-    pub input: String,
-    pub name: String,
 }
