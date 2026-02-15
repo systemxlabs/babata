@@ -34,17 +34,15 @@ impl OpenAIProvider {
         self
     }
 
-    fn format_tools(&self, tools: &[ToolSpec]) -> Vec<Value> {
+    fn format_tools(&self, tools: &[ToolSpec]) -> Vec<ChatCompletionTool> {
         tools
             .iter()
             .map(|t| {
-                json!({
-                    "type": "function",
-                    "function": {
-                        "name": t.name,
-                        "description": t.description,
-                        "parameters": t.parameters
-                    }
+                ChatCompletionTool::Function(FunctionDefination {
+                    name: t.name.clone(),
+                    description: t.description.clone(),
+                    parameters: Some(t.parameters.clone()),
+                    strict: None,
                 })
             })
             .collect()
@@ -322,7 +320,7 @@ pub enum ChatCompletionTool {
 pub struct FunctionDefination {
     pub name: String,
     pub description: String,
-    pub parameters: Option<String>,
+    pub parameters: Option<Value>,
     pub strict: Option<bool>,
 }
 
