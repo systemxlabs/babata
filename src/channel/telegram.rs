@@ -7,6 +7,7 @@ use tokio::sync::Mutex;
 
 use crate::{
     BabataResult,
+    config::{ChannelConfig, Config},
     error::BabataError,
     message::{Content, Message},
 };
@@ -46,6 +47,11 @@ impl TelegramChannel {
 
     pub fn with_polling_timeout_secs(mut self, polling_timeout_secs: u64) -> Self {
         self.polling_timeout_secs = polling_timeout_secs;
+        self
+    }
+
+    pub fn with_last_update_id(mut self, last_update_id: Option<i64>) -> Self {
+        self.last_update_id = Mutex::new(last_update_id);
         self
     }
 
@@ -108,10 +114,40 @@ impl TelegramChannel {
         let (max_update_id, messages) = extract_private_messages(updates, &self.allowed_user_ids);
 
         if let Some(max_update_id) = max_update_id {
-            *self.last_update_id.lock().await = Some(max_update_id);
+            self.update_last_update_id(max_update_id).await?;
         }
 
         Ok(messages)
+    }
+
+    async fn update_last_update_id(&self, last_update_id: i64) -> BabataResult<()> {
+        {
+            let mut current = self.last_update_id.lock().await;
+            if current.is_some_and(|current_id| current_id >= last_update_id) {
+                return Ok(());
+            }
+            *current = Some(last_update_id);
+        }
+
+        self.persist_last_update_id(last_update_id)
+    }
+
+    fn persist_last_update_id(&self, last_update_id: i64) -> BabataResult<()> {
+        let mut config = Config::load()?;
+        let mut updated = false;
+
+        for channel in &mut config.channels {
+            let ChannelConfig::Telegram(telegram) = channel;
+            telegram.last_update_id = Some(last_update_id);
+            updated = true;
+            break;
+        }
+
+        if updated {
+            config.save()?;
+        }
+
+        Ok(())
     }
 
     async fn send_text(&self, chat_id: i64, text: &str) -> BabataResult<()> {

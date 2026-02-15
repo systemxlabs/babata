@@ -358,6 +358,7 @@ fn prompt_telegram_channel_config() -> BabataResult<TelegramChannelConfig> {
         bot_token,
         base_url,
         polling_timeout_secs,
+        last_update_id: None,
         allowed_user_ids,
     })
 }

@@ -166,13 +166,24 @@ impl Config {
         self.providers.push(provider_config);
     }
 
-    pub fn upsert_channel(&mut self, channel_config: ChannelConfig) {
+    pub fn upsert_channel(&mut self, mut channel_config: ChannelConfig) {
         if let Some(existing) = self.channels.iter_mut().find(|existing| {
             matches!(
                 (existing, &channel_config),
                 (ChannelConfig::Telegram(_), ChannelConfig::Telegram(_))
             )
         }) {
+            match (&*existing, &mut channel_config) {
+                (
+                    ChannelConfig::Telegram(existing_telegram),
+                    ChannelConfig::Telegram(new_telegram),
+                ) => {
+                    // Keep cursor if caller updates channel settings without providing it.
+                    if new_telegram.last_update_id.is_none() {
+                        new_telegram.last_update_id = existing_telegram.last_update_id;
+                    }
+                }
+            }
             *existing = channel_config;
             return;
         }
@@ -277,5 +288,33 @@ mod tests {
         };
 
         assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn upsert_channel_preserves_telegram_last_update_id_when_omitted() {
+        let mut config = Config {
+            providers: Vec::new(),
+            agents: Vec::new(),
+            channels: vec![ChannelConfig::Telegram(TelegramChannelConfig {
+                bot_token: "old-token".to_string(),
+                base_url: None,
+                polling_timeout_secs: None,
+                last_update_id: Some(123),
+                allowed_user_ids: vec![1001],
+            })],
+            jobs: Vec::new(),
+        };
+
+        config.upsert_channel(ChannelConfig::Telegram(TelegramChannelConfig {
+            bot_token: "new-token".to_string(),
+            base_url: Some("https://api.telegram.org".to_string()),
+            polling_timeout_secs: Some(10),
+            last_update_id: None,
+            allowed_user_ids: vec![1001],
+        }));
+
+        let ChannelConfig::Telegram(telegram) = &config.channels[0];
+        assert_eq!(telegram.bot_token, "new-token");
+        assert_eq!(telegram.last_update_id, Some(123));
     }
 }

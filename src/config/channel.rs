@@ -16,6 +16,8 @@ pub struct TelegramChannelConfig {
     #[serde(default)]
     pub polling_timeout_secs: Option<u64>,
     #[serde(default)]
+    pub last_update_id: Option<i64>,
+    #[serde(default)]
     pub allowed_user_ids: Vec<i64>,
 }
 
@@ -36,6 +38,10 @@ impl TelegramChannelConfig {
             .unwrap_or(Self::DEFAULT_POLLING_TIMEOUT_SECS)
     }
 
+    pub fn last_update_id(&self) -> Option<i64> {
+        self.last_update_id
+    }
+
     pub fn validate(&self) -> BabataResult<()> {
         if self.bot_token.trim().is_empty() {
             return Err(BabataError::config(
@@ -54,6 +60,14 @@ impl TelegramChannelConfig {
         if self.polling_timeout_secs() == 0 {
             return Err(BabataError::config(
                 "Telegram channel polling_timeout_secs must be greater than 0",
+            ));
+        }
+
+        if let Some(last_update_id) = self.last_update_id
+            && last_update_id < 0
+        {
+            return Err(BabataError::config(
+                "Telegram channel last_update_id must be greater than or equal to 0",
             ));
         }
 
@@ -95,6 +109,7 @@ mod tests {
             bot_token: "token".to_string(),
             base_url: None,
             polling_timeout_secs: None,
+            last_update_id: None,
             allowed_user_ids: vec![12345],
         };
 
@@ -111,6 +126,7 @@ mod tests {
             bot_token: "   ".to_string(),
             base_url: None,
             polling_timeout_secs: None,
+            last_update_id: None,
             allowed_user_ids: vec![12345],
         };
 
@@ -123,7 +139,21 @@ mod tests {
             bot_token: "token".to_string(),
             base_url: None,
             polling_timeout_secs: None,
+            last_update_id: None,
             allowed_user_ids: Vec::new(),
+        };
+
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn telegram_config_rejects_negative_last_update_id() {
+        let config = TelegramChannelConfig {
+            bot_token: "token".to_string(),
+            base_url: None,
+            polling_timeout_secs: None,
+            last_update_id: Some(-1),
+            allowed_user_ids: vec![12345],
         };
 
         assert!(config.validate().is_err());
