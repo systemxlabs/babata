@@ -21,8 +21,6 @@ pub struct TelegramChannel {
     polling_timeout_secs: u64,
     // Telegram update cursor to avoid reprocessing already consumed updates.
     last_update_id: Mutex<Option<i64>>,
-    // The current DM chat to reply to; group chats are intentionally unsupported.
-    active_private_chat_id: Mutex<Option<i64>>,
     // Allowed DM user ids; messages from others are ignored.
     allowed_user_ids: HashSet<i64>,
 }
@@ -35,7 +33,6 @@ impl TelegramChannel {
             base_url: "https://api.telegram.org".to_string(),
             polling_timeout_secs: 30,
             last_update_id: Mutex::new(None),
-            active_private_chat_id: Mutex::new(None),
             allowed_user_ids: HashSet::new(),
         }
     }
@@ -202,13 +199,9 @@ impl TelegramChannel {
             return None;
         }
 
-        // Pin replies to the first DM chat in this batch.
-        let active_chat_id = incoming[0].chat_id;
-        *self.active_private_chat_id.lock().await = Some(active_chat_id);
-
         let messages = incoming
             .into_iter()
-            .filter(|message| message.chat_id == active_chat_id)
+            .filter(|m| self.allowed_user_ids.contains(&m.chat_id))
             .map(|message| Message::UserPrompt {
                 content: vec![Content::Text { text: message.text }],
             })
@@ -229,14 +222,11 @@ impl super::Channel for TelegramChannel {
     }
 
     async fn send(&self, messages: &[Message]) -> BabataResult<()> {
-        // Outbound messages are sent only to the active DM chat.
-        let chat_id = (*self.active_private_chat_id.lock().await).ok_or_else(|| {
-            BabataError::internal("No active private Telegram chat available for sending")
-        })?;
-
         let outgoing = extract_outgoing_texts(messages);
         for text in outgoing {
-            self.send_text(chat_id, &text).await?;
+            for chat_id in self.allowed_user_ids.iter() {
+                self.send_text(*chat_id, &text).await?;
+            }
         }
 
         Ok(())
