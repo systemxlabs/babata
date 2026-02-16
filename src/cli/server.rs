@@ -1,5 +1,8 @@
 use std::{path::Path, process::Command};
 
+use log::{info, warn};
+
+use crate::message::{Content, Message};
 use crate::{BabataResult, agent::AgentLoop, config::Config, error::BabataError, job::JobManager};
 
 use super::Args;
@@ -54,9 +57,37 @@ fn run_serve(_args: &Args) -> BabataResult<()> {
                 "No channels or enabled jobs configured; cannot start server",
             ));
         }
+        broadcast_service_started(&agent_loop.channels).await;
         agent_loop.run().await
     })?;
     Ok(())
+}
+
+async fn broadcast_service_started(channels: &[std::sync::Arc<dyn crate::channel::Channel>]) {
+    if channels.is_empty() {
+        return;
+    }
+
+    let message = service_started_message();
+    for channel in channels {
+        if let Err(err) = channel.send(std::slice::from_ref(&message)).await {
+            warn!(
+                "Server started but failed to send startup message to channel: {}",
+                err
+            );
+        }
+    }
+}
+
+fn service_started_message() -> Message {
+    let text = "Babata server started. This is a startup notification.".to_string();
+
+    info!("{text}");
+
+    Message::AssistantResponse {
+        content: vec![Content::Text { text }],
+        reasoning_content: None,
+    }
 }
 
 fn run_start() -> BabataResult<()> {
@@ -251,7 +282,9 @@ fn is_macos_service_not_found_error(message: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::is_macos_service_not_found_error;
+    use crate::message::{Content, Message};
+
+    use super::{is_macos_service_not_found_error, service_started_message};
 
     #[test]
     fn detects_launchctl_missing_service_error() {
@@ -263,5 +296,22 @@ mod tests {
     fn does_not_misclassify_unrelated_launchctl_error() {
         let message = "Internal error: Command 'launchctl kickstart -k gui/501/babata.server' failed: permission denied";
         assert!(!is_macos_service_not_found_error(message));
+    }
+
+    #[test]
+    fn service_started_message_without_scheduler_details() {
+        let message = service_started_message();
+        let Message::AssistantResponse { content, .. } = message else {
+            panic!("expected assistant response");
+        };
+        let text = content
+            .into_iter()
+            .find_map(|part| match part {
+                Content::Text { text } => Some(text),
+                _ => None,
+            })
+            .expect("text content");
+        assert!(text.contains("Babata server started."));
+        assert!(!text.contains("Job scheduler"));
     }
 }
