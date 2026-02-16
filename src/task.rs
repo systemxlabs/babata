@@ -78,7 +78,10 @@ impl AgentTask {
                             ))
                         })?;
 
-                        let result = tool.execute(&call.args).await?;
+                        let result = match tool.execute(&call.args).await {
+                            Ok(result) => result,
+                            Err(e) => format!("Tool execution failed with message: {e}"),
+                        };
                         messages.push(Message::ToolResult { call, result });
                     }
                 }
