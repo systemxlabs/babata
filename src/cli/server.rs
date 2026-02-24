@@ -10,6 +10,8 @@ use super::Args;
 const MACOS_LAUNCHD_LABEL: &str = "babata.server";
 const LINUX_SYSTEMD_SERVICE: &str = "babata.server.service";
 const WINDOWS_TASK_NAME: &str = "babata.server";
+const WINDOWS_RUN_KEY_PATH: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
+const WINDOWS_RUN_VALUE_NAME: &str = "babata.server";
 
 pub fn serve(args: &Args) {
     if let Err(err) = run_serve(args) {
@@ -211,28 +213,13 @@ fn start_windows() -> BabataResult<()> {
         &script_path,
         "Windows task script not found; run \"babata onboard\" first",
     )?;
-    let task_action = windows_task_action(&script_path);
-
-    run_command(
-        "schtasks",
-        &[
-            "/Create",
-            "/TN",
-            WINDOWS_TASK_NAME,
-            "/SC",
-            "ONLOGON",
-            "/RL",
-            "LIMITED",
-            "/F",
-            "/TR",
-            &task_action,
-        ],
-    )?;
-    run_command("schtasks", &["/Run", "/TN", WINDOWS_TASK_NAME])?;
-    println!(
-        "Started server with Windows Task Scheduler: {}",
-        WINDOWS_TASK_NAME
-    );
+    if let Err(task_err) = start_windows_with_task_scheduler(&script_path) {
+        warn!(
+            "Windows Task Scheduler backend failed, falling back to Run registry backend: {}",
+            task_err
+        );
+        return start_windows_with_run_registry(&script_path);
+    }
     Ok(())
 }
 
@@ -242,45 +229,22 @@ fn restart_windows() -> BabataResult<()> {
         &script_path,
         "Windows task script not found; run \"babata onboard\" first",
     )?;
-    let task_action = windows_task_action(&script_path);
-
-    run_command(
-        "schtasks",
-        &[
-            "/Create",
-            "/TN",
-            WINDOWS_TASK_NAME,
-            "/SC",
-            "ONLOGON",
-            "/RL",
-            "LIMITED",
-            "/F",
-            "/TR",
-            &task_action,
-        ],
-    )?;
-    let _ = run_command("schtasks", &["/End", "/TN", WINDOWS_TASK_NAME]);
-    run_command("schtasks", &["/Run", "/TN", WINDOWS_TASK_NAME])?;
-    println!(
-        "Restarted server with Windows Task Scheduler: {}",
-        WINDOWS_TASK_NAME
-    );
+    if let Err(task_err) = restart_windows_with_task_scheduler(&script_path) {
+        warn!(
+            "Windows Task Scheduler backend failed, falling back to Run registry backend: {}",
+            task_err
+        );
+        return restart_windows_with_run_registry(&script_path);
+    }
     Ok(())
 }
 
 fn stop_windows() -> BabataResult<()> {
-    let script_path = windows_task_script_path()?;
-    ensure_file_exists(
-        &script_path,
-        "Windows task script not found; run \"babata onboard\" first",
-    )?;
-
-    run_command("schtasks", &["/Query", "/TN", WINDOWS_TASK_NAME])?;
+    let task_name = windows_task_name();
+    let _ = run_command("schtasks", &["/End", "/TN", &task_name]);
     let _ = run_command("schtasks", &["/End", "/TN", WINDOWS_TASK_NAME]);
-    println!(
-        "Stopped server with Windows Task Scheduler: {}",
-        WINDOWS_TASK_NAME
-    );
+    stop_windows_running_processes()?;
+    println!("Stopped server on Windows");
     Ok(())
 }
 
@@ -308,6 +272,156 @@ fn windows_task_action(script_path: &Path) -> String {
         "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File \"{}\"",
         script_path.to_string_lossy()
     )
+}
+
+fn start_windows_with_task_scheduler(script_path: &Path) -> BabataResult<()> {
+    let task_name = windows_task_name();
+    let task_action = windows_task_action(script_path);
+    run_command(
+        "schtasks",
+        &[
+            "/Create",
+            "/TN",
+            &task_name,
+            "/SC",
+            "ONLOGON",
+            "/RL",
+            "LIMITED",
+            "/F",
+            "/TR",
+            &task_action,
+        ],
+    )?;
+    run_command("schtasks", &["/Run", "/TN", &task_name])?;
+    println!("Started server with Windows Task Scheduler: {}", task_name);
+    Ok(())
+}
+
+fn restart_windows_with_task_scheduler(script_path: &Path) -> BabataResult<()> {
+    let task_name = windows_task_name();
+    let task_action = windows_task_action(script_path);
+    run_command(
+        "schtasks",
+        &[
+            "/Create",
+            "/TN",
+            &task_name,
+            "/SC",
+            "ONLOGON",
+            "/RL",
+            "LIMITED",
+            "/F",
+            "/TR",
+            &task_action,
+        ],
+    )?;
+    let _ = run_command("schtasks", &["/End", "/TN", &task_name]);
+    run_command("schtasks", &["/Run", "/TN", &task_name])?;
+    println!(
+        "Restarted server with Windows Task Scheduler: {}",
+        task_name
+    );
+    Ok(())
+}
+
+fn start_windows_with_run_registry(script_path: &Path) -> BabataResult<()> {
+    upsert_windows_run_registry(script_path)?;
+    start_windows_service_script(script_path)?;
+    println!(
+        "Started server with Windows Run registry: {}",
+        WINDOWS_RUN_VALUE_NAME
+    );
+    Ok(())
+}
+
+fn restart_windows_with_run_registry(script_path: &Path) -> BabataResult<()> {
+    stop_windows_running_processes()?;
+    upsert_windows_run_registry(script_path)?;
+    start_windows_service_script(script_path)?;
+    println!(
+        "Restarted server with Windows Run registry: {}",
+        WINDOWS_RUN_VALUE_NAME
+    );
+    Ok(())
+}
+
+fn upsert_windows_run_registry(script_path: &Path) -> BabataResult<()> {
+    let startup_command = windows_task_action(script_path);
+    run_command(
+        "reg",
+        &[
+            "add",
+            WINDOWS_RUN_KEY_PATH,
+            "/v",
+            WINDOWS_RUN_VALUE_NAME,
+            "/t",
+            "REG_SZ",
+            "/d",
+            &startup_command,
+            "/f",
+        ],
+    )
+}
+
+fn start_windows_service_script(script_path: &Path) -> BabataResult<()> {
+    let escaped_script_path = script_path.to_string_lossy().replace('\'', "''");
+    let command = format!(
+        "Start-Process -WindowStyle Hidden -FilePath 'powershell.exe' -ArgumentList '-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File','{}'",
+        escaped_script_path
+    );
+    run_command(
+        "powershell.exe",
+        &[
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            &command,
+        ],
+    )
+}
+
+fn stop_windows_running_processes() -> BabataResult<()> {
+    run_command(
+        "powershell.exe",
+        &[
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            "$procs = Get-CimInstance Win32_Process | Where-Object { $_.Name -ieq 'babata.exe' -and $_.CommandLine -match '(?i)\\bserver\\s+serve\\b' }; foreach ($proc in $procs) { Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue }",
+        ],
+    )
+}
+
+fn windows_task_name() -> String {
+    match std::env::var("USERNAME") {
+        Ok(username) if !username.trim().is_empty() => windows_task_name_for_user(&username),
+        _ => WINDOWS_TASK_NAME.to_string(),
+    }
+}
+
+fn windows_task_name_for_user(username: &str) -> String {
+    let mut suffix: String = username
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' || ch == '.' {
+                ch.to_ascii_lowercase()
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    suffix = suffix.trim_matches('_').to_string();
+    if suffix.is_empty() {
+        return WINDOWS_TASK_NAME.to_string();
+    }
+    if suffix.len() > 48 {
+        suffix.truncate(48);
+    }
+    format!("{WINDOWS_TASK_NAME}.{suffix}")
 }
 
 fn ensure_file_exists(path: &Path, message: &str) -> BabataResult<()> {
@@ -380,7 +494,10 @@ fn is_macos_service_not_found_error(message: &str) -> bool {
 mod tests {
     use crate::message::{Content, Message};
 
-    use super::{is_macos_service_not_found_error, service_started_message, windows_task_action};
+    use super::{
+        is_macos_service_not_found_error, service_started_message, windows_task_action,
+        windows_task_name_for_user,
+    };
 
     #[test]
     fn detects_launchctl_missing_service_error() {
@@ -420,5 +537,18 @@ mod tests {
             action,
             "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File \"C:\\Users\\alice\\.babata\\services\\babata.server.ps1\""
         );
+    }
+
+    #[test]
+    fn windows_task_name_for_user_sanitizes_suffix() {
+        assert_eq!(
+            windows_task_name_for_user("DOMAIN\\Alice Smith"),
+            "babata.server.domain_alice_smith"
+        );
+    }
+
+    #[test]
+    fn windows_task_name_for_user_falls_back_when_empty_after_sanitize() {
+        assert_eq!(windows_task_name_for_user("   "), "babata.server");
     }
 }
