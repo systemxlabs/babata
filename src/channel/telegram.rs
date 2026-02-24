@@ -132,12 +132,10 @@ impl TelegramChannel {
     fn persist_last_update_id(&self, last_update_id: i64) -> BabataResult<()> {
         let mut config = Config::load()?;
         let mut updated = false;
-
-        for channel in &mut config.channels {
+        if let Some(channel) = config.channels.iter_mut().next() {
             let ChannelConfig::Telegram(telegram) = channel;
             telegram.last_update_id = Some(last_update_id);
             updated = true;
-            break;
         }
 
         if updated {
