@@ -9,6 +9,7 @@ use super::Args;
 
 const MACOS_LAUNCHD_LABEL: &str = "babata.server";
 const LINUX_SYSTEMD_SERVICE: &str = "babata.server.service";
+const WINDOWS_TASK_NAME: &str = "babata.server";
 
 pub fn serve(args: &Args) {
     if let Err(err) = run_serve(args) {
@@ -94,6 +95,7 @@ fn run_start() -> BabataResult<()> {
     match std::env::consts::OS {
         "macos" => start_macos(),
         "linux" => start_linux(),
+        "windows" => start_windows(),
         os => Err(BabataError::config(format!(
             "Server start is not supported on '{}'",
             os
@@ -105,6 +107,7 @@ fn run_stop() -> BabataResult<()> {
     match std::env::consts::OS {
         "macos" => stop_macos(),
         "linux" => stop_linux(),
+        "windows" => stop_windows(),
         os => Err(BabataError::config(format!(
             "Server stop is not supported on '{}'",
             os
@@ -116,6 +119,7 @@ fn run_restart() -> BabataResult<()> {
     match std::env::consts::OS {
         "macos" => restart_macos(),
         "linux" => restart_linux(),
+        "windows" => restart_windows(),
         os => Err(BabataError::config(format!(
             "Server restart is not supported on '{}'",
             os
@@ -201,6 +205,85 @@ fn stop_linux() -> BabataResult<()> {
     Ok(())
 }
 
+fn start_windows() -> BabataResult<()> {
+    let script_path = windows_task_script_path()?;
+    ensure_file_exists(
+        &script_path,
+        "Windows task script not found; run \"babata onboard\" first",
+    )?;
+    let task_action = windows_task_action(&script_path);
+
+    run_command(
+        "schtasks",
+        &[
+            "/Create",
+            "/TN",
+            WINDOWS_TASK_NAME,
+            "/SC",
+            "ONLOGON",
+            "/RL",
+            "LIMITED",
+            "/F",
+            "/TR",
+            &task_action,
+        ],
+    )?;
+    run_command("schtasks", &["/Run", "/TN", WINDOWS_TASK_NAME])?;
+    println!(
+        "Started server with Windows Task Scheduler: {}",
+        WINDOWS_TASK_NAME
+    );
+    Ok(())
+}
+
+fn restart_windows() -> BabataResult<()> {
+    let script_path = windows_task_script_path()?;
+    ensure_file_exists(
+        &script_path,
+        "Windows task script not found; run \"babata onboard\" first",
+    )?;
+    let task_action = windows_task_action(&script_path);
+
+    run_command(
+        "schtasks",
+        &[
+            "/Create",
+            "/TN",
+            WINDOWS_TASK_NAME,
+            "/SC",
+            "ONLOGON",
+            "/RL",
+            "LIMITED",
+            "/F",
+            "/TR",
+            &task_action,
+        ],
+    )?;
+    let _ = run_command("schtasks", &["/End", "/TN", WINDOWS_TASK_NAME]);
+    run_command("schtasks", &["/Run", "/TN", WINDOWS_TASK_NAME])?;
+    println!(
+        "Restarted server with Windows Task Scheduler: {}",
+        WINDOWS_TASK_NAME
+    );
+    Ok(())
+}
+
+fn stop_windows() -> BabataResult<()> {
+    let script_path = windows_task_script_path()?;
+    ensure_file_exists(
+        &script_path,
+        "Windows task script not found; run \"babata onboard\" first",
+    )?;
+
+    run_command("schtasks", &["/Query", "/TN", WINDOWS_TASK_NAME])?;
+    let _ = run_command("schtasks", &["/End", "/TN", WINDOWS_TASK_NAME]);
+    println!(
+        "Stopped server with Windows Task Scheduler: {}",
+        WINDOWS_TASK_NAME
+    );
+    Ok(())
+}
+
 fn macos_plist_path() -> BabataResult<std::path::PathBuf> {
     Ok(crate::utils::resolve_home_dir()?
         .join("Library")
@@ -212,6 +295,19 @@ fn linux_systemd_service_path() -> BabataResult<std::path::PathBuf> {
     Ok(crate::utils::babata_dir()?
         .join("services")
         .join(LINUX_SYSTEMD_SERVICE))
+}
+
+fn windows_task_script_path() -> BabataResult<std::path::PathBuf> {
+    Ok(crate::utils::babata_dir()?
+        .join("services")
+        .join("babata.server.ps1"))
+}
+
+fn windows_task_action(script_path: &Path) -> String {
+    format!(
+        "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File \"{}\"",
+        script_path.to_string_lossy()
+    )
 }
 
 fn ensure_file_exists(path: &Path, message: &str) -> BabataResult<()> {
@@ -284,7 +380,7 @@ fn is_macos_service_not_found_error(message: &str) -> bool {
 mod tests {
     use crate::message::{Content, Message};
 
-    use super::{is_macos_service_not_found_error, service_started_message};
+    use super::{is_macos_service_not_found_error, service_started_message, windows_task_action};
 
     #[test]
     fn detects_launchctl_missing_service_error() {
@@ -313,5 +409,16 @@ mod tests {
             .expect("text content");
         assert!(text.contains("Babata server started."));
         assert!(!text.contains("Job scheduler"));
+    }
+
+    #[test]
+    fn builds_windows_task_action_with_quoted_script_path() {
+        let action = windows_task_action(std::path::Path::new(
+            r"C:\Users\alice\.babata\services\babata.server.ps1",
+        ));
+        assert_eq!(
+            action,
+            "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File \"C:\\Users\\alice\\.babata\\services\\babata.server.ps1\""
+        );
     }
 }

@@ -437,6 +437,11 @@ fn configure_service_from_template() -> BabataResult<()> {
             "babata.server.service",
             crate::utils::babata_dir()?.join("services"),
         ),
+        "windows" => (
+            "babata.server.ps1.template",
+            "babata.server.ps1",
+            crate::utils::babata_dir()?.join("services"),
+        ),
         _ => {
             return Ok(());
         }
