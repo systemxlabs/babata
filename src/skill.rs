@@ -1,7 +1,4 @@
-use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
@@ -13,8 +10,6 @@ pub struct SkillFrontmatter {
     pub description: String,
     pub enable: Option<bool>,
     pub inline: Option<bool>,
-    #[serde(flatten)]
-    pub others: HashMap<String, serde_yaml::Value>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
