@@ -2,8 +2,9 @@ use std::{path::Path, process::Command};
 
 use log::{info, warn};
 
+use crate::job::start_job_scheduler;
 use crate::message::{Content, Message};
-use crate::{BabataResult, agent::AgentLoop, config::Config, error::BabataError, job::JobManager};
+use crate::{BabataResult, agent::AgentLoop, config::Config, error::BabataError};
 
 use super::Args;
 
@@ -81,7 +82,6 @@ pub fn install_windows_service() -> BabataResult<()> {
 fn run_serve(_args: &Args) -> BabataResult<()> {
     let config = Config::load()?;
     let agent_loop = AgentLoop::new(config.clone())?;
-    let job_manager = JobManager::new(config, agent_loop.channels.clone())?;
 
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -91,12 +91,7 @@ fn run_serve(_args: &Args) -> BabataResult<()> {
         })?;
 
     runtime.block_on(async move {
-        let has_job_scheduler = job_manager.start_scheduler().await?;
-        if agent_loop.channels.is_empty() && !has_job_scheduler {
-            return Err(BabataError::config(
-                "No channels or enabled jobs configured; cannot start server",
-            ));
-        }
+        start_job_scheduler();
         broadcast_service_started(&agent_loop.channels).await;
         agent_loop.run().await
     })?;
