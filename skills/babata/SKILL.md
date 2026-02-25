@@ -1,29 +1,29 @@
 ---
 name: babata
-description: 管理和配置 Babata CLI（providers/agents/channels/jobs/onboard/server），维护 ~/.babata/config.json，并排查服务启动、Windows Service、任务调度（schedule.kind=cron/at）与 job history 问题。用户请求这些操作时使用。
+description: Manage and configure Babata CLI (providers/agents/channels/jobs/onboard/server), maintain ~/.babata/config.json, and troubleshoot service startup, Windows Service, job scheduling (schedule.kind=cron/at), and job history issues. Use when users request these operations.
 ---
 
-# Babata 智能体管理与排障
+# Babata Agent Management and Troubleshooting
 
-保持最小改动并确保可运行。优先使用现有 CLI 子命令，不直接手改配置文件，除非用户明确要求。
+Keep changes minimal and ensure everything remains runnable. Prefer existing CLI subcommands, and do not edit configuration files directly unless the user explicitly requests it.
 
-## 执行步骤
+## Workflow
 
-1. 确认目标：明确要改 provider/agent/channel/job/service 的哪些字段。
-2. 读取现状：优先读取 `~/.babata/config.json`。
-3. 执行变更：优先调用 `babata provider|agent|channel|job|server` 子命令；服务操作仅使用 `babata server start` 或 `babata server restart`，不要使用 `babata server stop`。
-4. 校验结果：确认配置约束和服务状态，再给出可复现验证命令。
+1. Confirm the target: identify which fields to change for provider/agent/channel/job/service.
+2. Read the current state: start with `~/.babata/config.json`.
+3. Apply changes: prefer `babata provider|agent|channel|job|server` subcommands; for service operations, only use `babata server start` or `babata server restart`, and do not use `babata server stop`.
+4. Validate results: confirm configuration constraints and service status, then provide a reproducible verification command.
 
-## 当前 CLI 能力
+## Current CLI Capabilities
 
 - Prompt:
   - `babata --agent <agent_name> "<prompt>"`
-  - prompt 必填；不支持命令行临时覆盖 provider/model。
+  - `prompt` is required; temporary provider/model override via CLI is not supported.
 - Onboard:
   - `babata onboard`
-  - 交互式配置 provider、`main` agent、Telegram channel。
-  - 在 macOS/Linux 生成服务文件；在 Windows 创建 Windows Service。
-  - 配置服务后会尝试启动服务。
+  - Interactively configures provider, `main` agent, and Telegram channel.
+  - Generates service files on macOS/Linux; creates a Windows Service on Windows.
+  - Attempts to start the service after service configuration.
 - Provider:
   - `babata provider add <PROVIDER_CONFIG_JSON>`
   - `babata provider delete <PROVIDER_NAME>`
@@ -45,14 +45,14 @@ description: 管理和配置 Babata CLI（providers/agents/channels/jobs/onboard
   - `babata server serve`
   - `babata server start`
   - `babata server restart`
-  - 该技能执行服务操作时不要使用 `babata server stop`。
-  - 隐藏子命令：`babata server windows-service-host --home-dir <HOME_DIR>`（仅 Windows service host 内部使用）
+  - Do not use `babata server stop` when performing service operations in this skill.
+  - Hidden subcommand: `babata server windows-service-host --home-dir <HOME_DIR>` (for internal Windows service host use only)
 
-## 配置结构
+## Configuration Structure
 
-- 配置路径：`~/.babata/config.json`
-- 任务历史库：`~/.babata/job_history.db`
-- 典型配置：
+- Config path: `~/.babata/config.json`
+- Job history database: `~/.babata/job_history.db`
+- Example configuration:
 
 ```json
 {
@@ -79,64 +79,64 @@ description: 管理和配置 Babata CLI（providers/agents/channels/jobs/onboard
       "agent_name": "main",
       "enabled": true,
       "schedule": { "kind": "cron", "expr": "0 9 * * *", "tz": null },
-      "description": "每天 9 点产出日报",
-      "prompt": "请总结今天进展"
+      "description": "Generate a daily summary at 9 AM",
+      "prompt": "Please summarize today's progress"
     },
     {
       "name": "one-shot",
       "agent_name": "main",
       "enabled": true,
       "schedule": { "kind": "at", "at": "2026-02-26T09:00:00Z" },
-      "description": "单次任务",
-      "prompt": "执行一次"
+      "description": "One-time task",
+      "prompt": "Run once"
     }
   ]
 }
 ```
 
-## 约束与语义
+## Constraints and Semantics
 
-1. 保证存在 `name = "main"` 的 agent。
-2. 保证每个 agent 的 `provider` 在 `providers` 中存在。
-3. 保证 provider 类型唯一（`openai`/`moonshot`/`deepseek` 不重复）。
-4. 保证 job 名称唯一，且 `job.agent_name` 指向已存在 agent。
-5. 校验 `schedule`：
-   - `kind=cron` 时，`expr` 必须是合法 cron 表达式。
-   - `kind=at` 时，若当前时间已晚于 `at`，该任务不会执行（跳过）。
-6. 校验 Telegram channel：
-   - `bot_token` 必填。
-   - `allowed_user_ids` 必填且必须为正整数。
-   - `polling_timeout_secs` 若设置必须大于 0。
+1. Ensure an agent with `name = "main"` exists.
+2. Ensure each agent's `provider` exists in `providers`.
+3. Ensure provider types are unique (`openai`/`moonshot`/`deepseek` cannot be duplicated).
+4. Ensure job names are unique, and each `job.agent_name` points to an existing agent.
+5. Validate `schedule`:
+   - For `kind=cron`, `expr` must be a valid cron expression.
+   - For `kind=at`, if current time is later than `at`, the task will not run (skipped).
+6. Validate Telegram channel:
+   - `bot_token` is required.
+   - `allowed_user_ids` is required and must contain positive integers.
+   - If set, `polling_timeout_secs` must be greater than 0.
 
-## 调度与服务行为
+## Scheduling and Service Behavior
 
-- job 调度仅在 `babata server serve` 运行期间生效。
-- 调度器每 10 秒重载一次配置，并与运行中任务集合对比：新增则启动，删除/变化则重建。
-- 每次 job 执行都会写入 sqlite history（成功和失败都记录）。
-- Windows 服务实现为 SCM Windows Service（`sc create/config/start/stop`），不是 Task Scheduler，也不使用 `HKCU\\...\\Run`。
-- `babata onboard` 在 Windows 需要管理员权限才能创建服务；权限不足时给出 warning 并跳过服务创建。
-- Telegram channel 仅处理私聊（DM）；群组消息会被忽略。
-- 模板文件仅用于 macOS/Linux：
+- Job scheduling is active only while `babata server serve` is running.
+- The scheduler reloads configuration every 10 seconds and compares against running jobs: new jobs are started, deleted/changed jobs are rebuilt.
+- Every job execution is recorded in sqlite history (both success and failure are recorded).
+- Windows service is implemented as an SCM Windows Service (`sc create/config/start/stop`), not Task Scheduler, and does not use `HKCU\\...\\Run`.
+- `babata onboard` requires Administrator privileges on Windows to create the service; if insufficient, it warns and skips service creation.
+- Telegram channel handles only direct messages (DM); group messages are ignored.
+- Template files are only for macOS/Linux:
   - `services/babata.server.plist.template`
   - `services/babata.server.service.template`
 
-## 常用命令模板
+## Common Command Templates
 
-- 新增 provider：
+- Add provider:
   - `babata provider add '{"name":"openai","api_key":"sk-..."}'`
-- 新增 agent：
+- Add agent:
   - `babata agent add '{"name":"main","provider":"openai","model":"gpt-4.1"}'`
-- 新增 Telegram channel：
+- Add Telegram channel:
   - `babata channel add '{"name":"telegram","bot_token":"123:abc","allowed_user_ids":[123456789]}'`
-- 新增 cron 任务：
+- Add cron job:
   - `babata job add '{"name":"daily","agent_name":"main","enabled":true,"schedule":{"kind":"cron","expr":"0 9 * * *"},"description":"Daily summary","prompt":"..."}'`
-- 新增 at 任务：
+- Add at job:
   - `babata job add '{"name":"once","agent_name":"main","enabled":true,"schedule":{"kind":"at","at":"2026-02-26T09:00:00Z"},"description":"One shot","prompt":"..."}'`
-- 查询任务历史：
+- Query job history:
   - `babata job history --name daily --limit 20`
 
-## 结果回传
+## Result Reporting
 
-- 列出改动文件和关键字段。
-- 给出校验结果（成功/失败）。
-- 给出一条可直接执行的验证命令。
+- List changed files and key fields.
+- Provide validation results (success/failure).
+- Provide one directly executable verification command.
