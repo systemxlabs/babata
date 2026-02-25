@@ -20,7 +20,6 @@ const EMBEDDED_SYSTEM_PROMPTS: &[(&str, &str)] = &[
         include_str!("../../system_prompts/IDENTITY.md"),
     ),
     ("SOUL.md", include_str!("../../system_prompts/SOUL.md")),
-    ("USER.md", include_str!("../../system_prompts/USER.md")),
 ];
 
 const EMBEDDED_BABATA_SKILL: &str = include_str!("../../skills/babata/SKILL.md");
