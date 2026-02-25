@@ -12,6 +12,17 @@ use crate::{
 };
 
 use super::Args;
+use rust_embed::RustEmbed;
+
+/// Embed the entire project source code into the binary
+/// Excludes: target/, .git/, *.lock (except Cargo.lock)
+#[derive(RustEmbed)]
+#[folder = "$CARGO_MANIFEST_DIR"]
+#[exclude = "target/*"]
+#[exclude = ".git/*"]
+#[exclude = "*.pdb"]
+#[exclude = "*.exe"]
+struct EmbeddedProject;
 
 const EMBEDDED_SYSTEM_PROMPTS: &[(&str, &str)] = &[
     ("AGENTS.md", include_str!("../../system_prompts/AGENTS.md")),
@@ -68,6 +79,7 @@ fn ensure_default_directories() -> BabataResult<()> {
     let workspace = base.join("workspace");
     let system_prompts_dir = base.join("system_prompts");
     let skills_dir = base.join("skills");
+    let source_dir = base.join("source");
 
     ensure_directory_if_missing(&system_prompts_dir, "system_prompts")?;
     ensure_directory_if_missing(&skills_dir, "skills")?;
@@ -82,6 +94,48 @@ fn ensure_default_directories() -> BabataResult<()> {
     ensure_directory_if_missing(&babata_skill_dir, "skill")?;
     let babata_skill_file = babata_skill_dir.join("SKILL.md");
     overwrite_embedded_file(&babata_skill_file, EMBEDDED_BABATA_SKILL, "skill")?;
+
+    // Clean and write embedded project source to disk
+    remove_dir_all_if_exists(&source_dir)?;
+    ensure_directory_if_missing(&source_dir, "source")?;
+    write_embedded_project(&source_dir)?;
+
+    Ok(())
+}
+
+/// Write all embedded project files to disk
+fn write_embedded_project(base_path: &Path) -> BabataResult<()> {
+    for file_path in EmbeddedProject::iter() {
+        let file_path_str = file_path.as_ref();
+        let target = base_path.join(file_path_str);
+
+        // Ensure parent directory exists
+        if let Some(parent) = target.parent() {
+            ensure_directory_if_missing(parent, "source directory")?;
+        }
+
+        // Get file contents and write to disk
+        let content = EmbeddedProject::get(&file_path)
+            .unwrap_or_else(|| panic!("Failed to get embedded file: {}", file_path_str));
+
+        // Try to write as UTF-8 text, fallback to binary
+        match std::str::from_utf8(&content.data) {
+            Ok(text) => {
+                overwrite_embedded_file(&target, text, "source file")?;
+            }
+            Err(_) => {
+                // Binary file - write bytes directly
+                std::fs::write(&target, &content.data).map_err(|err| {
+                    BabataError::config(format!(
+                        "Failed to write source file '{}': {}",
+                        target.display(),
+                        err
+                    ))
+                })?;
+                println!("Overwrote default source file {}", target.display());
+            }
+        }
+    }
 
     Ok(())
 }
@@ -100,6 +154,21 @@ fn ensure_directory_if_missing(path: &Path, kind: &str) -> BabataResult<()> {
         ))
     })?;
     println!("Created directory {}", path.display());
+    Ok(())
+}
+
+/// Remove directory and all its contents if it exists
+fn remove_dir_all_if_exists(path: &Path) -> BabataResult<()> {
+    if path.exists() {
+        std::fs::remove_dir_all(path).map_err(|err| {
+            BabataError::config(format!(
+                "Failed to remove directory '{}': {}",
+                path.display(),
+                err
+            ))
+        })?;
+        println!("Removed directory {}", path.display());
+    }
     Ok(())
 }
 

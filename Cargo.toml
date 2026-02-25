@@ -21,6 +21,7 @@ uuid = { version = "1.20", features = ["v4"] }
 shellexpand = "3.1"
 rusqlite = { version = "0.32", features = ["bundled"] }
 croner = { version = "2.2", features = ["serde"] }
+rust-embed = { version = "8", features = ["include-flate", "include-exclude", "interpolate-folder-path"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-service = "0.8"
