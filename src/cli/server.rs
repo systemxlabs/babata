@@ -312,7 +312,7 @@ fn create_or_update_windows_service(bin_path: &str) -> BabataResult<()> {
         return Ok(());
     }
 
-    let create_err = create_result.err().expect("create_result checked is_err");
+    let create_err = create_result.expect_err("create_result checked is_err");
     let err_text = create_err.to_string();
     if !is_windows_service_already_exists_error(&err_text) {
         return Err(create_err);
@@ -363,10 +363,11 @@ fn configure_windows_service_metadata() {
 }
 
 fn start_windows_service() -> BabataResult<()> {
-    if let Err(err) = run_command("sc", &["start", WINDOWS_SERVICE_NAME]) {
-        if !is_windows_service_already_running_error(&err.to_string()) {
+    match run_command("sc", &["start", WINDOWS_SERVICE_NAME]) {
+        Err(err) if !is_windows_service_already_running_error(&err.to_string()) => {
             return Err(err);
         }
+        _ => {}
     }
     Ok(())
 }
