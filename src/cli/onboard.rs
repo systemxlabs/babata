@@ -105,39 +105,53 @@ fn ensure_default_directories() -> BabataResult<()> {
 
 /// Write all embedded project files to disk
 fn write_embedded_project(base_path: &Path) -> BabataResult<()> {
+    let mut file_count = 0;
+
     for file_path in EmbeddedProject::iter() {
         let file_path_str = file_path.as_ref();
         let target = base_path.join(file_path_str);
 
-        // Ensure parent directory exists
+        // Ensure parent directory exists (silent)
         if let Some(parent) = target.parent() {
-            ensure_directory_if_missing(parent, "source directory")?;
+            ensure_directory_if_missing_silent(parent)?;
         }
 
         // Get file contents and write to disk
         let content = EmbeddedProject::get(&file_path)
             .unwrap_or_else(|| panic!("Failed to get embedded file: {}", file_path_str));
 
-        // Try to write as UTF-8 text, fallback to binary
-        match std::str::from_utf8(&content.data) {
-            Ok(text) => {
-                overwrite_embedded_file(&target, text, "source file")?;
-            }
-            Err(_) => {
-                // Binary file - write bytes directly
-                std::fs::write(&target, &content.data).map_err(|err| {
-                    BabataError::config(format!(
-                        "Failed to write source file '{}': {}",
-                        target.display(),
-                        err
-                    ))
-                })?;
-                println!("Overwrote default source file {}", target.display());
-            }
-        }
+        // Write file
+        std::fs::write(&target, &content.data).map_err(|err| {
+            BabataError::config(format!(
+                "Failed to write file '{}': {}",
+                target.display(),
+                err
+            ))
+        })?;
+
+        file_count += 1;
     }
 
+    println!(
+        "Wrote {} source files to {}",
+        file_count,
+        base_path.display()
+    );
     Ok(())
+}
+
+/// Ensure directory exists without printing
+fn ensure_directory_if_missing_silent(path: &Path) -> BabataResult<()> {
+    if path.exists() {
+        return Ok(());
+    }
+    std::fs::create_dir_all(path).map_err(|err| {
+        BabataError::config(format!(
+            "Failed to create directory '{}': {}",
+            path.display(),
+            err
+        ))
+    })
 }
 
 fn ensure_directory_if_missing(path: &Path, kind: &str) -> BabataResult<()> {
