@@ -139,9 +139,9 @@ fn prompt_provider_setup() -> BabataResult<Option<ProviderConfig>> {
     }
     println!("{}. skip", providers.len() + 1);
 
-    let selection = prompt_line(&format!("Choice (1-{})", providers.len() + 1))?;
+    let selection = prompt_line(&format!("Choice (1-{}, or press Enter to skip)", providers.len() + 1))?;
     let selection = selection.trim();
-    if selection.eq_ignore_ascii_case("skip") {
+    if selection.is_empty() || selection.eq_ignore_ascii_case("skip") {
         return Ok(None);
     }
     let idx: usize = selection
@@ -171,10 +171,10 @@ fn prompt_main_agent_setup(config: &Config) -> BabataResult<Option<AgentConfig>>
     println!("1. yes");
     println!("2. skip");
 
-    let selection = prompt_line("Choice (1-2)")?;
+    let selection = prompt_line("Choice (1-2, or press Enter to skip)")?;
     match selection.trim() {
+        "" | "2" | "skip" => return Ok(None),
         "1" | "yes" => {}
-        "2" | "skip" => return Ok(None),
         _ => return Err(BabataError::config("Invalid selection")),
     }
 
@@ -282,9 +282,9 @@ fn prompt_channel_setup() -> BabataResult<Option<ChannelConfig>> {
     }
     println!("{}. skip", channel_names.len() + 1);
 
-    let selection = prompt_line(&format!("Choice (1-{})", channel_names.len() + 1))?;
+    let selection = prompt_line(&format!("Choice (1-{}, or press Enter to skip)", channel_names.len() + 1))?;
     let selection = selection.trim();
-    if selection.eq_ignore_ascii_case("skip") {
+    if selection.is_empty() || selection.eq_ignore_ascii_case("skip") {
         return Ok(None);
     }
 
