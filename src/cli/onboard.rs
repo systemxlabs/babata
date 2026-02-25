@@ -13,6 +13,22 @@ use crate::{
 
 use super::Args;
 
+const EMBEDDED_SYSTEM_PROMPTS: &[(&str, &str)] = &[
+    ("AGENTS.md", include_str!("../../system_prompts/AGENTS.md")),
+    (
+        "IDENTITY.md",
+        include_str!("../../system_prompts/IDENTITY.md"),
+    ),
+    ("SOUL.md", include_str!("../../system_prompts/SOUL.md")),
+    ("USER.md", include_str!("../../system_prompts/USER.md")),
+];
+
+const EMBEDDED_BABATA_SKILL: &str = include_str!("../../skills/babata/SKILL.md");
+const EMBEDDED_MACOS_SERVICE_TEMPLATE: &str =
+    include_str!("../../services/babata.server.plist.template");
+const EMBEDDED_LINUX_SERVICE_TEMPLATE: &str =
+    include_str!("../../services/babata.server.service.template");
+
 pub fn run(_args: &Args) {
     if let Err(err) = run_onboard() {
         eprintln!("{err}");
@@ -55,100 +71,68 @@ fn run_onboard() -> BabataResult<()> {
 fn ensure_default_directories() -> BabataResult<()> {
     let base = crate::utils::babata_dir()?;
     let workspace = base.join("workspace");
-    let system_prompts = base.join("system_prompts");
-    let skills = base.join("skills");
-    let project_root = std::env::current_dir().map_err(|err| {
-        BabataError::internal(format!("Failed to resolve current directory: {err}"))
-    })?;
-    let project_system_prompts = project_root.join("system_prompts");
-    let project_skills = project_root.join("skills");
+    let system_prompts_dir = base.join("system_prompts");
+    let skills_dir = base.join("skills");
 
-    if !system_prompts.exists() {
-        std::fs::create_dir_all(&system_prompts).map_err(|err| {
-            BabataError::config(format!(
-                "Failed to create system_prompts directory '{}': {}",
-                system_prompts.display(),
-                err
-            ))
-        })?;
-        println!("Created directory {}", system_prompts.display());
-        if project_system_prompts.is_dir() {
-            copy_dir_all(&project_system_prompts, &system_prompts)?;
-            println!(
-                "Copied system prompts from {}",
-                project_system_prompts.display()
-            );
-        }
+    ensure_directory_if_missing(&system_prompts_dir, "system_prompts")?;
+    ensure_directory_if_missing(&skills_dir, "skills")?;
+    ensure_directory_if_missing(&workspace, "workspace")?;
+
+    for (file_name, content) in EMBEDDED_SYSTEM_PROMPTS {
+        let target = system_prompts_dir.join(file_name);
+        write_embedded_file_if_missing(&target, content, "system prompt")?;
     }
 
-    if !skills.exists() {
-        std::fs::create_dir_all(&skills).map_err(|err| {
-            BabataError::config(format!(
-                "Failed to create skills directory '{}': {}",
-                skills.display(),
-                err
-            ))
-        })?;
-        println!("Created directory {}", skills.display());
-        if project_skills.is_dir() {
-            copy_dir_all(&project_skills, &skills)?;
-            println!("Copied skills from {}", project_skills.display());
-        }
-    }
-
-    if !workspace.exists() {
-        std::fs::create_dir_all(&workspace).map_err(|err| {
-            BabataError::config(format!(
-                "Failed to create workspace directory '{}': {}",
-                workspace.display(),
-                err
-            ))
-        })?;
-        println!("Created directory {}", workspace.display());
-    }
+    let babata_skill_dir = skills_dir.join("babata");
+    ensure_directory_if_missing(&babata_skill_dir, "skill")?;
+    let babata_skill_file = babata_skill_dir.join("SKILL.md");
+    write_embedded_file_if_missing(&babata_skill_file, EMBEDDED_BABATA_SKILL, "skill")?;
 
     Ok(())
 }
 
-fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> BabataResult<()> {
-    std::fs::create_dir_all(dst).map_err(|err| {
+fn ensure_directory_if_missing(path: &Path, kind: &str) -> BabataResult<()> {
+    if path.exists() {
+        return Ok(());
+    }
+
+    std::fs::create_dir_all(path).map_err(|err| {
         BabataError::config(format!(
-            "Failed to create directory '{}': {}",
-            dst.display(),
+            "Failed to create {} directory '{}': {}",
+            kind,
+            path.display(),
             err
         ))
     })?;
+    println!("Created directory {}", path.display());
+    Ok(())
+}
 
-    for entry in std::fs::read_dir(src).map_err(|err| {
-        BabataError::config(format!(
-            "Failed to read directory '{}': {}",
-            src.display(),
-            err
-        ))
-    })? {
-        let entry = entry.map_err(|err| {
+fn write_embedded_file_if_missing(path: &Path, content: &str, kind: &str) -> BabataResult<()> {
+    if path.exists() {
+        return Ok(());
+    }
+
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|err| {
             BabataError::config(format!(
-                "Failed to read directory entry in '{}': {}",
-                src.display(),
+                "Failed to create parent directory '{}' for {}: {}",
+                parent.display(),
+                kind,
                 err
             ))
         })?;
-        let path = entry.path();
-        let dest_path = dst.join(entry.file_name());
-        if path.is_dir() {
-            copy_dir_all(&path, &dest_path)?;
-        } else if path.is_file() {
-            std::fs::copy(&path, &dest_path).map_err(|err| {
-                BabataError::config(format!(
-                    "Failed to copy '{}' to '{}': {}",
-                    path.display(),
-                    dest_path.display(),
-                    err
-                ))
-            })?;
-        }
     }
 
+    std::fs::write(path, content).map_err(|err| {
+        BabataError::config(format!(
+            "Failed to write {} file '{}': {}",
+            kind,
+            path.display(),
+            err
+        ))
+    })?;
+    println!("Wrote default {} {}", kind, path.display());
     Ok(())
 }
 
@@ -442,8 +426,9 @@ fn configure_service_from_template() -> BabataResult<bool> {
         return Ok(true);
     }
 
-    let (template_name, output_name, output_dir) = match std::env::consts::OS {
+    let (template_content, template_name, output_name, output_dir) = match std::env::consts::OS {
         "macos" => (
+            EMBEDDED_MACOS_SERVICE_TEMPLATE,
             "babata.server.plist.template",
             "babata.server.plist",
             crate::utils::resolve_home_dir()?
@@ -451,6 +436,7 @@ fn configure_service_from_template() -> BabataResult<bool> {
                 .join("LaunchAgents"),
         ),
         "linux" => (
+            EMBEDDED_LINUX_SERVICE_TEMPLATE,
             "babata.server.service.template",
             "babata.server.service",
             crate::utils::babata_dir()?.join("services"),
@@ -460,10 +446,6 @@ fn configure_service_from_template() -> BabataResult<bool> {
         }
     };
 
-    let project_root = std::env::current_dir().map_err(|err| {
-        BabataError::internal(format!("Failed to resolve current directory: {err}"))
-    })?;
-    let template_path = project_root.join("services").join(template_name);
     std::fs::create_dir_all(&output_dir).map_err(|err| {
         BabataError::config(format!(
             "Failed to create service output directory '{}': {}",
@@ -473,7 +455,7 @@ fn configure_service_from_template() -> BabataResult<bool> {
     })?;
     let output_path = output_dir.join(output_name);
 
-    render_service_template(&template_path, &output_path)?;
+    render_service_template(template_content, template_name, &output_path)?;
 
     println!("Generated service file: {}", output_path.display());
     Ok(true)
@@ -485,24 +467,20 @@ fn start_service_after_onboard() -> BabataResult<()> {
     Ok(())
 }
 
-fn render_service_template(template_path: &Path, output_path: &Path) -> BabataResult<()> {
-    let template = std::fs::read_to_string(template_path).map_err(|err| {
-        BabataError::config(format!(
-            "Failed to read service template '{}': {}",
-            template_path.display(),
-            err
-        ))
-    })?;
-
-    if !template.contains("{{HOME_DIR}}") {
+fn render_service_template(
+    template_content: &str,
+    template_name: &str,
+    output_path: &Path,
+) -> BabataResult<()> {
+    if !template_content.contains("{{HOME_DIR}}") {
         return Err(BabataError::config(format!(
             "Service template '{}' is missing '{{{{HOME_DIR}}}}' placeholder",
-            template_path.display()
+            template_name
         )));
     }
 
     let home_dir = crate::utils::resolve_home_dir()?;
-    let rendered = template.replace("{{HOME_DIR}}", &home_dir.to_string_lossy());
+    let rendered = template_content.replace("{{HOME_DIR}}", &home_dir.to_string_lossy());
 
     std::fs::write(output_path, rendered).map_err(|err| {
         BabataError::config(format!(
