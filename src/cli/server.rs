@@ -9,9 +9,10 @@ use super::Args;
 
 const MACOS_LAUNCHD_LABEL: &str = "babata.server";
 const LINUX_SYSTEMD_SERVICE: &str = "babata.server.service";
-const WINDOWS_TASK_NAME: &str = "babata.server";
-const WINDOWS_RUN_KEY_PATH: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
-const WINDOWS_RUN_VALUE_NAME: &str = "babata.server";
+const WINDOWS_SERVICE_NAME: &str = "babata.server";
+const WINDOWS_SERVICE_DISPLAY_NAME: &str = "Babata Server";
+const WINDOWS_SERVICE_DESCRIPTION: &str =
+    "Babata background server managed by Windows Service Control Manager.";
 
 pub fn serve(args: &Args) {
     if let Err(err) = run_serve(args) {
@@ -39,6 +40,38 @@ pub fn restart(_args: &Args) {
         eprintln!("{err}");
         std::process::exit(1);
     }
+}
+
+pub fn windows_service_host(_args: &Args, home_dir: Option<&str>) {
+    if let Err(err) = run_windows_service_host(home_dir) {
+        eprintln!("{err}");
+        std::process::exit(1);
+    }
+}
+
+pub fn install_windows_service() -> BabataResult<()> {
+    if std::env::consts::OS != "windows" {
+        return Err(BabataError::config(
+            "Windows service installation is only supported on Windows",
+        ));
+    }
+
+    let exe_path = std::env::current_exe().map_err(|err| {
+        BabataError::internal(format!("Failed to resolve current executable path: {err}"))
+    })?;
+    let home_dir = crate::utils::resolve_home_dir()?;
+    let bin_path = windows_service_bin_path(&exe_path, &home_dir);
+
+    if let Err(err) = create_or_update_windows_service(&bin_path) {
+        if is_windows_service_permission_denied_message(&err.to_string()) {
+            return Err(BabataError::config(
+                "Installing Windows service requires Administrator privileges. Re-run in an elevated shell, e.g. \"babata onboard\" or \"babata server start\" as Administrator.",
+            ));
+        }
+        return Err(err);
+    }
+    configure_windows_service_metadata();
+    Ok(())
 }
 
 fn run_serve(_args: &Args) -> BabataResult<()> {
@@ -208,41 +241,31 @@ fn stop_linux() -> BabataResult<()> {
 }
 
 fn start_windows() -> BabataResult<()> {
-    let script_path = windows_task_script_path()?;
-    ensure_file_exists(
-        &script_path,
-        "Windows task script not found; run \"babata onboard\" first",
-    )?;
-    if let Err(task_err) = start_windows_with_task_scheduler(&script_path) {
-        warn!(
-            "Windows Task Scheduler backend failed, falling back to Run registry backend: {}",
-            task_err
-        );
-        return start_windows_with_run_registry(&script_path);
-    }
+    install_windows_service()?;
+    start_windows_service()?;
+
+    println!(
+        "Started server with Windows Service: {}",
+        WINDOWS_SERVICE_NAME
+    );
     Ok(())
 }
 
 fn restart_windows() -> BabataResult<()> {
-    let script_path = windows_task_script_path()?;
-    ensure_file_exists(
-        &script_path,
-        "Windows task script not found; run \"babata onboard\" first",
-    )?;
-    if let Err(task_err) = restart_windows_with_task_scheduler(&script_path) {
-        warn!(
-            "Windows Task Scheduler backend failed, falling back to Run registry backend: {}",
-            task_err
-        );
-        return restart_windows_with_run_registry(&script_path);
-    }
+    install_windows_service()?;
+
+    let _ = stop_windows_service();
+    start_windows_service()?;
+
+    println!(
+        "Restarted server with Windows Service: {}",
+        WINDOWS_SERVICE_NAME
+    );
     Ok(())
 }
 
 fn stop_windows() -> BabataResult<()> {
-    let task_name = windows_task_name();
-    let _ = run_command("schtasks", &["/End", "/TN", &task_name]);
-    let _ = run_command("schtasks", &["/End", "/TN", WINDOWS_TASK_NAME]);
+    stop_windows_service()?;
     stop_windows_running_processes()?;
     println!("Stopped server on Windows");
     Ok(())
@@ -261,125 +284,104 @@ fn linux_systemd_service_path() -> BabataResult<std::path::PathBuf> {
         .join(LINUX_SYSTEMD_SERVICE))
 }
 
-fn windows_task_script_path() -> BabataResult<std::path::PathBuf> {
-    Ok(crate::utils::babata_dir()?
-        .join("services")
-        .join("babata.server.ps1"))
-}
-
-fn windows_task_action(script_path: &Path) -> String {
+fn windows_service_bin_path(exe_path: &Path, home_dir: &Path) -> String {
     format!(
-        "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File \"{}\"",
-        script_path.to_string_lossy()
+        "\"{}\" server windows-service-host --home-dir \"{}\"",
+        exe_path.to_string_lossy(),
+        home_dir.to_string_lossy()
     )
 }
 
-fn start_windows_with_task_scheduler(script_path: &Path) -> BabataResult<()> {
-    let task_name = windows_task_name();
-    let task_action = windows_task_action(script_path);
-    run_command(
-        "schtasks",
+fn create_or_update_windows_service(bin_path: &str) -> BabataResult<()> {
+    let create_result = run_command(
+        "sc",
         &[
-            "/Create",
-            "/TN",
-            &task_name,
-            "/SC",
-            "ONLOGON",
-            "/RL",
-            "LIMITED",
-            "/F",
-            "/TR",
-            &task_action,
+            "create",
+            WINDOWS_SERVICE_NAME,
+            "type=",
+            "own",
+            "start=",
+            "auto",
+            "binPath=",
+            bin_path,
+            "displayname=",
+            WINDOWS_SERVICE_DISPLAY_NAME,
         ],
-    )?;
-    run_command("schtasks", &["/Run", "/TN", &task_name])?;
-    println!("Started server with Windows Task Scheduler: {}", task_name);
-    Ok(())
-}
+    );
 
-fn restart_windows_with_task_scheduler(script_path: &Path) -> BabataResult<()> {
-    let task_name = windows_task_name();
-    let task_action = windows_task_action(script_path);
+    if create_result.is_ok() {
+        return Ok(());
+    }
+
+    let create_err = create_result.err().expect("create_result checked is_err");
+    let err_text = create_err.to_string();
+    if !is_windows_service_already_exists_error(&err_text) {
+        return Err(create_err);
+    }
+
     run_command(
-        "schtasks",
+        "sc",
         &[
-            "/Create",
-            "/TN",
-            &task_name,
-            "/SC",
-            "ONLOGON",
-            "/RL",
-            "LIMITED",
-            "/F",
-            "/TR",
-            &task_action,
-        ],
-    )?;
-    let _ = run_command("schtasks", &["/End", "/TN", &task_name]);
-    run_command("schtasks", &["/Run", "/TN", &task_name])?;
-    println!(
-        "Restarted server with Windows Task Scheduler: {}",
-        task_name
-    );
-    Ok(())
-}
-
-fn start_windows_with_run_registry(script_path: &Path) -> BabataResult<()> {
-    upsert_windows_run_registry(script_path)?;
-    start_windows_service_script(script_path)?;
-    println!(
-        "Started server with Windows Run registry: {}",
-        WINDOWS_RUN_VALUE_NAME
-    );
-    Ok(())
-}
-
-fn restart_windows_with_run_registry(script_path: &Path) -> BabataResult<()> {
-    stop_windows_running_processes()?;
-    upsert_windows_run_registry(script_path)?;
-    start_windows_service_script(script_path)?;
-    println!(
-        "Restarted server with Windows Run registry: {}",
-        WINDOWS_RUN_VALUE_NAME
-    );
-    Ok(())
-}
-
-fn upsert_windows_run_registry(script_path: &Path) -> BabataResult<()> {
-    let startup_command = windows_task_action(script_path);
-    run_command(
-        "reg",
-        &[
-            "add",
-            WINDOWS_RUN_KEY_PATH,
-            "/v",
-            WINDOWS_RUN_VALUE_NAME,
-            "/t",
-            "REG_SZ",
-            "/d",
-            &startup_command,
-            "/f",
+            "config",
+            WINDOWS_SERVICE_NAME,
+            "type=",
+            "own",
+            "start=",
+            "auto",
+            "binPath=",
+            bin_path,
+            "displayname=",
+            WINDOWS_SERVICE_DISPLAY_NAME,
         ],
     )
 }
 
-fn start_windows_service_script(script_path: &Path) -> BabataResult<()> {
-    let escaped_script_path = script_path.to_string_lossy().replace('\'', "''");
-    let command = format!(
-        "Start-Process -WindowStyle Hidden -FilePath 'powershell.exe' -ArgumentList '-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File','{}'",
-        escaped_script_path
-    );
-    run_command(
-        "powershell.exe",
+fn configure_windows_service_metadata() {
+    if let Err(err) = run_command(
+        "sc",
         &[
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-Command",
-            &command,
+            "description",
+            WINDOWS_SERVICE_NAME,
+            WINDOWS_SERVICE_DESCRIPTION,
         ],
-    )
+    ) {
+        warn!("Failed to set Windows service description: {}", err);
+    }
+
+    if let Err(err) = run_command(
+        "sc",
+        &[
+            "failure",
+            WINDOWS_SERVICE_NAME,
+            "reset=",
+            "86400",
+            "actions=",
+            "restart/5000/restart/5000/restart/5000",
+        ],
+    ) {
+        warn!("Failed to set Windows service recovery actions: {}", err);
+    }
+}
+
+fn start_windows_service() -> BabataResult<()> {
+    if let Err(err) = run_command("sc", &["start", WINDOWS_SERVICE_NAME]) {
+        if !is_windows_service_already_running_error(&err.to_string()) {
+            return Err(err);
+        }
+    }
+    Ok(())
+}
+
+fn stop_windows_service() -> BabataResult<()> {
+    if let Err(err) = run_command("sc", &["stop", WINDOWS_SERVICE_NAME]) {
+        let err_text = err.to_string();
+        if !is_windows_service_not_running_error(&err_text)
+            && !is_windows_service_not_found_error(&err_text)
+        {
+            return Err(err);
+        }
+    }
+    Ok(())
 }
 
 fn stop_windows_running_processes() -> BabataResult<()> {
@@ -396,32 +398,48 @@ fn stop_windows_running_processes() -> BabataResult<()> {
     )
 }
 
-fn windows_task_name() -> String {
-    match std::env::var("USERNAME") {
-        Ok(username) if !username.trim().is_empty() => windows_task_name_for_user(&username),
-        _ => WINDOWS_TASK_NAME.to_string(),
-    }
+#[cfg(windows)]
+fn run_windows_service_host(home_dir: Option<&str>) -> BabataResult<()> {
+    windows_service_host::run(home_dir)
 }
 
-fn windows_task_name_for_user(username: &str) -> String {
-    let mut suffix: String = username
-        .chars()
-        .map(|ch| {
-            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' || ch == '.' {
-                ch.to_ascii_lowercase()
-            } else {
-                '_'
-            }
-        })
-        .collect();
-    suffix = suffix.trim_matches('_').to_string();
-    if suffix.is_empty() {
-        return WINDOWS_TASK_NAME.to_string();
-    }
-    if suffix.len() > 48 {
-        suffix.truncate(48);
-    }
-    format!("{WINDOWS_TASK_NAME}.{suffix}")
+#[cfg(not(windows))]
+fn run_windows_service_host(_home_dir: Option<&str>) -> BabataResult<()> {
+    Err(BabataError::config(
+        "Windows service host can only run on Windows",
+    ))
+}
+
+fn is_windows_service_already_exists_error(message: &str) -> bool {
+    let lower = message.to_ascii_lowercase();
+    lower.contains("1073") || lower.contains("already exists")
+}
+
+fn is_windows_service_already_running_error(message: &str) -> bool {
+    let lower = message.to_ascii_lowercase();
+    lower.contains("1056") || lower.contains("already running")
+}
+
+fn is_windows_service_not_running_error(message: &str) -> bool {
+    let lower = message.to_ascii_lowercase();
+    lower.contains("1062") || lower.contains("not been started")
+}
+
+fn is_windows_service_not_found_error(message: &str) -> bool {
+    let lower = message.to_ascii_lowercase();
+    lower.contains("1060") || lower.contains("does not exist")
+}
+
+pub fn is_windows_service_permission_denied_message(message: &str) -> bool {
+    let lower = message.to_ascii_lowercase();
+    let is_service_cmd = lower.contains("command 'sc create")
+        || lower.contains("command 'sc config")
+        || lower.contains("openscmanager")
+        || lower.contains("openservice");
+    let is_access_denied = lower.contains("status exit code: 5")
+        || lower.contains("access is denied")
+        || lower.contains("failed 5");
+    is_service_cmd && is_access_denied
 }
 
 fn ensure_file_exists(path: &Path, message: &str) -> BabataResult<()> {
@@ -490,13 +508,249 @@ fn is_macos_service_not_found_error(message: &str) -> bool {
         || message.contains("No such process")
 }
 
+#[cfg(windows)]
+mod windows_service_host {
+    use std::{
+        ffi::OsString,
+        path::PathBuf,
+        process::{Child, Command},
+        sync::{OnceLock, mpsc},
+        time::Duration,
+    };
+
+    use windows_service::{
+        define_windows_service,
+        service::{
+            ServiceControl, ServiceControlAccept, ServiceExitCode, ServiceState, ServiceStatus,
+            ServiceType,
+        },
+        service_control_handler::{self, ServiceControlHandlerResult, ServiceStatusHandle},
+        service_dispatcher,
+    };
+
+    use crate::{BabataResult, error::BabataError};
+
+    static SERVICE_HOME_DIR: OnceLock<String> = OnceLock::new();
+    static SERVICE_EXE_PATH: OnceLock<PathBuf> = OnceLock::new();
+
+    define_windows_service!(ffi_service_main, service_main);
+
+    pub fn run(home_dir: Option<&str>) -> BabataResult<()> {
+        let resolved_home_dir = match home_dir {
+            Some(value) if !value.trim().is_empty() => value.trim().to_string(),
+            _ => crate::utils::resolve_home_dir()?
+                .to_string_lossy()
+                .into_owned(),
+        };
+        let _ = SERVICE_HOME_DIR.set(resolved_home_dir);
+
+        let exe_path = std::env::current_exe().map_err(|err| {
+            BabataError::internal(format!("Failed to resolve current executable path: {err}"))
+        })?;
+        let _ = SERVICE_EXE_PATH.set(exe_path);
+
+        service_dispatcher::start(super::WINDOWS_SERVICE_NAME, ffi_service_main).map_err(|err| {
+            BabataError::internal(format!(
+                "Failed to start Windows service dispatcher: {}",
+                err
+            ))
+        })
+    }
+
+    fn service_main(_arguments: Vec<OsString>) {
+        if let Err(err) = run_service_main() {
+            eprintln!("{err}");
+        }
+    }
+
+    fn run_service_main() -> BabataResult<()> {
+        let (shutdown_tx, shutdown_rx) = mpsc::channel::<()>();
+
+        let status_handle =
+            service_control_handler::register(super::WINDOWS_SERVICE_NAME, move |control| {
+                match control {
+                    ServiceControl::Stop | ServiceControl::Shutdown => {
+                        let _ = shutdown_tx.send(());
+                        ServiceControlHandlerResult::NoError
+                    }
+                    ServiceControl::Interrogate => ServiceControlHandlerResult::NoError,
+                    _ => ServiceControlHandlerResult::NotImplemented,
+                }
+            })
+            .map_err(|err| {
+                BabataError::internal(format!(
+                    "Failed to register Windows service control handler: {}",
+                    err
+                ))
+            })?;
+
+        set_service_status(
+            &status_handle,
+            ServiceState::StartPending,
+            ServiceControlAccept::empty(),
+            ServiceExitCode::Win32(0),
+            5,
+        )?;
+
+        let mut child = match spawn_server_child() {
+            Ok(child) => child,
+            Err(err) => {
+                let _ = set_service_status(
+                    &status_handle,
+                    ServiceState::Stopped,
+                    ServiceControlAccept::empty(),
+                    ServiceExitCode::Win32(1),
+                    0,
+                );
+                return Err(err);
+            }
+        };
+
+        set_service_status(
+            &status_handle,
+            ServiceState::Running,
+            ServiceControlAccept::STOP | ServiceControlAccept::SHUTDOWN,
+            ServiceExitCode::Win32(0),
+            0,
+        )?;
+
+        loop {
+            if shutdown_rx.recv_timeout(Duration::from_secs(1)).is_ok() {
+                break;
+            }
+
+            if let Some(exit_status) = child.try_wait().map_err(|err| {
+                BabataError::internal(format!("Failed to monitor child process: {}", err))
+            })? {
+                let _ = set_service_status(
+                    &status_handle,
+                    ServiceState::Stopped,
+                    ServiceControlAccept::empty(),
+                    ServiceExitCode::Win32(1),
+                    0,
+                );
+                return Err(BabataError::internal(format!(
+                    "Babata server child process exited unexpectedly: {}",
+                    exit_status
+                )));
+            }
+        }
+
+        set_service_status(
+            &status_handle,
+            ServiceState::StopPending,
+            ServiceControlAccept::empty(),
+            ServiceExitCode::Win32(0),
+            10,
+        )?;
+        terminate_child(&mut child)?;
+        set_service_status(
+            &status_handle,
+            ServiceState::Stopped,
+            ServiceControlAccept::empty(),
+            ServiceExitCode::Win32(0),
+            0,
+        )?;
+        Ok(())
+    }
+
+    fn set_service_status(
+        status_handle: &ServiceStatusHandle,
+        state: ServiceState,
+        controls_accepted: ServiceControlAccept,
+        exit_code: ServiceExitCode,
+        wait_hint_secs: u64,
+    ) -> BabataResult<()> {
+        let checkpoint = match state {
+            ServiceState::StartPending | ServiceState::StopPending => 1,
+            _ => 0,
+        };
+        status_handle
+            .set_service_status(ServiceStatus {
+                service_type: ServiceType::OWN_PROCESS,
+                current_state: state,
+                controls_accepted,
+                exit_code,
+                checkpoint,
+                wait_hint: Duration::from_secs(wait_hint_secs),
+                process_id: None,
+            })
+            .map_err(|err| {
+                BabataError::internal(format!("Failed to update Windows service status: {}", err))
+            })
+    }
+
+    fn spawn_server_child() -> BabataResult<Child> {
+        let home_dir = SERVICE_HOME_DIR.get().cloned().ok_or_else(|| {
+            BabataError::internal("Windows service home directory not initialized")
+        })?;
+        let home_path = PathBuf::from(&home_dir);
+        let workdir = home_path.join(".babata");
+        std::fs::create_dir_all(&workdir).map_err(|err| {
+            BabataError::internal(format!(
+                "Failed to create working directory '{}': {}",
+                workdir.display(),
+                err
+            ))
+        })?;
+
+        let exe_path = SERVICE_EXE_PATH.get().cloned().ok_or_else(|| {
+            BabataError::internal("Windows service executable path not initialized")
+        })?;
+
+        let cargo_bin = home_path.join(".cargo").join("bin");
+        let existing_path = std::env::var("PATH").unwrap_or_default();
+        let merged_path = if existing_path.is_empty() {
+            cargo_bin.to_string_lossy().into_owned()
+        } else {
+            format!("{};{}", cargo_bin.to_string_lossy(), existing_path)
+        };
+
+        let mut child_cmd = Command::new(exe_path);
+        child_cmd
+            .arg("server")
+            .arg("serve")
+            .current_dir(&workdir)
+            .env("HOME", &home_dir)
+            .env("USERPROFILE", &home_dir)
+            .env("PATH", merged_path);
+
+        child_cmd.spawn().map_err(|err| {
+            BabataError::internal(format!(
+                "Failed to start babata server child process: {}",
+                err
+            ))
+        })
+    }
+
+    fn terminate_child(child: &mut Child) -> BabataResult<()> {
+        if child
+            .try_wait()
+            .map_err(|err| {
+                BabataError::internal(format!(
+                    "Failed to inspect child process before termination: {}",
+                    err
+                ))
+            })?
+            .is_some()
+        {
+            return Ok(());
+        }
+
+        child.kill().map_err(|err| {
+            BabataError::internal(format!("Failed to stop child process: {}", err))
+        })?;
+        let _ = child.wait();
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::message::{Content, Message};
 
     use super::{
-        is_macos_service_not_found_error, service_started_message, windows_task_action,
-        windows_task_name_for_user,
+        is_macos_service_not_found_error, service_started_message, windows_service_bin_path,
     };
 
     #[test]
@@ -529,26 +783,14 @@ mod tests {
     }
 
     #[test]
-    fn builds_windows_task_action_with_quoted_script_path() {
-        let action = windows_task_action(std::path::Path::new(
-            r"C:\Users\alice\.babata\services\babata.server.ps1",
-        ));
-        assert_eq!(
-            action,
-            "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File \"C:\\Users\\alice\\.babata\\services\\babata.server.ps1\""
+    fn builds_windows_service_bin_path_with_home_dir() {
+        let cmdline = windows_service_bin_path(
+            std::path::Path::new(r"C:\Users\alice\.cargo\bin\babata.exe"),
+            std::path::Path::new(r"C:\Users\alice"),
         );
-    }
-
-    #[test]
-    fn windows_task_name_for_user_sanitizes_suffix() {
         assert_eq!(
-            windows_task_name_for_user("DOMAIN\\Alice Smith"),
-            "babata.server.domain_alice_smith"
+            cmdline,
+            "\"C:\\Users\\alice\\.cargo\\bin\\babata.exe\" server windows-service-host --home-dir \"C:\\Users\\alice\""
         );
-    }
-
-    #[test]
-    fn windows_task_name_for_user_falls_back_when_empty_after_sanitize() {
-        assert_eq!(windows_task_name_for_user("   "), "babata.server");
     }
 }

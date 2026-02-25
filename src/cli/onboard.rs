@@ -424,6 +424,21 @@ fn load_or_init_config() -> BabataResult<Config> {
 }
 
 fn configure_service_from_template() -> BabataResult<()> {
+    if std::env::consts::OS == "windows" {
+        if let Err(err) = super::server::install_windows_service() {
+            if super::server::is_windows_service_permission_denied_message(&err.to_string()) {
+                println!(
+                    "Warning: Windows service was not created due to missing Administrator privileges."
+                );
+                println!("Run an elevated shell and execute: babata server start");
+                return Ok(());
+            }
+            return Err(err);
+        }
+        println!("Configured Windows service: babata.server");
+        return Ok(());
+    }
+
     let (template_name, output_name, output_dir) = match std::env::consts::OS {
         "macos" => (
             "babata.server.plist.template",
@@ -435,11 +450,6 @@ fn configure_service_from_template() -> BabataResult<()> {
         "linux" => (
             "babata.server.service.template",
             "babata.server.service",
-            crate::utils::babata_dir()?.join("services"),
-        ),
-        "windows" => (
-            "babata.server.ps1.template",
-            "babata.server.ps1",
             crate::utils::babata_dir()?.join("services"),
         ),
         _ => {
