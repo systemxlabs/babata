@@ -173,6 +173,16 @@ impl Config {
                 (ChannelConfig::Telegram(_), ChannelConfig::Telegram(_))
             )
         }) {
+            // Preserve last_update_id when the new config doesn't specify it
+            let ChannelConfig::Telegram(existing_telegram) = existing;
+            let ChannelConfig::Telegram(new_telegram) = &channel_config;
+            if new_telegram.last_update_id.is_none() && existing_telegram.last_update_id.is_some() {
+                let mut new_config = channel_config;
+                let ChannelConfig::Telegram(ref mut new_telegram) = new_config;
+                new_telegram.last_update_id = existing_telegram.last_update_id;
+                *existing = new_config;
+                return;
+            }
             *existing = channel_config;
             return;
         }
