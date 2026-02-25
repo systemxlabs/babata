@@ -139,7 +139,10 @@ fn prompt_provider_setup() -> BabataResult<Option<ProviderConfig>> {
     }
     println!("{}. skip", providers.len() + 1);
 
-    let selection = prompt_line(&format!("Choice (1-{}, or press Enter to skip)", providers.len() + 1))?;
+    let selection = prompt_line(&format!(
+        "Choice (1-{}, or press Enter to skip)",
+        providers.len() + 1
+    ))?;
     let selection = selection.trim();
     if selection.is_empty() || selection.eq_ignore_ascii_case("skip") {
         return Ok(None);
@@ -278,7 +281,10 @@ fn prompt_channel_setup() -> BabataResult<Option<ChannelConfig>> {
     }
     println!("{}. skip", channel_names.len() + 1);
 
-    let selection = prompt_line(&format!("Choice (1-{}, or press Enter to skip)", channel_names.len() + 1))?;
+    let selection = prompt_line(&format!(
+        "Choice (1-{}, or press Enter to skip)",
+        channel_names.len() + 1
+    ))?;
     let selection = selection.trim();
     if selection.is_empty() || selection.eq_ignore_ascii_case("skip") {
         return Ok(None);
