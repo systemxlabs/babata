@@ -49,6 +49,10 @@ pub fn windows_service_host(_args: &Args, home_dir: Option<&str>) {
     }
 }
 
+pub fn start_background_service() -> BabataResult<()> {
+    run_start()
+}
+
 pub fn install_windows_service() -> BabataResult<()> {
     if std::env::consts::OS != "windows" {
         return Err(BabataError::config(

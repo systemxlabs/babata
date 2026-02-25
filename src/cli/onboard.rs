@@ -44,7 +44,10 @@ fn run_onboard() -> BabataResult<()> {
         .map_err(|err| BabataError::config(format!("Failed to serialize config: {}", err)))?;
     println!("{config_json}");
 
-    configure_service_from_template()?;
+    let should_start_service = configure_service_from_template()?;
+    if should_start_service {
+        start_service_after_onboard()?;
+    }
 
     Ok(())
 }
@@ -423,7 +426,7 @@ fn load_or_init_config() -> BabataResult<Config> {
     }
 }
 
-fn configure_service_from_template() -> BabataResult<()> {
+fn configure_service_from_template() -> BabataResult<bool> {
     if std::env::consts::OS == "windows" {
         if let Err(err) = super::server::install_windows_service() {
             if super::server::is_windows_service_permission_denied_message(&err.to_string()) {
@@ -431,12 +434,12 @@ fn configure_service_from_template() -> BabataResult<()> {
                     "Warning: Windows service was not created due to missing Administrator privileges."
                 );
                 println!("Run an elevated shell and execute: babata server start");
-                return Ok(());
+                return Ok(false);
             }
             return Err(err);
         }
         println!("Configured Windows service: babata.server");
-        return Ok(());
+        return Ok(true);
     }
 
     let (template_name, output_name, output_dir) = match std::env::consts::OS {
@@ -453,7 +456,7 @@ fn configure_service_from_template() -> BabataResult<()> {
             crate::utils::babata_dir()?.join("services"),
         ),
         _ => {
-            return Ok(());
+            return Ok(false);
         }
     };
 
@@ -473,6 +476,12 @@ fn configure_service_from_template() -> BabataResult<()> {
     render_service_template(&template_path, &output_path)?;
 
     println!("Generated service file: {}", output_path.display());
+    Ok(true)
+}
+
+fn start_service_after_onboard() -> BabataResult<()> {
+    super::server::start_background_service()?;
+    println!("Started service.");
     Ok(())
 }
 
