@@ -1,9 +1,9 @@
-mod bash;
 mod read_file;
+mod shell;
 mod write_file;
 
-pub use bash::*;
 pub use read_file::*;
+pub use shell::*;
 pub use write_file::*;
 
 use crate::BabataResult;
@@ -25,7 +25,7 @@ pub struct ToolSpec {
 
 pub fn build_tools() -> HashMap<String, Arc<dyn Tool>> {
     let tools: Vec<Arc<dyn Tool>> = vec![
-        Arc::new(BashTool::new()),
+        Arc::new(ShellTool::new()),
         Arc::new(ReadFileTool::new()),
         Arc::new(WriteFileTool::new()),
     ];

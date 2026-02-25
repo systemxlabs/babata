@@ -8,24 +8,26 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub struct BashTool {
+pub struct ShellTool {
     spec: ToolSpec,
     default_timeout_ms: u64,
 }
 
-impl BashTool {
+impl ShellTool {
     pub fn new() -> Self {
         let default_timeout_ms = 30000;
         let spec = ToolSpec {
-            name: "bash".to_string(),
-            description: "Execute a bash command and return the output".to_string(),
+            name: "shell".to_string(),
+            description:
+                "Execute a shell command and return the output. Uses bash on Linux/macOS and PowerShell on Windows."
+                    .to_string(),
             parameters: json!({
 
             "type": "object",
             "properties": {
                 "command": {
                     "type": "string",
-                    "description": "The bash command to execute"
+                    "description": "The shell command to execute (bash syntax on Linux/macOS, PowerShell syntax on Windows)"
                 },
                 "timeout_ms": {
                     "type": "integer",
@@ -43,13 +45,13 @@ impl BashTool {
 }
 
 #[async_trait::async_trait]
-impl Tool for BashTool {
+impl Tool for ShellTool {
     fn spec(&self) -> &ToolSpec {
         &self.spec
     }
 
     async fn execute(&self, args: &str) -> BabataResult<String> {
-        debug!("Executing bash command: {args}",);
+        debug!("Executing shell command: {args}",);
 
         let args: Value = serde_json::from_str(args)?;
         let command = args["command"]
@@ -62,16 +64,10 @@ impl Tool for BashTool {
 
         // Run command with timeout
         let timeout_duration = std::time::Duration::from_millis(timeout_ms);
-        let output = tokio::time::timeout(
-            timeout_duration,
-            tokio::process::Command::new("bash")
-                .arg("-c")
-                .arg(command)
-                .output(),
-        )
-        .await
-        .map_err(|_| BabataError::tool(format!("Command timed out after {}ms", timeout_ms)))?
-        .map_err(|e| BabataError::tool(format!("Failed to execute command: {}", e)))?;
+        let output = tokio::time::timeout(timeout_duration, spawn_shell_command(command))
+            .await
+            .map_err(|_| BabataError::tool(format!("Command timed out after {}ms", timeout_ms)))?
+            .map_err(|e| BabataError::tool(format!("Failed to execute command: {}", e)))?;
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -100,8 +96,32 @@ impl Tool for BashTool {
     }
 }
 
-impl Default for BashTool {
+impl Default for ShellTool {
     fn default() -> Self {
         Self::new()
     }
+}
+
+fn spawn_shell_command(
+    command: &str,
+) -> impl std::future::Future<Output = std::io::Result<std::process::Output>> {
+    let mut process = match std::env::consts::OS {
+        "windows" => {
+            let mut cmd = tokio::process::Command::new("powershell.exe");
+            cmd.arg("-NoProfile")
+                .arg("-NonInteractive")
+                .arg("-ExecutionPolicy")
+                .arg("Bypass")
+                .arg("-Command")
+                .arg(command);
+            cmd
+        }
+        _ => {
+            let mut cmd = tokio::process::Command::new("bash");
+            cmd.arg("-c").arg(command);
+            cmd
+        }
+    };
+
+    process.output()
 }
