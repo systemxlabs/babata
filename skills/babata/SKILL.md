@@ -11,7 +11,7 @@ description: 管理和配置 Babata CLI（providers/agents/channels/jobs/onboard
 
 1. 确认目标：明确要改 provider/agent/channel/job/service 的哪些字段。
 2. 读取现状：优先读取 `~/.babata/config.json`。
-3. 执行变更：优先调用 `babata provider|agent|channel|job|server` 子命令。
+3. 执行变更：优先调用 `babata provider|agent|channel|job|server` 子命令；服务操作仅使用 `babata server start` 或 `babata server restart`，不要使用 `babata server stop`。
 4. 校验结果：确认配置约束和服务状态，再给出可复现验证命令。
 
 ## 当前 CLI 能力
@@ -44,8 +44,8 @@ description: 管理和配置 Babata CLI（providers/agents/channels/jobs/onboard
 - Server:
   - `babata server serve`
   - `babata server start`
-  - `babata server stop`
   - `babata server restart`
+  - 该技能执行服务操作时不要使用 `babata server stop`。
   - 隐藏子命令：`babata server windows-service-host --home-dir <HOME_DIR>`（仅 Windows service host 内部使用）
 
 ## 配置结构
