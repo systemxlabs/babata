@@ -36,6 +36,11 @@
 - Log filtering uses environment settings with a default level of `debug`.
 - File logs rotate daily and keep minimal history (current behavior keeps one log file).
 
+## Source
+- The project source code is embedded in the binary and written to `~/.babata/source/` during `babata onboard`.
+- The source code is read-only and serves as reference only.
+- The source directory includes all project files (src, Cargo.toml, etc.) excluding build artifacts.
+
 ## Jobs
 - Manage jobs using the `babata job` subcommands.
 - Scheduled jobs are recurring tasks (for example, cron-based jobs) that run repeatedly according to their schedule.
