@@ -81,9 +81,12 @@ fn ensure_default_directories() -> BabataResult<()> {
     let skills_dir = base.join("skills");
     let source_dir = base.join("source");
 
-    ensure_directory_if_missing(&system_prompts_dir, "system_prompts")?;
-    ensure_directory_if_missing(&skills_dir, "skills")?;
-    ensure_directory_if_missing(&workspace, "workspace")?;
+    ensure_directory_if_missing(&system_prompts_dir)?;
+    println!("Created directory {}", system_prompts_dir.display());
+    ensure_directory_if_missing(&skills_dir)?;
+    println!("Created directory {}", skills_dir.display());
+    ensure_directory_if_missing(&workspace)?;
+    println!("Created directory {}", workspace.display());
 
     for (file_name, content) in EMBEDDED_SYSTEM_PROMPTS {
         let target = system_prompts_dir.join(file_name);
@@ -91,13 +94,15 @@ fn ensure_default_directories() -> BabataResult<()> {
     }
 
     let babata_skill_dir = skills_dir.join("babata");
-    ensure_directory_if_missing(&babata_skill_dir, "skill")?;
+    ensure_directory_if_missing(&babata_skill_dir)?;
+    println!("Created directory {}", babata_skill_dir.display());
     let babata_skill_file = babata_skill_dir.join("SKILL.md");
     overwrite_embedded_file(&babata_skill_file, EMBEDDED_BABATA_SKILL, "skill")?;
 
     // Clean and write embedded project source to disk
     remove_dir_all_if_exists(&source_dir)?;
-    ensure_directory_if_missing(&source_dir, "source")?;
+    ensure_directory_if_missing(&source_dir)?;
+    println!("Created directory {}", source_dir.display());
     write_embedded_project(&source_dir)?;
 
     Ok(())
@@ -111,9 +116,9 @@ fn write_embedded_project(base_path: &Path) -> BabataResult<()> {
         let file_path_str = file_path.as_ref();
         let target = base_path.join(file_path_str);
 
-        // Ensure parent directory exists (silent)
+        // Ensure parent directory exists
         if let Some(parent) = target.parent() {
-            ensure_directory_if_missing_silent(parent)?;
+            ensure_directory_if_missing(parent)?;
         }
 
         // Get file contents and write to disk
@@ -140,11 +145,11 @@ fn write_embedded_project(base_path: &Path) -> BabataResult<()> {
     Ok(())
 }
 
-/// Ensure directory exists without printing
-fn ensure_directory_if_missing_silent(path: &Path) -> BabataResult<()> {
+fn ensure_directory_if_missing(path: &Path) -> BabataResult<()> {
     if path.exists() {
         return Ok(());
     }
+
     std::fs::create_dir_all(path).map_err(|err| {
         BabataError::config(format!(
             "Failed to create directory '{}': {}",
@@ -152,23 +157,6 @@ fn ensure_directory_if_missing_silent(path: &Path) -> BabataResult<()> {
             err
         ))
     })
-}
-
-fn ensure_directory_if_missing(path: &Path, kind: &str) -> BabataResult<()> {
-    if path.exists() {
-        return Ok(());
-    }
-
-    std::fs::create_dir_all(path).map_err(|err| {
-        BabataError::config(format!(
-            "Failed to create {} directory '{}': {}",
-            kind,
-            path.display(),
-            err
-        ))
-    })?;
-    println!("Created directory {}", path.display());
-    Ok(())
 }
 
 /// Remove directory and all its contents if it exists
