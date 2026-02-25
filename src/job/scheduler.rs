@@ -1,13 +1,11 @@
 use std::{collections::HashMap, time::Duration};
 
 use chrono::Utc;
-use croner::Cron;
 use log::{error, info, warn};
 
 use crate::{
     BabataResult,
     config::{Config, JobConfig, Schedule},
-    error::BabataError,
 };
 
 use super::{JobHistoryStore, JobRunner};
@@ -117,62 +115,23 @@ async fn run_running_job_task(
 ) -> BabataResult<()> {
     let history_store = JobHistoryStore::new()?;
 
-    match schedule {
-        Schedule::Cron { expr, .. } => {
-            let cron = Cron::new(expr.trim()).parse().map_err(|err| {
-                BabataError::config(format!(
-                    "Failed to parse cron for running job '{}' ('{}'): {}",
-                    job_name, expr, err
-                ))
-            })?;
+    loop {
+        let Some(next_run) = schedule.next_run_from_now()? else {
+            info!("Job '{}' is done", job_name,);
+            return Ok(());
+        };
 
-            loop {
-                let now = Utc::now();
-                let next_run = cron.find_next_occurrence(&now, false).map_err(|err| {
-                    BabataError::internal(format!(
-                        "Failed to calculate next run time for job '{}': {}",
-                        job_name, err
-                    ))
-                })?;
-
-                let wait_duration = next_run
-                    .signed_duration_since(now)
-                    .to_std()
-                    .unwrap_or_else(|_| Duration::from_secs(0));
-                if wait_duration > Duration::from_secs(0) {
-                    tokio::time::sleep(wait_duration).await;
-                }
-
-                let runner =
-                    JobRunner::new(config.clone(), job_name.to_string(), history_store.clone());
-                if let Err(err) = runner.run().await {
-                    error!("Scheduled job '{}' failed: {}", job_name, err);
-                }
-            }
+        let wait_duration = next_run
+            .signed_duration_since(Utc::now())
+            .to_std()
+            .unwrap_or_else(|_| Duration::from_secs(0));
+        if wait_duration > Duration::from_secs(0) {
+            tokio::time::sleep(wait_duration).await;
         }
-        Schedule::At { at } => {
-            let now = Utc::now();
-            if now > at {
-                info!(
-                    "Skipping one-shot job '{}' because schedule.at '{}' is in the past (now: '{}')",
-                    job_name, at, now
-                );
-                return Ok(());
-            }
 
-            let wait_duration = at
-                .signed_duration_since(now)
-                .to_std()
-                .unwrap_or_else(|_| Duration::from_secs(0));
-            if wait_duration > Duration::from_secs(0) {
-                tokio::time::sleep(wait_duration).await;
-            }
-
-            let runner = JobRunner::new(config, job_name.to_string(), history_store);
-            if let Err(err) = runner.run().await {
-                error!("Scheduled job '{}' failed: {}", job_name, err);
-            }
-            Ok(())
+        let runner = JobRunner::new(config.clone(), job_name.to_string(), history_store.clone());
+        if let Err(err) = runner.run().await {
+            error!("Scheduled job '{}' failed: {}", job_name, err);
         }
     }
 }

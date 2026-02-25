@@ -60,3 +60,63 @@ pub enum Schedule {
         at: DateTime<Utc>,
     },
 }
+
+impl Schedule {
+    pub fn next_run_from_now(&self) -> BabataResult<Option<DateTime<Utc>>> {
+        let now = Utc::now();
+        match self {
+            Schedule::Cron { expr, .. } => {
+                let cron = Cron::new(expr.trim()).parse().map_err(|err| {
+                    BabataError::config(format!("Invalid cron expression '{}': {}", expr, err))
+                })?;
+                let next_run = cron.find_next_occurrence(&now, false).map_err(|err| {
+                    BabataError::internal(format!(
+                        "Failed to calculate next run time for cron schedule '{}': {}",
+                        expr, err
+                    ))
+                })?;
+                Ok(Some(next_run))
+            }
+            Schedule::At { at } => {
+                if now > *at {
+                    Ok(None)
+                } else {
+                    Ok(Some(*at))
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::Duration;
+
+    use super::*;
+
+    #[test]
+    fn at_schedule_returns_none_when_time_is_past() {
+        let schedule = Schedule::At {
+            at: Utc::now() - Duration::seconds(1),
+        };
+
+        let next_run = schedule
+            .next_run_from_now()
+            .expect("next_run_from_now should succeed");
+
+        assert!(next_run.is_none());
+    }
+
+    #[test]
+    fn at_schedule_returns_some_when_time_is_future() {
+        let schedule = Schedule::At {
+            at: Utc::now() + Duration::seconds(5),
+        };
+
+        let next_run = schedule
+            .next_run_from_now()
+            .expect("next_run_from_now should succeed");
+
+        assert!(next_run.is_some());
+    }
+}
