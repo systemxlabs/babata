@@ -1,7 +1,9 @@
+mod edit_file;
 mod read_file;
 mod shell;
 mod write_file;
 
+pub use edit_file::*;
 pub use read_file::*;
 pub use shell::*;
 pub use write_file::*;
@@ -28,6 +30,7 @@ pub fn build_tools() -> HashMap<String, Arc<dyn Tool>> {
         Arc::new(ShellTool::new()),
         Arc::new(ReadFileTool::new()),
         Arc::new(WriteFileTool::new()),
+        Arc::new(EditFileTool::new()),
     ];
 
     let mut tool_map = HashMap::with_capacity(tools.len());
