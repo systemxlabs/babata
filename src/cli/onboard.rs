@@ -79,13 +79,13 @@ fn ensure_default_directories() -> BabataResult<()> {
 
     for (file_name, content) in EMBEDDED_SYSTEM_PROMPTS {
         let target = system_prompts_dir.join(file_name);
-        write_embedded_file_if_missing(&target, content, "system prompt")?;
+        overwrite_embedded_file(&target, content, "system prompt")?;
     }
 
     let babata_skill_dir = skills_dir.join("babata");
     ensure_directory_if_missing(&babata_skill_dir, "skill")?;
     let babata_skill_file = babata_skill_dir.join("SKILL.md");
-    write_embedded_file_if_missing(&babata_skill_file, EMBEDDED_BABATA_SKILL, "skill")?;
+    overwrite_embedded_file(&babata_skill_file, EMBEDDED_BABATA_SKILL, "skill")?;
 
     Ok(())
 }
@@ -107,11 +107,7 @@ fn ensure_directory_if_missing(path: &Path, kind: &str) -> BabataResult<()> {
     Ok(())
 }
 
-fn write_embedded_file_if_missing(path: &Path, content: &str, kind: &str) -> BabataResult<()> {
-    if path.exists() {
-        return Ok(());
-    }
-
+fn overwrite_embedded_file(path: &Path, content: &str, kind: &str) -> BabataResult<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|err| {
             BabataError::config(format!(
@@ -131,7 +127,7 @@ fn write_embedded_file_if_missing(path: &Path, content: &str, kind: &str) -> Bab
             err
         ))
     })?;
-    println!("Wrote default {} {}", kind, path.display());
+    println!("Overwrote default {} {}", kind, path.display());
     Ok(())
 }
 
