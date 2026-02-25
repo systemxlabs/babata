@@ -122,7 +122,20 @@ impl JobManager {
         let provider_config = self.require_provider_config_for_agent(agent_config)?;
         let provider = create_provider(&agent_config.provider, provider_config)?;
 
-        let scheduler_cron = normalize_scheduler_cron(&job_config.cron)?;
+        let scheduler_cron = {
+            let trimmed = job_config.cron.trim();
+            let field_count = trimmed.split_whitespace().count();
+            match field_count {
+                5 => format!("0 {trimmed}"),
+                6 | 7 => trimmed.to_string(),
+                _ => {
+                    return Err(BabataError::config(format!(
+                        "Unsupported cron expression '{}': expected 5, 6 or 7 fields",
+                        job_config.cron
+                    )));
+                }
+            }
+        };
         let job_name = job_config.name.clone();
         let job_description = job_config.description.clone();
         let agent_name = job_config.agent_name.clone();
@@ -269,18 +282,5 @@ async fn broadcast_job_message(channels: &[Arc<dyn Channel>], job_name: &str, me
                 job_name, err
             );
         }
-    }
-}
-
-fn normalize_scheduler_cron(cron: &str) -> BabataResult<String> {
-    let trimmed = cron.trim();
-    let field_count = trimmed.split_whitespace().count();
-    match field_count {
-        5 => Ok(format!("0 {trimmed}")),
-        6 | 7 => Ok(trimmed.to_string()),
-        _ => Err(BabataError::config(format!(
-            "Unsupported cron expression '{}': expected 5, 6 or 7 fields",
-            cron
-        ))),
     }
 }
