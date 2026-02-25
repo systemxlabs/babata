@@ -8,8 +8,6 @@ use crate::{BabataResult, error::BabataError, utils::babata_dir};
 pub struct SkillFrontmatter {
     pub name: String,
     pub description: String,
-    pub enable: Option<bool>,
-    pub inline: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

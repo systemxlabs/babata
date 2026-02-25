@@ -121,26 +121,13 @@ impl AgentTask {
 
         let mut skill_summaries = Vec::new();
         for skill in &self.skills {
-            if skill.frontmatter.enable == Some(false) {
-                continue;
-            }
-
             let title = format!(
                 "{}: {}",
                 skill.frontmatter.name.trim(),
                 skill.frontmatter.description.trim()
             );
 
-            if skill.frontmatter.inline.unwrap_or(false) {
-                let body = skill.body.trim();
-                if body.is_empty() {
-                    skill_summaries.push(format!("- {title}"));
-                } else {
-                    sections.push(format!("Skill {title}\n\n{}", body));
-                }
-            } else {
-                skill_summaries.push(format!("- {title}"));
-            }
+            skill_summaries.push(format!("- {title}"));
         }
 
         if !skill_summaries.is_empty() {

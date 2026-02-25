@@ -6,22 +6,11 @@ System prompts are stored in ~/.babata/system_prompts folder. All markdown files
 ## Skills
 Skills are stored in ~/.babata/skills folder.
 
-### Disable skill
-Add `enable: false` in skill.md yaml section.
-```
----
-name: pdf-processing
-description: Extract text and tables from PDF files, fill forms, merge documents.
-enable: false
----
-```
+Skill frontmatter only includes `name` and `description`:
 
-### Inline skill
-Add `inline: true` in skill.md yaml section. This will load the whole SKILL.md in system prompt.
 ```
 ---
 name: pdf-processing
 description: Extract text and tables from PDF files, fill forms, merge documents.
-inline: true
 ---
 ```
