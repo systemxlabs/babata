@@ -166,24 +166,13 @@ impl Config {
         self.providers.push(provider_config);
     }
 
-    pub fn upsert_channel(&mut self, mut channel_config: ChannelConfig) {
+    pub fn upsert_channel(&mut self, channel_config: ChannelConfig) {
         if let Some(existing) = self.channels.iter_mut().find(|existing| {
             matches!(
                 (existing, &channel_config),
                 (ChannelConfig::Telegram(_), ChannelConfig::Telegram(_))
             )
         }) {
-            match (&*existing, &mut channel_config) {
-                (
-                    ChannelConfig::Telegram(existing_telegram),
-                    ChannelConfig::Telegram(new_telegram),
-                ) => {
-                    // Keep cursor if caller updates channel settings without providing it.
-                    if new_telegram.last_update_id.is_none() {
-                        new_telegram.last_update_id = existing_telegram.last_update_id;
-                    }
-                }
-            }
             *existing = channel_config;
             return;
         }
