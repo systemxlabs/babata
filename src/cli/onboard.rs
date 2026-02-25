@@ -15,10 +15,6 @@ use super::Args;
 
 const EMBEDDED_SYSTEM_PROMPTS: &[(&str, &str)] = &[
     ("AGENTS.md", include_str!("../../system_prompts/AGENTS.md")),
-    (
-        "IDENTITY.md",
-        include_str!("../../system_prompts/IDENTITY.md"),
-    ),
     ("SOUL.md", include_str!("../../system_prompts/SOUL.md")),
 ];
 
