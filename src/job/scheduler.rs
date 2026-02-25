@@ -10,7 +10,7 @@ use crate::{
     error::BabataError,
 };
 
-use super::JobRunner;
+use super::{JobHistoryStore, JobRunner};
 
 const CONFIG_RELOAD_INTERVAL: Duration = Duration::from_secs(10);
 
@@ -121,6 +121,8 @@ fn spawn_running_job_task(
 }
 
 async fn run_running_job_task(config: Config, job_name: &str, cron: Cron) -> BabataResult<()> {
+    let history_store = JobHistoryStore::new()?;
+
     loop {
         let now = Utc::now();
         let next_run = cron.find_next_occurrence(&now, false).map_err(|err| {
@@ -138,7 +140,7 @@ async fn run_running_job_task(config: Config, job_name: &str, cron: Cron) -> Bab
             tokio::time::sleep(wait_duration).await;
         }
 
-        let runner = JobRunner::new(config.clone(), job_name.to_string());
+        let runner = JobRunner::new(config.clone(), job_name.to_string(), history_store.clone());
         if let Err(err) = runner.run().await {
             error!("Scheduled job '{}' failed: {}", job_name, err);
         }
