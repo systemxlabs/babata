@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use croner::Cron;
 use serde::{Deserialize, Serialize};
 
@@ -8,7 +9,7 @@ pub struct JobConfig {
     pub name: String,
     pub agent_name: String,
     pub enabled: bool,
-    pub cron: String,
+    pub schedule: Schedule,
     #[serde(default)]
     pub description: String,
     pub prompt: String,
@@ -24,13 +25,20 @@ impl JobConfig {
             return Err(BabataError::config("Job agent_name cannot be empty"));
         }
 
-        let cron = self.cron.trim();
-        if cron.is_empty() {
-            return Err(BabataError::config("Job cron expression cannot be empty"));
+        match &self.schedule {
+            Schedule::Cron { expr, .. } => {
+                let cron = expr.trim();
+                if cron.is_empty() {
+                    return Err(BabataError::config(
+                        "Job schedule.cron expression cannot be empty",
+                    ));
+                }
+                Cron::new(cron).parse().map_err(|err| {
+                    BabataError::config(format!("Invalid cron expression '{}': {}", expr, err))
+                })?;
+            }
+            Schedule::At { .. } => {}
         }
-        Cron::new(cron).parse().map_err(|err| {
-            BabataError::config(format!("Invalid cron expression '{}': {}", self.cron, err))
-        })?;
 
         if self.prompt.trim().is_empty() {
             return Err(BabataError::config("Job prompt cannot be empty"));
@@ -38,4 +46,17 @@ impl JobConfig {
 
         Ok(())
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum Schedule {
+    Cron {
+        expr: String,
+        #[serde(default)]
+        tz: Option<String>,
+    },
+    At {
+        at: DateTime<Utc>,
+    },
 }

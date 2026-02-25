@@ -6,7 +6,7 @@ use log::{error, info, warn};
 
 use crate::{
     BabataResult,
-    config::{Config, JobConfig},
+    config::{Config, JobConfig, Schedule},
     error::BabataError,
 };
 
@@ -89,8 +89,8 @@ fn sync_running_jobs(running_jobs: &mut HashMap<String, RunningJob>, config: Con
 }
 
 fn create_running_job(config: Config, job_config: JobConfig) -> BabataResult<RunningJob> {
-    let cron = parse_job_cron(&job_config)?;
-    let handle = spawn_running_job_task(config.clone(), job_config.name.clone(), cron);
+    let schedule = job_config.schedule.clone();
+    let handle = spawn_running_job_task(config.clone(), job_config.name.clone(), schedule);
     Ok(RunningJob {
         config,
         job_config,
@@ -98,57 +98,87 @@ fn create_running_job(config: Config, job_config: JobConfig) -> BabataResult<Run
     })
 }
 
-fn parse_job_cron(job_config: &JobConfig) -> BabataResult<Cron> {
-    let scheduler_cron = job_config.cron.trim();
-    Cron::new(scheduler_cron).parse().map_err(|err| {
-        BabataError::config(format!(
-            "Failed to parse cron for running job '{}' ('{}'): {}",
-            job_config.name, job_config.cron, err
-        ))
-    })
-}
-
 fn spawn_running_job_task(
     config: Config,
     job_name: String,
-    cron: Cron,
+    schedule: Schedule,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
-        if let Err(err) = run_running_job_task(config, &job_name, cron).await {
+        if let Err(err) = run_running_job_task(config, &job_name, schedule).await {
             error!("Running job task '{}' exited with error: {}", job_name, err);
         }
     })
 }
 
-async fn run_running_job_task(config: Config, job_name: &str, cron: Cron) -> BabataResult<()> {
+async fn run_running_job_task(
+    config: Config,
+    job_name: &str,
+    schedule: Schedule,
+) -> BabataResult<()> {
     let history_store = JobHistoryStore::new()?;
 
-    loop {
-        let now = Utc::now();
-        let next_run = cron.find_next_occurrence(&now, false).map_err(|err| {
-            BabataError::internal(format!(
-                "Failed to calculate next run time for job '{}': {}",
-                job_name, err
-            ))
-        })?;
+    match schedule {
+        Schedule::Cron { expr, .. } => {
+            let cron = Cron::new(expr.trim()).parse().map_err(|err| {
+                BabataError::config(format!(
+                    "Failed to parse cron for running job '{}' ('{}'): {}",
+                    job_name, expr, err
+                ))
+            })?;
 
-        let wait_duration = next_run
-            .signed_duration_since(now)
-            .to_std()
-            .unwrap_or_else(|_| Duration::from_secs(0));
-        if wait_duration > Duration::from_secs(0) {
-            tokio::time::sleep(wait_duration).await;
+            loop {
+                let now = Utc::now();
+                let next_run = cron.find_next_occurrence(&now, false).map_err(|err| {
+                    BabataError::internal(format!(
+                        "Failed to calculate next run time for job '{}': {}",
+                        job_name, err
+                    ))
+                })?;
+
+                let wait_duration = next_run
+                    .signed_duration_since(now)
+                    .to_std()
+                    .unwrap_or_else(|_| Duration::from_secs(0));
+                if wait_duration > Duration::from_secs(0) {
+                    tokio::time::sleep(wait_duration).await;
+                }
+
+                let runner =
+                    JobRunner::new(config.clone(), job_name.to_string(), history_store.clone());
+                if let Err(err) = runner.run().await {
+                    error!("Scheduled job '{}' failed: {}", job_name, err);
+                }
+            }
         }
+        Schedule::At { at } => {
+            let now = Utc::now();
+            if now > at {
+                info!(
+                    "Skipping one-shot job '{}' because schedule.at '{}' is in the past (now: '{}')",
+                    job_name, at, now
+                );
+                return Ok(());
+            }
 
-        let runner = JobRunner::new(config.clone(), job_name.to_string(), history_store.clone());
-        if let Err(err) = runner.run().await {
-            error!("Scheduled job '{}' failed: {}", job_name, err);
+            let wait_duration = at
+                .signed_duration_since(now)
+                .to_std()
+                .unwrap_or_else(|_| Duration::from_secs(0));
+            if wait_duration > Duration::from_secs(0) {
+                tokio::time::sleep(wait_duration).await;
+            }
+
+            let runner = JobRunner::new(config, job_name.to_string(), history_store);
+            if let Err(err) = runner.run().await {
+                error!("Scheduled job '{}' failed: {}", job_name, err);
+            }
+            Ok(())
         }
     }
 }
 
 pub fn is_job_changed(old_job: &JobConfig, new_job: &JobConfig) -> bool {
     old_job.agent_name != new_job.agent_name
-        || old_job.cron != new_job.cron
+        || old_job.schedule != new_job.schedule
         || old_job.prompt != new_job.prompt
 }

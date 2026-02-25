@@ -281,7 +281,10 @@ mod tests {
                 name: "daily-summary".to_string(),
                 agent_name: "non-existent-agent".to_string(),
                 enabled: true,
-                cron: "0 9 * * *".to_string(),
+                schedule: Schedule::Cron {
+                    expr: "0 9 * * *".to_string(),
+                    tz: None,
+                },
                 description: "Daily summary job".to_string(),
                 prompt: "Summarize today's progress".to_string(),
             }],

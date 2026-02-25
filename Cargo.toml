@@ -15,12 +15,12 @@ serde_yaml = "0.9"
 log = "0.4"
 logforth = { version = "0.29.1", features = ["starter-log"] }
 tokio = { version = "1", features = ["full"] }
-chrono = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
 reqwest = { version = "0.12", features = ["json", "stream"] }
 uuid = { version = "1.20", features = ["v4"] }
 shellexpand = "3.1"
 rusqlite = { version = "0.32", features = ["bundled"] }
-croner = "2.2"
+croner = { version = "2.2", features = ["serde"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-service = "0.8"
