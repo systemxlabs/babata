@@ -167,14 +167,10 @@ fn available_provider_names() -> Vec<String> {
 }
 
 fn prompt_main_agent_setup(config: &Config) -> BabataResult<Option<AgentConfig>> {
-    println!("Configure main agent:");
-    println!("1. yes");
-    println!("2. skip");
-
-    let selection = prompt_line("Choice (1-2, or press Enter to skip)")?;
+    let selection = prompt_line("Configure main agent? (Press Enter to skip, or Y to continue)")?;
     match selection.trim() {
-        "" | "2" | "skip" => return Ok(None),
-        "1" | "yes" => {}
+        "" | "N" | "n" | "no" => return Ok(None),
+        "Y" | "y" | "yes" => {}
         _ => return Err(BabataError::config("Invalid selection")),
     }
 
