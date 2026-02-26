@@ -4,22 +4,11 @@ use chrono::Local;
 
 use crate::{BabataResult, error::BabataError, skill::Skill, utils::babata_dir};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SystemPrompt {
-    pub path: PathBuf,
-    pub content: String,
-}
-
-pub fn load_system_prompts() -> BabataResult<Vec<SystemPrompt>> {
-    let dir = babata_dir()?.join("system_prompts");
-    load_system_prompts_from_dir(&dir)
-}
-
-pub fn build_system_prompt(system_prompts: &[SystemPrompt], skills: &[Skill]) -> String {
+pub fn build_system_prompt(system_prompt_files: &[SystemPromptFile], skills: &[Skill]) -> String {
     let mut sections = Vec::new();
 
-    for prompt in system_prompts {
-        let content = prompt.content.trim();
+    for prompt_file in system_prompt_files {
+        let content = prompt_file.content.trim();
         if !content.is_empty() {
             sections.push(content.to_string());
         }
@@ -50,7 +39,18 @@ pub fn build_system_prompt(system_prompts: &[SystemPrompt], skills: &[Skill]) ->
     sections.join("\n\n")
 }
 
-fn load_system_prompts_from_dir(dir: &Path) -> BabataResult<Vec<SystemPrompt>> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SystemPromptFile {
+    pub path: PathBuf,
+    pub content: String,
+}
+
+pub fn load_system_prompt_files() -> BabataResult<Vec<SystemPromptFile>> {
+    let dir = babata_dir()?.join("system_prompts");
+    load_system_prompt_files_from_dir(&dir)
+}
+
+fn load_system_prompt_files_from_dir(dir: &Path) -> BabataResult<Vec<SystemPromptFile>> {
     if !dir.exists() {
         return Ok(Vec::new());
     }
@@ -96,7 +96,7 @@ fn load_system_prompts_from_dir(dir: &Path) -> BabataResult<Vec<SystemPrompt>> {
                 err
             ))
         })?;
-        prompts.push(SystemPrompt { path, content });
+        prompts.push(SystemPromptFile { path, content });
     }
 
     prompts.sort_by(|a, b| a.path.cmp(&b.path));

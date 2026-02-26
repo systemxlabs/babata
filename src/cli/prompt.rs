@@ -5,7 +5,7 @@ use crate::{
     message::{Content, Message},
     provider::create_provider,
     skill::load_skills,
-    system_prompt::load_system_prompts,
+    system_prompt::load_system_prompt_files,
     task::AgentTask,
     tool::build_tools,
 };
@@ -57,7 +57,7 @@ fn run_prompt(args: &Args) -> BabataResult<()> {
         provider,
         agent_config.model.clone(),
         build_tools(),
-        load_system_prompts()?,
+        load_system_prompt_files()?,
         load_skills()?,
     );
 

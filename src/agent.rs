@@ -9,7 +9,7 @@ use crate::{
     message::MessageStore,
     provider::{Provider, build_providers},
     skill::{Skill, load_skills},
-    system_prompt::{SystemPrompt, load_system_prompts},
+    system_prompt::{SystemPromptFile, load_system_prompt_files},
     task::AgentTask,
     tool::{Tool, build_tools},
 };
@@ -21,7 +21,7 @@ pub struct AgentLoop {
     pub message_store: MessageStore,
     pub memory: Memory,
     pub tools: HashMap<String, Arc<dyn Tool>>,
-    pub system_prompts: Vec<SystemPrompt>,
+    pub system_prompt_files: Vec<SystemPromptFile>,
     pub skills: Vec<Skill>,
 }
 
@@ -32,7 +32,7 @@ impl AgentLoop {
         let message_store = MessageStore::new()?;
         let memory = Memory {};
         let tools = build_tools();
-        let system_prompts = load_system_prompts()?;
+        let system_prompt_files = load_system_prompt_files()?;
         let skills = load_skills()?;
 
         Ok(Self {
@@ -42,7 +42,7 @@ impl AgentLoop {
             message_store,
             memory,
             tools,
-            system_prompts,
+            system_prompt_files,
             skills,
         })
     }
@@ -70,7 +70,7 @@ impl AgentLoop {
                     Arc::clone(&provider),
                     agent_config.model.clone(),
                     self.tools.clone(),
-                    self.system_prompts.clone(),
+                    self.system_prompt_files.clone(),
                     self.skills.clone(),
                 );
                 let response = task.run().await?;

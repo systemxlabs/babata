@@ -111,7 +111,9 @@ impl OpenAICompatibleProvider {
                                 parts.push(ChatCompletionContentPart::Text { text: text.clone() })
                             }
                             Content::ImageUrl { .. } | Content::ImageData { .. } => {
-                                warn!("OpenAI-compatible assistant responses do not support images yet");
+                                warn!(
+                                    "OpenAI-compatible assistant responses do not support images yet"
+                                );
                             }
                         }
                     }

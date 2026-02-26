@@ -6,7 +6,7 @@ use crate::{
     message::Message,
     provider::{GenerationReqest, Provider},
     skill::Skill,
-    system_prompt::{SystemPrompt, build_system_prompt},
+    system_prompt::{SystemPromptFile, build_system_prompt},
     tool::{Tool, ToolSpec},
 };
 
@@ -15,7 +15,7 @@ pub struct AgentTask {
     pub provider: Arc<dyn Provider>,
     pub model: String,
     pub tools: HashMap<String, Arc<dyn Tool>>,
-    pub system_prompts: Vec<SystemPrompt>,
+    pub system_prompt_files: Vec<SystemPromptFile>,
     pub skills: Vec<Skill>,
     pub max_steps: usize,
 }
@@ -26,7 +26,7 @@ impl AgentTask {
         provider: Arc<dyn Provider>,
         model: String,
         tools: HashMap<String, Arc<dyn Tool>>,
-        system_prompts: Vec<SystemPrompt>,
+        system_prompt_files: Vec<SystemPromptFile>,
         skills: Vec<Skill>,
     ) -> Self {
         AgentTask {
@@ -34,7 +34,7 @@ impl AgentTask {
             provider,
             model,
             tools,
-            system_prompts,
+            system_prompt_files,
             skills,
             max_steps: 100,
         }
@@ -47,7 +47,7 @@ impl AgentTask {
 
         let mut messages = self.messages.clone();
         let tool_specs = self.collect_tool_specs();
-        let system_prompt = build_system_prompt(&self.system_prompts, &self.skills);
+        let system_prompt = build_system_prompt(&self.system_prompt_files, &self.skills);
 
         for _ in 0..self.max_steps {
             let response = self
