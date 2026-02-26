@@ -1,10 +1,12 @@
 mod deepseek;
 mod moonshot;
 mod openai;
+mod openai_compatible;
 
 pub use deepseek::*;
 pub use moonshot::*;
 pub use openai::*;
+pub(crate) use openai_compatible::*;
 
 use std::{collections::HashMap, fmt::Debug, sync::Arc};
 

@@ -6,11 +6,11 @@ use crate::{
     },
 };
 
-use super::OpenAIProvider;
+use super::OpenAICompatibleProvider;
 
 #[derive(Debug)]
 pub struct DeepSeekProvider {
-    inner: OpenAIProvider,
+    inner: OpenAICompatibleProvider,
 }
 
 const DEEPSEEK_SUPPORTED_MODELS: &[Model] = &[
@@ -28,7 +28,7 @@ const DEEPSEEK_SUPPORTED_MODELS: &[Model] = &[
 
 impl DeepSeekProvider {
     pub fn new(api_key: &str) -> Self {
-        let inner = OpenAIProvider::new(api_key).with_base_url("https://api.deepseek.com/v1");
+        let inner = OpenAICompatibleProvider::new(api_key, "https://api.deepseek.com/v1");
         Self { inner }
     }
 }

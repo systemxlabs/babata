@@ -6,11 +6,11 @@ use crate::{
     },
 };
 
-use super::OpenAIProvider;
+use super::OpenAICompatibleProvider;
 
 #[derive(Debug)]
 pub struct MoonshotProvider {
-    inner: OpenAIProvider,
+    inner: OpenAICompatibleProvider,
 }
 
 const MOONSHOT_SUPPORTED_MODELS: &[Model] = &[Model {
@@ -21,7 +21,7 @@ const MOONSHOT_SUPPORTED_MODELS: &[Model] = &[Model {
 
 impl MoonshotProvider {
     pub fn new(api_key: &str) -> Self {
-        let inner = OpenAIProvider::new(api_key).with_base_url("https://api.moonshot.cn/v1");
+        let inner = OpenAICompatibleProvider::new(api_key, "https://api.moonshot.cn/v1");
         Self { inner }
     }
 }
