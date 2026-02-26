@@ -80,7 +80,7 @@ impl JobRunner {
     async fn run_task_and_send(&self, job_config: &JobConfig) -> BabataResult<Message> {
         let agent_config = self.require_agent(&job_config.agent_name)?;
         let provider_config = self.require_provider_config_for_agent(agent_config)?;
-        let provider = create_provider(&agent_config.provider, provider_config)?;
+        let provider = create_provider(provider_config)?;
 
         let task = AgentTask::new(
             vec![Message::UserPrompt {

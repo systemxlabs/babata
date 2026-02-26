@@ -40,7 +40,7 @@ fn run_prompt(args: &Args) -> BabataResult<()> {
         )));
     };
 
-    let provider = create_provider(&agent_config.provider, provider_config)?;
+    let provider = create_provider(provider_config)?;
 
     let prompt = args
         .prompt

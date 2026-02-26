@@ -53,10 +53,7 @@ pub struct Model {
     pub context_length: usize,
 }
 
-pub fn create_provider(
-    _provider_name: &str,
-    provider_config: &ProviderConfig,
-) -> BabataResult<Arc<dyn Provider>> {
+pub fn create_provider(provider_config: &ProviderConfig) -> BabataResult<Arc<dyn Provider>> {
     match provider_config {
         ProviderConfig::OpenAI(config) => Ok(Arc::new(OpenAIProvider::new(&config.api_key))),
         ProviderConfig::Moonshot(config) => Ok(Arc::new(MoonshotProvider::new(&config.api_key))),
@@ -70,7 +67,7 @@ pub fn build_providers(config: &Config) -> BabataResult<HashMap<String, Arc<dyn 
 
     for provider_config in &config.providers {
         let provider_name = provider_config.provider_name();
-        let provider = create_provider(provider_name, provider_config)?;
+        let provider = create_provider(provider_config)?;
         providers.insert(provider_name.to_string(), provider);
     }
 
