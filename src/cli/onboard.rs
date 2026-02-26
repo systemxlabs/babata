@@ -67,9 +67,9 @@ fn run_onboard() -> BabataResult<()> {
     println!("{config_json}");
 
     if prompt_background_service_setup()? {
-        let should_start_service = configure_service_from_template()?;
-        if should_start_service {
-            start_service_after_onboard()?;
+        let should_start_background_service = configure_background_service()?;
+        if should_start_background_service {
+            start_background_service_after_onboard()?;
         }
     } else {
         println!("Skipped background service setup.");
@@ -479,7 +479,7 @@ fn prompt_line(label: &str) -> BabataResult<String> {
     Ok(input.trim_end().to_string())
 }
 
-fn configure_service_from_template() -> BabataResult<bool> {
+fn configure_background_service() -> BabataResult<bool> {
     if std::env::consts::OS == "windows" {
         if let Err(err) = super::server::install_windows_service() {
             if super::server::is_windows_service_permission_denied_message(&err.to_string()) {
@@ -524,19 +524,19 @@ fn configure_service_from_template() -> BabataResult<bool> {
     })?;
     let output_path = output_dir.join(output_name);
 
-    render_service_template(template_content, template_name, &output_path)?;
+    render_background_service_template(template_content, template_name, &output_path)?;
 
     println!("Generated service file: {}", output_path.display());
     Ok(true)
 }
 
-fn start_service_after_onboard() -> BabataResult<()> {
+fn start_background_service_after_onboard() -> BabataResult<()> {
     super::server::start_background_service()?;
     println!("Started service.");
     Ok(())
 }
 
-fn render_service_template(
+fn render_background_service_template(
     template_content: &str,
     template_name: &str,
     output_path: &Path,
