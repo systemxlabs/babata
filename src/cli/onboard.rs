@@ -45,7 +45,7 @@ pub fn run(_args: &Args) {
 fn run_onboard() -> BabataResult<()> {
     ensure_default_directories()?;
 
-    let mut config = load_or_init_config()?;
+    let mut config = Config::load_or_init()?;
 
     if let Some(provider_config) = prompt_provider_setup()? {
         config.upsert_provider(provider_config);
@@ -477,20 +477,6 @@ fn prompt_line(label: &str) -> BabataResult<String> {
         .read_line(&mut input)
         .map_err(|err| BabataError::internal(format!("Failed to read input: {err}")))?;
     Ok(input.trim_end().to_string())
-}
-
-fn load_or_init_config() -> BabataResult<Config> {
-    let config_path = Config::path()?;
-    if config_path.exists() {
-        Config::load()
-    } else {
-        Ok(Config {
-            providers: Vec::new(),
-            agents: Vec::new(),
-            channels: Vec::new(),
-            jobs: Vec::new(),
-        })
-    }
 }
 
 fn configure_service_from_template() -> BabataResult<bool> {

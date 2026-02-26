@@ -34,6 +34,20 @@ impl Config {
         Ok(babata_dir()?.join("config.json"))
     }
 
+    pub fn load_or_init() -> BabataResult<Self> {
+        let config_path = Self::path()?;
+        if config_path.exists() {
+            Self::load()
+        } else {
+            Ok(Self {
+                providers: Vec::new(),
+                agents: Vec::new(),
+                channels: Vec::new(),
+                jobs: Vec::new(),
+            })
+        }
+    }
+
     pub fn load() -> BabataResult<Self> {
         let config_path = Self::path()?;
         let raw = std::fs::read_to_string(&config_path).map_err(|err| {
