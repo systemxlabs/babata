@@ -1,6 +1,8 @@
 use std::path::{Path, PathBuf};
 
-use crate::{BabataResult, error::BabataError, utils::babata_dir};
+use chrono::Local;
+
+use crate::{BabataResult, error::BabataError, skill::Skill, utils::babata_dir};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SystemPrompt {
@@ -11,6 +13,41 @@ pub struct SystemPrompt {
 pub fn load_system_prompts() -> BabataResult<Vec<SystemPrompt>> {
     let dir = babata_dir()?.join("system_prompts");
     load_system_prompts_from_dir(&dir)
+}
+
+pub fn build_system_prompt(system_prompts: &[SystemPrompt], skills: &[Skill]) -> String {
+    let mut sections = Vec::new();
+
+    for prompt in system_prompts {
+        let content = prompt.content.trim();
+        if !content.is_empty() {
+            sections.push(content.to_string());
+        }
+    }
+
+    let runtime_context = format!(
+        "Runtime context:\n- Current local time: {}\n- Operating system: {}\n- CPU architecture: {}",
+        Local::now().to_rfc3339(),
+        std::env::consts::OS,
+        std::env::consts::ARCH
+    );
+    sections.push(runtime_context);
+
+    let mut skill_summaries = Vec::new();
+    for skill in skills {
+        let title = format!(
+            "{}: {}",
+            skill.frontmatter.name.trim(),
+            skill.frontmatter.description.trim()
+        );
+        skill_summaries.push(format!("- {title}"));
+    }
+
+    if !skill_summaries.is_empty() {
+        sections.push(format!("Available skills:\n{}", skill_summaries.join("\n")));
+    }
+
+    sections.join("\n\n")
 }
 
 fn load_system_prompts_from_dir(dir: &Path) -> BabataResult<Vec<SystemPrompt>> {

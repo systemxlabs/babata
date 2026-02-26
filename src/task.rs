@@ -6,7 +6,7 @@ use crate::{
     message::Message,
     provider::{GenerationReqest, Provider},
     skill::Skill,
-    system_prompt::SystemPrompt,
+    system_prompt::{SystemPrompt, build_system_prompt},
     tool::{Tool, ToolSpec},
 };
 
@@ -47,7 +47,7 @@ impl AgentTask {
 
         let mut messages = self.messages.clone();
         let tool_specs = self.collect_tool_specs();
-        let system_prompt = self.build_system_prompt();
+        let system_prompt = build_system_prompt(&self.system_prompts, &self.skills);
 
         for _ in 0..self.max_steps {
             let response = self
@@ -107,33 +107,5 @@ impl AgentTask {
             .collect();
         specs.sort_by(|a, b| a.name.cmp(&b.name));
         specs
-    }
-
-    fn build_system_prompt(&self) -> String {
-        let mut sections = Vec::new();
-
-        for prompt in &self.system_prompts {
-            let content = prompt.content.trim();
-            if !content.is_empty() {
-                sections.push(content.to_string());
-            }
-        }
-
-        let mut skill_summaries = Vec::new();
-        for skill in &self.skills {
-            let title = format!(
-                "{}: {}",
-                skill.frontmatter.name.trim(),
-                skill.frontmatter.description.trim()
-            );
-
-            skill_summaries.push(format!("- {title}"));
-        }
-
-        if !skill_summaries.is_empty() {
-            sections.push(format!("Available skills:\n{}", skill_summaries.join("\n")));
-        }
-
-        sections.join("\n\n")
     }
 }
