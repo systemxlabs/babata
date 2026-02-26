@@ -1,7 +1,8 @@
 use crate::{
     BabataResult,
     provider::{
-        GenerationReqest, GenerationResponse, InteractionRequest, InteractionResponse, Provider,
+        GenerationReqest, GenerationResponse, InteractionRequest, InteractionResponse, Model,
+        Provider,
     },
 };
 
@@ -11,6 +12,12 @@ use super::OpenAIProvider;
 pub struct MoonshotProvider {
     inner: OpenAIProvider,
 }
+
+const MOONSHOT_SUPPORTED_MODELS: &[Model] = &[Model {
+    provider: "moonshot",
+    name: "kimi-k2.5",
+    context_length: 128_000,
+}];
 
 impl MoonshotProvider {
     pub fn new(api_key: &str) -> Self {
@@ -25,8 +32,8 @@ impl Provider for MoonshotProvider {
         "moonshot"
     }
 
-    fn supported_models() -> &'static [&'static str] {
-        &["kimi-k2.5"]
+    fn supported_models() -> &'static [Model] {
+        MOONSHOT_SUPPORTED_MODELS
     }
 
     async fn generate<'a>(

@@ -1,7 +1,8 @@
 use crate::{
     BabataResult,
     provider::{
-        GenerationReqest, GenerationResponse, InteractionRequest, InteractionResponse, Provider,
+        GenerationReqest, GenerationResponse, InteractionRequest, InteractionResponse, Model,
+        Provider,
     },
 };
 
@@ -11,6 +12,19 @@ use super::OpenAIProvider;
 pub struct DeepSeekProvider {
     inner: OpenAIProvider,
 }
+
+const DEEPSEEK_SUPPORTED_MODELS: &[Model] = &[
+    Model {
+        provider: "deepseek",
+        name: "deepseek-chat",
+        context_length: 64_000,
+    },
+    Model {
+        provider: "deepseek",
+        name: "deepseek-reasoner",
+        context_length: 64_000,
+    },
+];
 
 impl DeepSeekProvider {
     pub fn new(api_key: &str) -> Self {
@@ -25,8 +39,8 @@ impl Provider for DeepSeekProvider {
         "deepseek"
     }
 
-    fn supported_models() -> &'static [&'static str] {
-        &["deepseek-chat", "deepseek-reasoner"]
+    fn supported_models() -> &'static [Model] {
+        DEEPSEEK_SUPPORTED_MODELS
     }
 
     async fn generate<'a>(

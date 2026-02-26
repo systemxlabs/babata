@@ -8,7 +8,7 @@ use crate::{
         OpenAIProviderConfig, ProviderConfig, TelegramChannelConfig,
     },
     error::BabataError,
-    provider::{DeepSeekProvider, MoonshotProvider, OpenAIProvider, Provider},
+    provider::{DeepSeekProvider, Model, MoonshotProvider, OpenAIProvider, Provider},
 };
 
 use super::Args;
@@ -292,7 +292,12 @@ fn prompt_model_setup(provider_config: &ProviderConfig) -> BabataResult<String> 
 
     println!("Select model for main agent:");
     for (idx, model) in supported_models.iter().enumerate() {
-        println!("{}. {}", idx + 1, model);
+        println!(
+            "{}. {} (context: {} tokens)",
+            idx + 1,
+            model.name,
+            model.context_length
+        );
     }
 
     let choice = prompt_line(&format!("Choice (1-{})", supported_models.len()))?;
@@ -304,10 +309,10 @@ fn prompt_model_setup(provider_config: &ProviderConfig) -> BabataResult<String> 
         return Err(BabataError::config("Invalid model choice"));
     };
 
-    Ok((*model).to_string())
+    Ok(model.name.to_string())
 }
 
-fn supported_models_for_provider(provider_config: &ProviderConfig) -> &'static [&'static str] {
+fn supported_models_for_provider(provider_config: &ProviderConfig) -> &'static [Model] {
     match provider_config {
         ProviderConfig::OpenAI(_) => OpenAIProvider::supported_models(),
         ProviderConfig::Moonshot(_) => MoonshotProvider::supported_models(),

@@ -8,7 +8,8 @@ use crate::{
     error::BabataError,
     message::{Content, Message, ToolCall},
     provider::{
-        GenerationReqest, GenerationResponse, InteractionRequest, InteractionResponse, Provider,
+        GenerationReqest, GenerationResponse, InteractionRequest, InteractionResponse, Model,
+        Provider,
     },
     tool::ToolSpec,
 };
@@ -19,6 +20,12 @@ pub struct OpenAIProvider {
     api_key: String,
     base_url: String,
 }
+
+const OPENAI_SUPPORTED_MODELS: &[Model] = &[Model {
+    provider: "openai",
+    name: "gpt-4.1",
+    context_length: 1_000_000,
+}];
 
 impl OpenAIProvider {
     pub fn new(api_key: &str) -> Self {
@@ -148,8 +155,8 @@ impl Provider for OpenAIProvider {
         "openai"
     }
 
-    fn supported_models() -> &'static [&'static str] {
-        &["gpt-4.1"]
+    fn supported_models() -> &'static [Model] {
+        OPENAI_SUPPORTED_MODELS
     }
 
     async fn generate<'a>(

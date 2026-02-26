@@ -22,7 +22,7 @@ pub trait Provider: Debug + Send + Sync {
     where
         Self: Sized;
 
-    fn supported_models() -> &'static [&'static str]
+    fn supported_models() -> &'static [Model]
     where
         Self: Sized;
 
@@ -45,6 +45,13 @@ pub struct GenerationResponse {
 pub struct InteractionRequest {}
 
 pub struct InteractionResponse {}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Model {
+    pub provider: &'static str,
+    pub name: &'static str,
+    pub context_length: usize,
+}
 
 pub fn create_provider(
     _provider_name: &str,
