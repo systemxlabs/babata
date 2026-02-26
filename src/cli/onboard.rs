@@ -66,9 +66,13 @@ fn run_onboard() -> BabataResult<()> {
         .map_err(|err| BabataError::config(format!("Failed to serialize config: {}", err)))?;
     println!("{config_json}");
 
-    let should_start_service = configure_service_from_template()?;
-    if should_start_service {
-        start_service_after_onboard()?;
+    if prompt_background_service_setup()? {
+        let should_start_service = configure_service_from_template()?;
+        if should_start_service {
+            start_service_after_onboard()?;
+        }
+    } else {
+        println!("Skipped background service setup.");
     }
 
     Ok(())
@@ -450,6 +454,16 @@ fn parse_allowed_user_ids(raw: &str) -> BabataResult<Vec<i64>> {
     }
 
     Ok(values)
+}
+
+fn prompt_background_service_setup() -> BabataResult<bool> {
+    let selection =
+        prompt_line("Configure background server service? (Press Enter to continue, or N to skip)")?;
+    match selection.trim() {
+        "" | "Y" | "y" | "yes" => Ok(true),
+        "N" | "n" | "no" => Ok(false),
+        _ => Err(BabataError::config("Invalid selection")),
+    }
 }
 
 fn prompt_line(label: &str) -> BabataResult<String> {
