@@ -1,12 +1,14 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
+use log::error;
+
 use crate::{
     BabataResult,
     channel::{Channel, build_channels},
     config::{AgentConfig, Config},
     error::BabataError,
     memory::Memory,
-    message::MessageStore,
+    message::{Message, MessageStore},
     provider::{Provider, build_providers},
     skill::{Skill, load_skills},
     system_prompt::{SystemPromptFile, load_system_prompt_files},
@@ -52,38 +54,56 @@ impl AgentLoop {
         let provider = self.require_provider_for_agent(agent_config)?;
 
         loop {
-            let mut handled_message = false;
+            let pending_messages = self.collect_messages_from_channels().await;
+
+            if pending_messages.is_empty() {
+                tokio::time::sleep(Duration::from_millis(200)).await;
+                continue;
+            }
+
+            self.message_store.insert_messages(&pending_messages)?;
+
+            let task = AgentTask::new(
+                pending_messages,
+                Arc::clone(&provider),
+                agent_config.model.clone(),
+                self.tools.clone(),
+                self.system_prompt_files.clone(),
+                self.skills.clone(),
+            );
+            let response = task.run().await?;
+
+            self.message_store
+                .insert_messages(std::slice::from_ref(&response))?;
 
             for channel in &self.channels {
-                let Some(messages) = channel.try_receive().await? else {
-                    continue;
-                };
-                if messages.is_empty() {
-                    continue;
-                }
-
-                handled_message = true;
-                self.message_store.insert_messages(&messages)?;
-
-                let task = AgentTask::new(
-                    messages,
-                    Arc::clone(&provider),
-                    agent_config.model.clone(),
-                    self.tools.clone(),
-                    self.system_prompt_files.clone(),
-                    self.skills.clone(),
-                );
-                let response = task.run().await?;
-
-                self.message_store
-                    .insert_messages(std::slice::from_ref(&response))?;
                 channel.send(std::slice::from_ref(&response)).await?;
             }
-
-            if !handled_message {
-                tokio::time::sleep(Duration::from_millis(200)).await;
-            }
         }
+    }
+
+    async fn collect_messages_from_channels(&self) -> Vec<Message> {
+        let mut pending_messages = Vec::new();
+
+        for channel in &self.channels {
+            let maybe_messages = match channel.try_receive().await {
+                Ok(messages) => messages,
+                Err(err) => {
+                    error!(
+                        "Failed to receive messages from channel {:?}: {}. Skipping this channel in current cycle.",
+                        channel, err
+                    );
+                    continue;
+                }
+            };
+
+            if let Some(messages) = maybe_messages {
+                pending_messages.extend(messages);
+            }
+
+        }
+
+        pending_messages
     }
 
     pub(crate) fn require_agent(&self, agent_name: &str) -> BabataResult<&AgentConfig> {
