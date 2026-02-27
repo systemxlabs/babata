@@ -1,8 +1,11 @@
 use std::collections::HashSet;
 
-use reqwest::{Client, StatusCode};
-use serde::Deserialize;
-use serde_json::json;
+use teloxide::{
+    payloads::GetUpdatesSetters,
+    prelude::{Request, Requester},
+    types::{ChatId, ChatKind, Update, UpdateKind},
+    Bot,
+};
 use tokio::sync::Mutex;
 
 use crate::{
@@ -14,9 +17,7 @@ use crate::{
 
 #[derive(Debug)]
 pub struct TelegramChannel {
-    client: Client,
-    bot_token: String,
-    base_url: String,
+    bot: Bot,
     // Long-poll timeout used by blocking receive().
     polling_timeout_secs: u64,
     // Telegram update cursor to avoid reprocessing already consumed updates.
@@ -28,18 +29,11 @@ pub struct TelegramChannel {
 impl TelegramChannel {
     pub fn new(bot_token: &str) -> Self {
         Self {
-            client: Client::new(),
-            bot_token: bot_token.to_string(),
-            base_url: "https://api.telegram.org".to_string(),
+            bot: Bot::new(bot_token),
             polling_timeout_secs: 30,
             last_update_id: Mutex::new(None),
             allowed_user_ids: HashSet::new(),
         }
-    }
-
-    pub fn with_base_url(mut self, base_url: &str) -> Self {
-        self.base_url = base_url.trim_end_matches('/').to_string();
-        self
     }
 
     pub fn with_polling_timeout_secs(mut self, polling_timeout_secs: u64) -> Self {
@@ -57,56 +51,21 @@ impl TelegramChannel {
         self
     }
 
-    fn endpoint(&self, method: &str) -> String {
-        format!("{}/bot{}/{}", self.base_url, self.bot_token, method)
-    }
-
     async fn fetch_updates(&self, timeout_secs: u64) -> BabataResult<Vec<IncomingPrivateMessage>> {
         let offset = *self.last_update_id.lock().await;
+        let mut request = self.bot.get_updates().timeout(timeout_secs as u32);
 
-        let mut body = json!({
-            "timeout": timeout_secs
-        });
         if let Some(offset) = offset {
-            body["offset"] = json!(offset + 1);
+            // Telegram offset is i32 in teloxide API; saturate safely from stored i64.
+            let next = offset.saturating_add(1);
+            let next = next.clamp(i32::MIN as i64, i32::MAX as i64) as i32;
+            request = request.offset(next);
         }
 
-        let response = self
-            .client
-            .post(self.endpoint("getUpdates"))
-            .header("Content-Type", "application/json")
-            .json(&body)
-            .send()
-            .await
-            .map_err(|err| {
-                BabataError::internal(format!("Failed to call Telegram getUpdates: {err}"))
-            })?;
+        let updates = request.send().await.map_err(|err| {
+            BabataError::internal(format!("Failed to call Telegram getUpdates: {err}"))
+        })?;
 
-        let status = response.status();
-        if status != StatusCode::OK {
-            let body = response.text().await.unwrap_or_default();
-            return Err(BabataError::internal(format!(
-                "Telegram getUpdates returned status {status}: {body}"
-            )));
-        }
-
-        let payload: TelegramResponse<Vec<TelegramUpdate>> =
-            response.json().await.map_err(|err| {
-                BabataError::internal(format!(
-                    "Failed to parse Telegram getUpdates response: {err}"
-                ))
-            })?;
-
-        if !payload.ok {
-            return Err(BabataError::internal(format!(
-                "Telegram getUpdates failed: {}",
-                payload
-                    .description
-                    .unwrap_or_else(|| "Unknown error".to_string())
-            )));
-        }
-
-        let updates = payload.result.unwrap_or_default();
         // Keep only DM messages and return the max update_id for cursor advancing.
         let (max_update_id, messages) = extract_private_messages(updates, &self.allowed_user_ids);
 
@@ -146,45 +105,13 @@ impl TelegramChannel {
     }
 
     async fn send_text(&self, chat_id: i64, text: &str) -> BabataResult<()> {
-        let body = json!({
-            "chat_id": chat_id,
-            "text": text
-        });
-
-        let response = self
-            .client
-            .post(self.endpoint("sendMessage"))
-            .header("Content-Type", "application/json")
-            .json(&body)
+        self.bot
+            .send_message(ChatId(chat_id), text.to_string())
             .send()
             .await
             .map_err(|err| {
                 BabataError::internal(format!("Failed to call Telegram sendMessage: {err}"))
             })?;
-
-        let status = response.status();
-        if status != StatusCode::OK {
-            let body = response.text().await.unwrap_or_default();
-            return Err(BabataError::internal(format!(
-                "Telegram sendMessage returned status {status}: {body}"
-            )));
-        }
-
-        let payload: TelegramResponse<serde_json::Value> =
-            response.json().await.map_err(|err| {
-                BabataError::internal(format!(
-                    "Failed to parse Telegram sendMessage response: {err}"
-                ))
-            })?;
-
-        if !payload.ok {
-            return Err(BabataError::internal(format!(
-                "Telegram sendMessage failed: {}",
-                payload
-                    .description
-                    .unwrap_or_else(|| "Unknown error".to_string())
-            )));
-        }
 
         Ok(())
     }
@@ -222,7 +149,7 @@ impl super::Channel for TelegramChannel {
     async fn send(&self, messages: &[Message]) -> BabataResult<()> {
         let outgoing = extract_outgoing_texts(messages);
         for text in outgoing {
-            for chat_id in self.allowed_user_ids.iter() {
+            for chat_id in &self.allowed_user_ids {
                 self.send_text(*chat_id, &text).await?;
             }
         }
@@ -253,54 +180,33 @@ struct IncomingPrivateMessage {
     text: String,
 }
 
-#[derive(Debug, Deserialize)]
-struct TelegramResponse<T> {
-    ok: bool,
-    result: Option<T>,
-    description: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct TelegramUpdate {
-    update_id: i64,
-    message: Option<TelegramMessage>,
-}
-
-#[derive(Debug, Deserialize)]
-struct TelegramMessage {
-    chat: TelegramChat,
-    text: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct TelegramChat {
-    id: i64,
-    #[serde(rename = "type")]
-    chat_type: String,
-}
-
 fn extract_private_messages(
-    updates: Vec<TelegramUpdate>,
+    updates: Vec<Update>,
     allowed_user_ids: &HashSet<i64>,
 ) -> (Option<i64>, Vec<IncomingPrivateMessage>) {
     let mut max_update_id = None;
     let mut messages = Vec::new();
 
     for update in updates {
-        max_update_id =
-            Some(max_update_id.map_or(update.update_id, |id: i64| id.max(update.update_id)));
+        let update_id = i64::from(update.id.0);
+        max_update_id = Some(max_update_id.map_or(update_id, |id: i64| id.max(update_id)));
 
-        let Some(message) = update.message else {
-            continue;
+        let message = match update.kind {
+            UpdateKind::Message(message) => message,
+            _ => continue,
         };
+
         // DM-only: ignore group/supergroup/channel updates.
-        if message.chat.chat_type != "private" {
+        if !matches!(message.chat.kind, ChatKind::Private(_)) {
             continue;
         }
-        if !allowed_user_ids.contains(&message.chat.id) {
+
+        let chat_id = message.chat.id.0;
+        if !allowed_user_ids.contains(&chat_id) {
             continue;
         }
-        let Some(text) = message.text else {
+
+        let Some(text) = message.text() else {
             continue;
         };
         let text = text.trim();
@@ -309,7 +215,7 @@ fn extract_private_messages(
         }
 
         messages.push(IncomingPrivateMessage {
-            chat_id: message.chat.id,
+            chat_id,
             text: text.to_string(),
         });
     }
@@ -346,25 +252,54 @@ mod tests {
 
     #[test]
     fn extract_private_messages_filters_group_updates() {
-        let updates_json = serde_json::json!([
-            {
-                "update_id": 1,
-                "message": {
-                    "chat": { "id": 1001, "type": "private" },
-                    "text": "hello"
-                }
-            },
-            {
-                "update_id": 2,
-                "message": {
-                    "chat": { "id": -1002, "type": "group" },
-                    "text": "group message"
-                }
-            }
-        ]);
-
-        let updates: Vec<TelegramUpdate> =
-            serde_json::from_value(updates_json).expect("parse updates json");
+        let updates = vec![
+            serde_json::from_str::<Update>(
+                r#"{
+                    "message": {
+                        "chat": {
+                            "first_name": "Alice",
+                            "id": 1001,
+                            "type": "private",
+                            "username": "alice"
+                        },
+                        "date": 1700000001,
+                        "from": {
+                            "first_name": "Alice",
+                            "id": 1001,
+                            "is_bot": false,
+                            "language_code": "en",
+                            "username": "alice"
+                        },
+                        "message_id": 101,
+                        "text": "hello"
+                    },
+                    "update_id": 1
+                }"#,
+            )
+            .expect("parse private update"),
+            serde_json::from_str::<Update>(
+                r#"{
+                    "message": {
+                        "chat": {
+                            "id": -1002,
+                            "title": "demo-group",
+                            "type": "group"
+                        },
+                        "date": 1700000002,
+                        "from": {
+                            "first_name": "Bob",
+                            "id": 1002,
+                            "is_bot": false,
+                            "username": "bob"
+                        },
+                        "message_id": 102,
+                        "text": "group message"
+                    },
+                    "update_id": 2
+                }"#,
+            )
+            .expect("parse group update"),
+        ];
 
         let allowed_user_ids = HashSet::from([1001]);
         let (max_id, private_messages) = extract_private_messages(updates, &allowed_user_ids);
@@ -376,25 +311,56 @@ mod tests {
 
     #[test]
     fn extract_private_messages_filters_disallowed_users() {
-        let updates_json = serde_json::json!([
-            {
-                "update_id": 1,
-                "message": {
-                    "chat": { "id": 1001, "type": "private" },
-                    "text": "allow"
-                }
-            },
-            {
-                "update_id": 2,
-                "message": {
-                    "chat": { "id": 2002, "type": "private" },
-                    "text": "deny"
-                }
-            }
-        ]);
-
-        let updates: Vec<TelegramUpdate> =
-            serde_json::from_value(updates_json).expect("parse updates json");
+        let updates = vec![
+            serde_json::from_str::<Update>(
+                r#"{
+                    "message": {
+                        "chat": {
+                            "first_name": "Alice",
+                            "id": 1001,
+                            "type": "private",
+                            "username": "alice"
+                        },
+                        "date": 1700000101,
+                        "from": {
+                            "first_name": "Alice",
+                            "id": 1001,
+                            "is_bot": false,
+                            "language_code": "en",
+                            "username": "alice"
+                        },
+                        "message_id": 201,
+                        "text": "allow"
+                    },
+                    "update_id": 1
+                }"#,
+            )
+            .expect("parse allowed update"),
+            serde_json::from_str::<Update>(
+                r#"{
+                    "message": {
+                        "chat": {
+                            "first_name": "Carol",
+                            "id": 2002,
+                            "type": "private",
+                            "username": "carol"
+                        },
+                        "date": 1700000102,
+                        "from": {
+                            "first_name": "Carol",
+                            "id": 2002,
+                            "is_bot": false,
+                            "language_code": "en",
+                            "username": "carol"
+                        },
+                        "message_id": 202,
+                        "text": "deny"
+                    },
+                    "update_id": 2
+                }"#,
+            )
+            .expect("parse disallowed update"),
+        ];
 
         let allowed_user_ids = HashSet::from([1001]);
         let (max_id, private_messages) = extract_private_messages(updates, &allowed_user_ids);

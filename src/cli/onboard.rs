@@ -400,15 +400,6 @@ fn build_channel_config(channel_name: &str) -> BabataResult<ChannelConfig> {
 fn prompt_telegram_channel_config() -> BabataResult<TelegramChannelConfig> {
     let bot_token = prompt_line("Telegram bot token")?;
 
-    let base_url = prompt_line(
-        "Telegram base url (optional, press Enter to use default https://api.telegram.org)",
-    )?;
-    let base_url = if base_url.trim().is_empty() {
-        None
-    } else {
-        Some(base_url)
-    };
-
     let polling_timeout_secs_raw =
         prompt_line("Telegram polling timeout seconds (optional, press Enter to use default 30)")?;
     let polling_timeout_secs = if polling_timeout_secs_raw.trim().is_empty() {
@@ -428,7 +419,6 @@ fn prompt_telegram_channel_config() -> BabataResult<TelegramChannelConfig> {
 
     Ok(TelegramChannelConfig {
         bot_token,
-        base_url,
         polling_timeout_secs,
         last_update_id: None,
         allowed_user_ids,

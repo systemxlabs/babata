@@ -33,7 +33,6 @@ pub fn build_channels(config: &Config) -> BabataResult<Vec<Arc<dyn Channel>>> {
             ChannelConfig::Telegram(telegram_config) => {
                 telegram_config.validate()?;
                 let channel = TelegramChannel::new(&telegram_config.bot_token)
-                    .with_base_url(telegram_config.base_url())
                     .with_polling_timeout_secs(telegram_config.polling_timeout_secs())
                     .with_last_update_id(telegram_config.last_update_id())
                     .with_allowed_user_ids(telegram_config.allowed_user_ids.clone());

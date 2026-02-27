@@ -12,8 +12,6 @@ pub enum ChannelConfig {
 pub struct TelegramChannelConfig {
     pub bot_token: String,
     #[serde(default)]
-    pub base_url: Option<String>,
-    #[serde(default)]
     pub polling_timeout_secs: Option<u64>,
     #[serde(default)]
     pub last_update_id: Option<i64>,
@@ -22,16 +20,7 @@ pub struct TelegramChannelConfig {
 }
 
 impl TelegramChannelConfig {
-    pub const DEFAULT_BASE_URL: &'static str = "https://api.telegram.org";
     pub const DEFAULT_POLLING_TIMEOUT_SECS: u64 = 30;
-
-    pub fn base_url(&self) -> &str {
-        self.base_url
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .unwrap_or(Self::DEFAULT_BASE_URL)
-    }
 
     pub fn polling_timeout_secs(&self) -> u64 {
         self.polling_timeout_secs
@@ -46,14 +35,6 @@ impl TelegramChannelConfig {
         if self.bot_token.trim().is_empty() {
             return Err(BabataError::config(
                 "Telegram channel bot_token cannot be empty",
-            ));
-        }
-
-        if let Some(base_url) = &self.base_url
-            && base_url.trim().is_empty()
-        {
-            return Err(BabataError::config(
-                "Telegram channel base_url cannot be empty when provided",
             ));
         }
 
@@ -107,13 +88,11 @@ mod tests {
     fn telegram_config_defaults_work() {
         let config = TelegramChannelConfig {
             bot_token: "token".to_string(),
-            base_url: None,
             polling_timeout_secs: None,
             last_update_id: None,
             allowed_user_ids: vec![12345],
         };
 
-        assert_eq!(config.base_url(), TelegramChannelConfig::DEFAULT_BASE_URL);
         assert_eq!(
             config.polling_timeout_secs(),
             TelegramChannelConfig::DEFAULT_POLLING_TIMEOUT_SECS
@@ -124,7 +103,6 @@ mod tests {
     fn telegram_config_rejects_empty_bot_token() {
         let config = TelegramChannelConfig {
             bot_token: "   ".to_string(),
-            base_url: None,
             polling_timeout_secs: None,
             last_update_id: None,
             allowed_user_ids: vec![12345],
@@ -137,7 +115,6 @@ mod tests {
     fn telegram_config_rejects_empty_allowed_user_ids() {
         let config = TelegramChannelConfig {
             bot_token: "token".to_string(),
-            base_url: None,
             polling_timeout_secs: None,
             last_update_id: None,
             allowed_user_ids: Vec::new(),
@@ -150,7 +127,6 @@ mod tests {
     fn telegram_config_rejects_negative_last_update_id() {
         let config = TelegramChannelConfig {
             bot_token: "token".to_string(),
-            base_url: None,
             polling_timeout_secs: None,
             last_update_id: Some(-1),
             allowed_user_ids: vec![12345],
