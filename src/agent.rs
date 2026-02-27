@@ -8,7 +8,7 @@ use crate::{
     config::{AgentConfig, Config},
     error::BabataError,
     memory::Memory,
-    message::{Message, MessageStore},
+    message::Message,
     provider::{Provider, build_providers},
     skill::{Skill, load_skills},
     system_prompt::{SystemPromptFile, load_system_prompt_files},
@@ -20,7 +20,6 @@ pub struct AgentLoop {
     pub config: Config,
     pub providers: HashMap<String, Arc<dyn Provider>>,
     pub channels: Vec<Arc<dyn Channel>>,
-    pub message_store: MessageStore,
     pub memory: Memory,
     pub tools: HashMap<String, Arc<dyn Tool>>,
     pub system_prompt_files: Vec<SystemPromptFile>,
@@ -31,8 +30,7 @@ impl AgentLoop {
     pub fn new(config: Config) -> BabataResult<Self> {
         let providers = build_providers(&config)?;
         let channels = build_channels(&config)?;
-        let message_store = MessageStore::new()?;
-        let memory = Memory {};
+        let memory = Memory::new()?;
         let tools = build_tools();
         let system_prompt_files = load_system_prompt_files()?;
         let skills = load_skills()?;
@@ -41,7 +39,6 @@ impl AgentLoop {
             config,
             providers,
             channels,
-            message_store,
             memory,
             tools,
             system_prompt_files,
@@ -61,7 +58,7 @@ impl AgentLoop {
                 continue;
             }
 
-            self.message_store.insert_messages(&pending_messages)?;
+            self.memory.insert_messages(&pending_messages)?;
 
             let task = AgentTask::new(
                 pending_messages,
@@ -73,8 +70,7 @@ impl AgentLoop {
             );
             let response = task.run().await?;
 
-            self.message_store
-                .insert_messages(std::slice::from_ref(&response))?;
+            self.memory.insert_messages(std::slice::from_ref(&response))?;
 
             for channel in &self.channels {
                 channel.send(std::slice::from_ref(&response)).await?;
