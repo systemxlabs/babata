@@ -24,16 +24,11 @@ impl Memory {
         self.message_store.insert_messages(messages)
     }
 
-    pub fn scan_messages(&self) -> BabataResult<Vec<Message>> {
-        self.message_store.scan_messages()
+    pub fn scan_messages(&self, limit: Option<usize>) -> BabataResult<Vec<Message>> {
+        self.message_store.scan_messages(limit)
     }
 
     pub fn build_context(&self) -> BabataResult<Vec<Message>> {
-        let messages = self.scan_messages()?;
-        if messages.len() <= Self::CONTEXT_LIMIT {
-            return Ok(messages);
-        }
-
-        Ok(messages[messages.len() - Self::CONTEXT_LIMIT..].to_vec())
+        self.scan_messages(Some(Self::CONTEXT_LIMIT))
     }
 }

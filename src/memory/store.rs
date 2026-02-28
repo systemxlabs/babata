@@ -91,17 +91,40 @@ impl MessageStore {
         Ok(())
     }
 
-    pub fn scan_messages(&self) -> BabataResult<Vec<Message>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT role, message FROM messages ORDER BY datetime(created_at), rowid")
-            .map_err(|err| {
-                BabataError::memory(format!("Failed to prepare message scan statement: {}", err))
-            })?;
+    pub fn scan_messages(&self, limit: Option<usize>) -> BabataResult<Vec<Message>> {
+        if limit == Some(0) {
+            return Ok(Vec::new());
+        }
 
-        let mut rows = stmt.query([]).map_err(|err| {
-            BabataError::memory(format!("Failed to query messages from sqlite: {}", err))
+        let (query, limit_param) = match limit {
+            Some(limit) => (
+                "SELECT role, message FROM (
+                    SELECT role, message, created_at, rowid
+                    FROM messages
+                    ORDER BY datetime(created_at) DESC, rowid DESC
+                    LIMIT ?1
+                )
+                ORDER BY datetime(created_at), rowid",
+                Some(limit.min(i64::MAX as usize) as i64),
+            ),
+            None => (
+                "SELECT role, message FROM messages ORDER BY datetime(created_at), rowid",
+                None,
+            ),
+        };
+
+        let mut stmt = self.conn.prepare(query).map_err(|err| {
+            BabataError::memory(format!("Failed to prepare message scan statement: {}", err))
         })?;
+
+        let mut rows = match limit_param {
+            Some(limit) => stmt.query(params![limit]).map_err(|err| {
+                BabataError::memory(format!("Failed to query messages from sqlite: {}", err))
+            })?,
+            None => stmt.query([]).map_err(|err| {
+                BabataError::memory(format!("Failed to query messages from sqlite: {}", err))
+            })?,
+        };
 
         let mut messages = Vec::new();
         while let Some(row) = rows.next().map_err(|err| {
@@ -190,9 +213,55 @@ mod tests {
         store
             .insert_messages(&messages)
             .expect("insert messages into sqlite");
-        let scanned = store.scan_messages().expect("scan messages from sqlite");
+        let scanned = store
+            .scan_messages(None)
+            .expect("scan messages from sqlite");
 
         assert_eq!(messages, scanned);
+
+        let _ = std::fs::remove_file(db_path);
+    }
+
+    #[test]
+    fn scan_messages_with_limit_returns_latest_messages_in_order() {
+        let db_path = std::env::temp_dir()
+            .join("babata-tests")
+            .join(format!("message-store-{}.db", Uuid::new_v4()));
+
+        let store = MessageStore::open(&db_path).expect("open sqlite message store");
+        let messages = vec![
+            Message::UserPrompt {
+                content: vec![Content::Text {
+                    text: "m1".to_string(),
+                }],
+            },
+            Message::UserPrompt {
+                content: vec![Content::Text {
+                    text: "m2".to_string(),
+                }],
+            },
+            Message::UserPrompt {
+                content: vec![Content::Text {
+                    text: "m3".to_string(),
+                }],
+            },
+        ];
+
+        store
+            .insert_messages(&messages)
+            .expect("insert messages into sqlite");
+
+        let scanned = store
+            .scan_messages(Some(2))
+            .expect("scan limited messages from sqlite");
+        assert_eq!(scanned.len(), 2);
+        assert_eq!(scanned[0], messages[1]);
+        assert_eq!(scanned[1], messages[2]);
+
+        let scanned_empty = store
+            .scan_messages(Some(0))
+            .expect("scan zero messages from sqlite");
+        assert!(scanned_empty.is_empty());
 
         let _ = std::fs::remove_file(db_path);
     }
