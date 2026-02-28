@@ -448,10 +448,10 @@ fn parse_allowed_user_ids(raw: &str) -> BabataResult<Vec<i64>> {
 
 fn prompt_background_service_setup() -> BabataResult<bool> {
     let selection =
-        prompt_line("Configure background server service? (Press Enter to continue, or N to skip)")?;
+        prompt_line("Configure background server service? (Press Enter to skip, or Y to continue)")?;
     match selection.trim() {
-        "" | "Y" | "y" | "yes" => Ok(true),
-        "N" | "n" | "no" => Ok(false),
+        "" | "N" | "n" | "no" => Ok(false),
+        "Y" | "y" | "yes" => Ok(true),
         _ => Err(BabataError::config("Invalid selection")),
     }
 }
