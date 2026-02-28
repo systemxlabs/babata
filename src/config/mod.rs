@@ -10,6 +10,14 @@ use crate::{BabataResult, error::BabataError, utils::babata_dir};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+pub struct EmbeddingConfig {
+    pub api_key: String,
+    pub base_url: String,
+    pub model: String,
+    pub dimension: usize,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct AgentConfig {
     pub name: String,
     // If None, use default skills
@@ -23,6 +31,8 @@ pub struct Config {
     pub agents: Vec<AgentConfig>,
     #[serde(default)]
     pub channels: Vec<ChannelConfig>,
+    #[serde(default)]
+    pub embedding: Option<EmbeddingConfig>,
 }
 
 impl Config {
@@ -39,6 +49,7 @@ impl Config {
                 providers: Vec::new(),
                 agents: Vec::new(),
                 channels: Vec::new(),
+                embedding: None,
             })
         }
     }
@@ -194,6 +205,10 @@ impl Config {
             .iter()
             .find(|provider| provider.matches_name(provider_name))
     }
+
+    pub fn get_embedding_config(&self) -> Option<&EmbeddingConfig> {
+        self.embedding.as_ref()
+    }
 }
 
 #[cfg(test)]
@@ -212,6 +227,7 @@ mod tests {
                 model: "gpt-4.1".to_string(),
             }],
             channels: Vec::new(),
+            embedding: None,
         };
 
         let json = serde_json::to_string(&config).expect("serialize config to json");
@@ -232,6 +248,7 @@ mod tests {
                 model: "test-model".to_string(),
             }],
             channels: Vec::new(),
+            embedding: None,
         };
 
         config.validate().expect("provider URL no longer validated");
