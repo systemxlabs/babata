@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
-use log::error;
+use log::{error, info};
 
 use crate::{
     BabataResult,
@@ -57,7 +57,8 @@ impl AgentLoop {
                 tokio::time::sleep(Duration::from_millis(200)).await;
                 continue;
             }
-
+            info!("Channel messages: {:?}", pending_messages);
+            
             self.memory.insert_messages(&pending_messages)?;
 
             let task = AgentTask::new(
@@ -69,6 +70,7 @@ impl AgentLoop {
                 self.skills.clone(),
             );
             let response = task.run().await?;
+            info!("Task run result message: {:?}", response);
 
             self.memory.insert_messages(std::slice::from_ref(&response))?;
 

@@ -1,3 +1,5 @@
+use log::info;
+
 use crate::{
     BabataResult,
     config::Config,
@@ -50,10 +52,13 @@ fn run_prompt(args: &Args) -> BabataResult<()> {
         .ok_or_else(|| BabataError::config("Prompt is required"))?
         .to_string();
 
+    let user_message = Message::UserPrompt {
+        content: vec![Content::Text { text: prompt }],
+    };
+    info!("User message before task.run: {:?}", user_message);
+
     let task = AgentTask::new(
-        vec![Message::UserPrompt {
-            content: vec![Content::Text { text: prompt }],
-        }],
+        vec![user_message],
         provider,
         agent_config.model.clone(),
         build_tools(),
@@ -69,6 +74,7 @@ fn run_prompt(args: &Args) -> BabataResult<()> {
         })?;
 
     let message = runtime.block_on(task.run())?;
+    info!("Task run result message: {:?}", message);
     print_final_message(&message)?;
 
     Ok(())

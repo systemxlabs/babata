@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use log::error;
+use log::{error, info};
 
 use crate::{
     BabataResult,
@@ -82,12 +82,15 @@ impl JobRunner {
         let provider_config = self.require_provider_config_for_agent(agent_config)?;
         let provider = create_provider(provider_config)?;
 
-        let task = AgentTask::new(
-            vec![Message::UserPrompt {
-                content: vec![Content::Text {
-                    text: job_config.prompt.clone(),
-                }],
+        let user_message = Message::UserPrompt {
+            content: vec![Content::Text {
+                text: job_config.prompt.clone(),
             }],
+        };
+        info!("Job prompt: {}", job_config.prompt);
+
+        let task = AgentTask::new(
+            vec![user_message],
             provider,
             agent_config.model.clone(),
             build_tools(),
@@ -96,6 +99,7 @@ impl JobRunner {
         );
 
         let response = task.run().await?;
+        info!("Job result: {:?}", response);
         let channels = build_channels(&self.config)?;
         let mut send_failures = Vec::new();
 

@@ -1,5 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
+use log::info;
+
 use crate::{
     BabataResult,
     error::BabataError,
@@ -61,6 +63,7 @@ impl AgentTask {
                 .await?;
 
             let message = response.message;
+            info!("Provider returned message: {:?}", message);
             messages.push(message.clone());
 
             match message {
