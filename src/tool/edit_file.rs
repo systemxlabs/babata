@@ -1,4 +1,4 @@
-use log::debug;
+use log::info;
 use serde_json::{Value, json};
 
 use crate::{
@@ -79,7 +79,7 @@ impl Tool for EditFileTool {
         }
 
         let path = shellexpand::tilde(path).to_string();
-        debug!("Editing file: {}", path);
+        info!("Editing file: {}", path);
 
         let content = tokio::fs::read_to_string(&path)
             .await

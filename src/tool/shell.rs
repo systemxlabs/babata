@@ -1,4 +1,4 @@
-use log::debug;
+use log::info;
 use serde_json::{Value, json};
 
 use crate::{
@@ -51,7 +51,7 @@ impl Tool for ShellTool {
     }
 
     async fn execute(&self, args: &str) -> BabataResult<String> {
-        debug!("Executing shell command: {args}",);
+        info!("Executing shell command: {args}",);
 
         let args: Value = serde_json::from_str(args)?;
         let command = args["command"]

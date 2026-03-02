@@ -5,7 +5,7 @@ use crate::{
     error::BabataError,
     tool::{Tool, ToolSpec},
 };
-use log::debug;
+use log::info;
 use std::path::Path;
 
 #[derive(Debug, Clone)]
@@ -61,7 +61,7 @@ impl Tool for WriteFileTool {
             .ok_or_else(|| BabataError::tool("Missing required parameter: content"))?;
 
         let path = shellexpand::tilde(path).to_string();
-        debug!("Writing to file: {}", path);
+        info!("Writing to file: {}", path);
 
         let file_path = Path::new(&path);
 

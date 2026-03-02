@@ -5,7 +5,7 @@ use crate::{
     error::BabataError,
     tool::{Tool, ToolSpec},
 };
-use log::debug;
+use log::info;
 
 #[derive(Debug, Clone)]
 pub struct ReadFileTool {
@@ -60,7 +60,7 @@ impl Tool for ReadFileTool {
             .ok_or_else(|| BabataError::tool("Missing path"))?;
 
         let path = shellexpand::tilde(path).to_string();
-        debug!("Reading file: {}", path);
+        info!("Reading file: {}", path);
 
         let content = tokio::fs::read_to_string(&path)
             .await
