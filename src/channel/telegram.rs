@@ -3,10 +3,10 @@ use std::collections::HashSet;
 use log::warn;
 use reqwest::{Client, StatusCode};
 use teloxide::{
+    Bot,
     payloads::GetUpdatesSetters,
     prelude::{Request, Requester},
     types::{ChatId, ChatKind, Document, Message as TelegramMessage, Update, UpdateKind},
-    Bot,
 };
 use tokio::sync::Mutex;
 
@@ -189,13 +189,22 @@ impl TelegramChannel {
             })?;
 
         let path = file.path.trim_start_matches('/');
-        let file_url = format!("https://api.telegram.org/file/bot{}/{}", self.bot.token(), path);
-        let response = self.http_client.get(&file_url).send().await.map_err(|err| {
-            BabataError::internal(format!(
-                "Failed to download Telegram file '{}' ({media_type}): {err}",
-                file_id
-            ))
-        })?;
+        let file_url = format!(
+            "https://api.telegram.org/file/bot{}/{}",
+            self.bot.token(),
+            path
+        );
+        let response = self
+            .http_client
+            .get(&file_url)
+            .send()
+            .await
+            .map_err(|err| {
+                BabataError::internal(format!(
+                    "Failed to download Telegram file '{}' ({media_type}): {err}",
+                    file_id
+                ))
+            })?;
 
         let status = response.status();
         if status != StatusCode::OK {
@@ -491,8 +500,9 @@ mod tests {
 
     #[test]
     fn extract_private_messages_supports_photo_message() {
-        let updates = vec![serde_json::from_str::<Update>(
-            r#"{
+        let updates = vec![
+            serde_json::from_str::<Update>(
+                r#"{
                 "message": {
                     "chat": {
                         "first_name": "Alice",
@@ -528,8 +538,9 @@ mod tests {
                 },
                 "update_id": 3
             }"#,
-        )
-        .expect("parse photo update")];
+            )
+            .expect("parse photo update"),
+        ];
 
         let allowed_user_ids = HashSet::from([1001]);
         let (max_id, private_messages) = extract_private_messages(updates, &allowed_user_ids);
@@ -550,8 +561,9 @@ mod tests {
 
     #[test]
     fn extract_private_messages_supports_image_document_message() {
-        let updates = vec![serde_json::from_str::<Update>(
-            r#"{
+        let updates = vec![
+            serde_json::from_str::<Update>(
+                r#"{
                 "message": {
                     "chat": {
                         "first_name": "Alice",
@@ -578,8 +590,9 @@ mod tests {
                 },
                 "update_id": 4
             }"#,
-        )
-        .expect("parse image document update")];
+            )
+            .expect("parse image document update"),
+        ];
 
         let allowed_user_ids = HashSet::from([1001]);
         let (max_id, private_messages) = extract_private_messages(updates, &allowed_user_ids);

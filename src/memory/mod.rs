@@ -2,10 +2,7 @@ mod store;
 
 pub use store::*;
 
-use crate::{
-    BabataResult,
-    message::Message,
-};
+use crate::{BabataResult, message::Message};
 
 pub struct Memory {
     message_store: MessageStore,
@@ -28,7 +25,9 @@ impl Memory {
         self.message_store.scan_messages(limit)
     }
 
-    pub fn build_context(&self) -> BabataResult<Vec<Message>> {
-        self.scan_messages(Some(Self::CONTEXT_LIMIT))
+    pub fn build_context(&self, user_messages: Vec<Message>) -> BabataResult<Vec<Message>> {
+        let mut context = self.scan_messages(Some(Self::CONTEXT_LIMIT))?;
+        context.extend(user_messages);
+        Ok(context)
     }
 }

@@ -58,11 +58,13 @@ impl AgentLoop {
                 continue;
             }
             info!("Channel messages: {:?}", pending_messages);
-            
+
+            let context = self.memory.build_context(pending_messages.clone())?;
+
             self.memory.insert_messages(&pending_messages)?;
 
             let task = AgentTask::new(
-                pending_messages,
+                context,
                 Arc::clone(&provider),
                 agent_config.model.clone(),
                 self.tools.clone(),
@@ -72,7 +74,8 @@ impl AgentLoop {
             let response = task.run().await?;
             info!("Task run result message: {:?}", response);
 
-            self.memory.insert_messages(std::slice::from_ref(&response))?;
+            self.memory
+                .insert_messages(std::slice::from_ref(&response))?;
 
             for channel in &self.channels {
                 channel.send(std::slice::from_ref(&response)).await?;
@@ -98,7 +101,6 @@ impl AgentLoop {
             if let Some(messages) = maybe_messages {
                 pending_messages.extend(messages);
             }
-
         }
 
         pending_messages

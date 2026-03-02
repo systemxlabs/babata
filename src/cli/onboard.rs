@@ -4,8 +4,8 @@ use crate::{
     BabataResult,
     channel::{Channel, TelegramChannel},
     config::{
-        AgentConfig, ChannelConfig, Config, DeepSeekProviderConfig, MoonshotProviderConfig,
-        KimiProviderConfig, OpenAIProviderConfig, ProviderConfig, TelegramChannelConfig,
+        AgentConfig, ChannelConfig, Config, DeepSeekProviderConfig, KimiProviderConfig,
+        MoonshotProviderConfig, OpenAIProviderConfig, ProviderConfig, TelegramChannelConfig,
     },
     error::BabataError,
     provider::{DeepSeekProvider, KimiProvider, Model, MoonshotProvider, OpenAIProvider, Provider},
@@ -447,8 +447,9 @@ fn parse_allowed_user_ids(raw: &str) -> BabataResult<Vec<i64>> {
 }
 
 fn prompt_background_service_setup() -> BabataResult<bool> {
-    let selection =
-        prompt_line("Configure background server service? (Press Enter to skip, or Y to continue)")?;
+    let selection = prompt_line(
+        "Configure background server service? (Press Enter to skip, or Y to continue)",
+    )?;
     match selection.trim() {
         "" | "N" | "n" | "no" => Ok(false),
         "Y" | "y" | "yes" => Ok(true),
