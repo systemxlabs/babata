@@ -29,7 +29,6 @@ const EMBEDDED_SYSTEM_PROMPTS: &[(&str, &str)] = &[
     ("SOUL.md", include_str!("../../system_prompts/SOUL.md")),
 ];
 
-const EMBEDDED_BABATA_SKILL: &str = include_str!("../../skills/babata/SKILL.md");
 const EMBEDDED_MACOS_SERVICE_TEMPLATE: &str =
     include_str!("../../services/babata.server.plist.template");
 const EMBEDDED_LINUX_SERVICE_TEMPLATE: &str =
@@ -82,13 +81,10 @@ fn ensure_default_directories() -> BabataResult<()> {
     let base = crate::utils::babata_dir()?;
     let workspace = base.join("workspace");
     let system_prompts_dir = base.join("system_prompts");
-    let skills_dir = base.join("skills");
     let source_dir = base.join("source");
 
     ensure_directory_if_missing(&system_prompts_dir)?;
     println!("Created directory {}", system_prompts_dir.display());
-    ensure_directory_if_missing(&skills_dir)?;
-    println!("Created directory {}", skills_dir.display());
     ensure_directory_if_missing(&workspace)?;
     println!("Created directory {}", workspace.display());
 
@@ -96,12 +92,6 @@ fn ensure_default_directories() -> BabataResult<()> {
         let target = system_prompts_dir.join(file_name);
         overwrite_embedded_file(&target, content, "system prompt")?;
     }
-
-    let babata_skill_dir = skills_dir.join("babata");
-    ensure_directory_if_missing(&babata_skill_dir)?;
-    println!("Created directory {}", babata_skill_dir.display());
-    let babata_skill_file = babata_skill_dir.join("SKILL.md");
-    overwrite_embedded_file(&babata_skill_file, EMBEDDED_BABATA_SKILL, "skill")?;
 
     // Clean and write embedded project source to disk
     remove_dir_all_if_exists(&source_dir)?;
