@@ -4,9 +4,9 @@ use log::warn;
 use reqwest::{Client, StatusCode};
 use teloxide::{
     Bot,
-    payloads::GetUpdatesSetters,
+    payloads::{GetUpdatesSetters, SendMessageSetters},
     prelude::{Request, Requester},
-    types::{ChatId, ChatKind, Document, Message as TelegramMessage, Update, UpdateKind},
+    types::{ChatId, ChatKind, Document, Message as TelegramMessage, ParseMode, Update, UpdateKind},
 };
 use tokio::sync::Mutex;
 
@@ -109,13 +109,29 @@ impl TelegramChannel {
     }
 
     async fn send_text(&self, chat_id: i64, text: &str) -> BabataResult<()> {
-        self.bot
+        let markdown_result = self
+            .bot
             .send_message(ChatId(chat_id), text.to_string())
+            .parse_mode(ParseMode::MarkdownV2)
             .send()
-            .await
-            .map_err(|err| {
-                BabataError::internal(format!("Failed to call Telegram sendMessage: {err}"))
-            })?;
+            .await;
+
+        if let Err(err) = markdown_result {
+            warn!(
+                "Failed to send Telegram message with MarkdownV2, falling back to plain text: {}",
+                err
+            );
+            self.bot
+                .send_message(ChatId(chat_id), text.to_string())
+                .send()
+                .await
+                .map_err(|fallback_err| {
+                    BabataError::internal(format!(
+                        "Failed to call Telegram sendMessage (markdown and plain text both failed): markdown error: {}; plain text error: {}",
+                        err, fallback_err
+                    ))
+                })?;
+        }
 
         Ok(())
     }
