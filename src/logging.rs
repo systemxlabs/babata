@@ -1,6 +1,8 @@
 use std::{env, num::NonZeroUsize};
 
-use logforth::{append::file::FileBuilder, filter::env_filter::EnvFilterBuilder};
+use logforth::{
+    append::file::FileBuilder, filter::env_filter::EnvFilterBuilder, layout::TextLayout,
+};
 
 use crate::{BabataResult, error::BabataError, utils::babata_dir};
 
@@ -16,6 +18,7 @@ fn init_file_logger() -> BabataResult<()> {
     let max_log_files = NonZeroUsize::new(1).expect("1 is non-zero");
 
     let file = FileBuilder::new(log_dir, "babata")
+        .layout(TextLayout::default().no_color())
         .filename_suffix("log")
         .rollover_daily()
         .max_log_files(max_log_files)
@@ -38,7 +41,10 @@ fn init_stdio_logger() -> BabataResult<()> {
     let filter = EnvFilterBuilder::from_default_env_or("info").build();
 
     logforth::starter_log::builder()
-        .dispatch(|d| d.filter(filter).append(logforth::append::Stdout::default()))
+        .dispatch(|d| {
+            d.filter(filter)
+                .append(logforth::append::Stdout::default().with_layout(TextLayout::default().no_color()))
+        })
         .try_apply()
         .map_err(|err| BabataError::internal(format!("Failed to initialize logger: {err}")))?;
 
