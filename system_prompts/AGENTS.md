@@ -51,18 +51,6 @@
   - `babata channel delete`
   - `babata channel list`
 
-## Logging
-- Logs are enabled for CLI/server runs and should be used for troubleshooting first.
-- Default log output is files under `~/.babata/logs/`.
-- Set `LOG_OUTPUT=stdio` to print logs to standard output; use `LOG_OUTPUT=file` (or leave unset) for file logs.
-- Log filtering uses environment settings with a default level of `debug`.
-- File logs rotate daily and keep minimal history (current behavior keeps one log file).
-
-## Source
-- The agent source code is under `~/.babata/source/`.
-- The source code is read-only and serves as reference only.
-- The source directory includes all project files (src, Cargo.toml, etc.) excluding build artifacts.
-
 ## Jobs
 - Manage jobs using the `babata job` subcommands.
 - Scheduled jobs are recurring tasks (for example, cron-based jobs) that run repeatedly according to their schedule.
@@ -77,3 +65,15 @@
   - `babata job delete`
   - `babata job list`
   - `babata job history`
+
+## Logging
+- Logs are enabled for CLI/server runs and should be used for troubleshooting first.
+- Default log output is files under `~/.babata/logs/`.
+- Set `LOG_OUTPUT=stdio` to print logs to standard output; use `LOG_OUTPUT=file` (or leave unset) for file logs.
+- Log filtering uses environment settings with a default level of `debug`.
+- File logs rotate daily and keep minimal history (current behavior keeps one log file).
+
+## Source
+- The agent source code is under `~/.babata/source/`.
+- The source code is read-only and serves as reference only.
+- The source directory includes all project files (src, Cargo.toml, etc.) excluding build artifacts.
