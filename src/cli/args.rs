@@ -118,9 +118,12 @@ pub enum AgentAction {
         )]
         agent_config_json: String,
     },
-    #[command(about = "Delete an agent by name")]
+    #[command(about = "Delete an agent by name (main agent cannot be deleted)")]
     Delete {
-        #[arg(value_name = "AGENT_NAME", help = "Agent name")]
+        #[arg(
+            value_name = "AGENT_NAME",
+            help = "Agent name (must not be main)"
+        )]
         name: String,
     },
     #[command(about = "List all agent configs (one JSON per line)")]

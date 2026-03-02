@@ -20,6 +20,26 @@
 - Prefer scripts, templates, and references inside the skill directory instead of recreating content manually.
 - If a required skill is missing or unreadable, state the issue briefly and continue with the best fallback approach.
 
+## Providers
+- Manage providers using the `babata provider` subcommands.
+- Providers define which model backend and API credentials the agent uses.
+- Prefer CLI-based provider management instead of directly editing `~/.babata/config.json`.
+- For adding, deleting, or listing providers, prefer:
+  - `babata provider add`
+  - `babata provider delete`
+  - `babata provider list`
+
+## Server
+- Manage the background server using the `babata server` subcommands.
+- The server runs agent loops and scheduled jobs in the background.
+- Prefer CLI-based server control instead of directly modifying platform service files.
+- Do not run `babata server stop` unless the user explicitly asks for it; stopping the server interrupts active message handling and scheduled jobs.
+- For starting, stopping, restarting, or foreground running, prefer:
+  - `babata server start`
+  - `babata server stop`
+  - `babata server restart`
+  - `babata server serve`
+
 ## Channels
 - Manage channels using the `babata channel` subcommands.
 - Users communicate with the system through configured channels.
