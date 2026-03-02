@@ -38,7 +38,7 @@
 - File logs rotate daily and keep minimal history (current behavior keeps one log file).
 
 ## Source
-- The project source code is embedded in the binary and written to `~/.babata/source/` during `babata onboard`.
+- The agent source code is under `~/.babata/source/`.
 - The source code is read-only and serves as reference only.
 - The source directory includes all project files (src, Cargo.toml, etc.) excluding build artifacts.
 
