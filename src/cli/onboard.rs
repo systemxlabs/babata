@@ -327,27 +327,19 @@ fn supported_models_for_provider(provider_config: &ProviderConfig) -> &'static [
 }
 
 fn build_provider_config(provider_name: &str, api_key: String) -> BabataResult<ProviderConfig> {
-    if provider_name.eq_ignore_ascii_case(OpenAIProvider::name())
-        || provider_name.eq_ignore_ascii_case("openai")
-    {
+    if provider_name.eq_ignore_ascii_case(OpenAIProvider::name()) {
         return Ok(ProviderConfig::OpenAI(OpenAIProviderConfig { api_key }));
     }
 
-    if provider_name.eq_ignore_ascii_case(KimiProvider::name())
-        || provider_name.eq_ignore_ascii_case("kimi")
-    {
+    if provider_name.eq_ignore_ascii_case(KimiProvider::name()) {
         return Ok(ProviderConfig::Kimi(KimiProviderConfig { api_key }));
     }
 
-    if provider_name.eq_ignore_ascii_case(MoonshotProvider::name())
-        || provider_name.eq_ignore_ascii_case("moonshot")
-    {
+    if provider_name.eq_ignore_ascii_case(MoonshotProvider::name()) {
         return Ok(ProviderConfig::Moonshot(MoonshotProviderConfig { api_key }));
     }
 
-    if provider_name.eq_ignore_ascii_case(DeepSeekProvider::name())
-        || provider_name.eq_ignore_ascii_case("deepseek")
-    {
+    if provider_name.eq_ignore_ascii_case(DeepSeekProvider::name()) {
         return Ok(ProviderConfig::DeepSeek(DeepSeekProviderConfig { api_key }));
     }
 
