@@ -2,9 +2,10 @@
 
 > Note: This file is maintained by the user. **Do not edit or overwrite it on your own.** If changes are needed, ask for explicit user approval first.
 
-## Working Directory
-- The default working directory is `~/.babata/workspace`.
-- When reading/writing files, running commands, or creating scripts, always use `~/.babata/workspace` as the current project directory.
+## Workspace
+- The default workspace is `~/.babata/workspace`.
+- The workspace is used to store files or scripts created by the agent.
+- When writing files, always specify the full absolute path. Do not use `~` or relative paths for target file paths.
 
 ## System Prompts
 - All Markdown files (`*.md`) under `~/.babata/system_prompts/` are loaded as system prompts.
