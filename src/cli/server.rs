@@ -4,6 +4,7 @@ use log::{info, warn};
 
 use crate::job::start_job_scheduler;
 use crate::message::{Content, Message};
+use crate::utils::babata_dir;
 use crate::{BabataResult, agent::AgentLoop, config::Config, error::BabataError};
 
 use super::Args;
@@ -80,6 +81,8 @@ pub fn install_windows_service() -> BabataResult<()> {
 }
 
 fn run_serve(_args: &Args) -> BabataResult<()> {
+    info!("Server run babata dir: {}", babata_dir()?.display());
+
     let config = Config::load()?;
     let agent_loop = AgentLoop::new(config.clone())?;
 
@@ -529,6 +532,7 @@ mod windows_service_host {
     };
 
     use crate::{BabataResult, error::BabataError};
+    use log::info;
 
     static SERVICE_HOME_DIR: OnceLock<String> = OnceLock::new();
     static SERVICE_EXE_PATH: OnceLock<PathBuf> = OnceLock::new();
@@ -544,11 +548,13 @@ mod windows_service_host {
         }
         let resolved_home_dir = home_dir.to_string();
         let _ = SERVICE_HOME_DIR.set(resolved_home_dir);
+        info!("Windows service host starting with home directory: {}", home_dir);
 
         let exe_path = std::env::current_exe().map_err(|err| {
             BabataError::internal(format!("Failed to resolve current executable path: {err}"))
         })?;
         let _ = SERVICE_EXE_PATH.set(exe_path);
+        info!("Windows service host resolved executable path: {}", SERVICE_EXE_PATH.get().unwrap().display());
 
         service_dispatcher::start(super::WINDOWS_SERVICE_NAME, ffi_service_main).map_err(|err| {
             BabataError::internal(format!(
@@ -715,6 +721,9 @@ mod windows_service_host {
             .env("HOME", &home_dir)
             .env("USERPROFILE", &home_dir)
             .env("PATH", merged_path);
+        if let Some(username) = home_path.file_name().and_then(|name| name.to_str()) {
+            child_cmd.env("USERNAME", username);
+        }
 
         child_cmd.spawn().map_err(|err| {
             BabataError::internal(format!(
