@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Local};
 use croner::Cron;
 use serde::{Deserialize, Serialize};
 
@@ -57,13 +57,13 @@ pub enum Schedule {
         tz: Option<String>,
     },
     At {
-        at: DateTime<Utc>,
+        at: DateTime<Local>,
     },
 }
 
 impl Schedule {
-    pub fn next_run_from_now(&self) -> BabataResult<Option<DateTime<Utc>>> {
-        let now = Utc::now();
+    pub fn next_run_from_now(&self) -> BabataResult<Option<DateTime<Local>>> {
+        let now = Local::now();
         match self {
             Schedule::Cron { expr, .. } => {
                 let cron = Cron::new(expr.trim()).parse().map_err(|err| {
@@ -97,7 +97,7 @@ mod tests {
     #[test]
     fn at_schedule_returns_none_when_time_is_past() {
         let schedule = Schedule::At {
-            at: Utc::now() - Duration::seconds(1),
+            at: Local::now() - Duration::seconds(1),
         };
 
         let next_run = schedule
@@ -110,7 +110,7 @@ mod tests {
     #[test]
     fn at_schedule_returns_some_when_time_is_future() {
         let schedule = Schedule::At {
-            at: Utc::now() + Duration::seconds(5),
+            at: Local::now() + Duration::seconds(5),
         };
 
         let next_run = schedule

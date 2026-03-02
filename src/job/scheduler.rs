@@ -1,6 +1,6 @@
 use std::{collections::HashMap, time::Duration};
 
-use chrono::Utc;
+use chrono::Local;
 use log::{error, info, warn};
 
 use crate::{
@@ -122,7 +122,7 @@ async fn run_running_job_task(
         };
 
         let wait_duration = next_run
-            .signed_duration_since(Utc::now())
+            .signed_duration_since(Local::now())
             .to_std()
             .unwrap_or_else(|_| Duration::from_secs(0));
         if wait_duration > Duration::from_secs(0) {
