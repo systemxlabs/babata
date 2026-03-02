@@ -5,10 +5,10 @@ use crate::{
     channel::{Channel, TelegramChannel},
     config::{
         AgentConfig, ChannelConfig, Config, DeepSeekProviderConfig, MoonshotProviderConfig,
-        OpenAIProviderConfig, ProviderConfig, TelegramChannelConfig,
+        KimiProviderConfig, OpenAIProviderConfig, ProviderConfig, TelegramChannelConfig,
     },
     error::BabataError,
-    provider::{DeepSeekProvider, Model, MoonshotProvider, OpenAIProvider, Provider},
+    provider::{DeepSeekProvider, KimiProvider, Model, MoonshotProvider, OpenAIProvider, Provider},
 };
 
 use super::Args;
@@ -235,6 +235,7 @@ fn prompt_provider_setup() -> BabataResult<Option<ProviderConfig>> {
 fn available_provider_names() -> Vec<String> {
     vec![
         OpenAIProvider::name().to_string(),
+        KimiProvider::name().to_string(),
         MoonshotProvider::name().to_string(),
         DeepSeekProvider::name().to_string(),
     ]
@@ -319,6 +320,7 @@ fn prompt_model_setup(provider_config: &ProviderConfig) -> BabataResult<String> 
 fn supported_models_for_provider(provider_config: &ProviderConfig) -> &'static [Model] {
     match provider_config {
         ProviderConfig::OpenAI(_) => OpenAIProvider::supported_models(),
+        ProviderConfig::Kimi(_) => KimiProvider::supported_models(),
         ProviderConfig::Moonshot(_) => MoonshotProvider::supported_models(),
         ProviderConfig::DeepSeek(_) => DeepSeekProvider::supported_models(),
     }
@@ -329,6 +331,12 @@ fn build_provider_config(provider_name: &str, api_key: String) -> BabataResult<P
         || provider_name.eq_ignore_ascii_case("openai")
     {
         return Ok(ProviderConfig::OpenAI(OpenAIProviderConfig { api_key }));
+    }
+
+    if provider_name.eq_ignore_ascii_case(KimiProvider::name())
+        || provider_name.eq_ignore_ascii_case("kimi")
+    {
+        return Ok(ProviderConfig::Kimi(KimiProviderConfig { api_key }));
     }
 
     if provider_name.eq_ignore_ascii_case(MoonshotProvider::name())

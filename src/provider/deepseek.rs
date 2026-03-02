@@ -28,7 +28,8 @@ const DEEPSEEK_SUPPORTED_MODELS: &[Model] = &[
 
 impl DeepSeekProvider {
     pub fn new(api_key: &str) -> Self {
-        let inner = OpenAICompatibleProvider::new(api_key, "https://api.deepseek.com/v1");
+        let inner = OpenAICompatibleProvider::new(api_key, "https://api.deepseek.com/v1")
+            .with_user_agent(None);
         Self { inner }
     }
 }

@@ -9,32 +9,32 @@ use crate::{
 use super::OpenAICompatibleProvider;
 
 #[derive(Debug)]
-pub struct MoonshotProvider {
+pub struct KimiProvider {
     inner: OpenAICompatibleProvider,
 }
 
-const MOONSHOT_SUPPORTED_MODELS: &[Model] = &[Model {
-    provider: "moonshot",
+const KIMI_SUPPORTED_MODELS: &[Model] = &[Model {
+    provider: "kimi",
     name: "kimi-k2.5",
     context_length: 128_000,
 }];
 
-impl MoonshotProvider {
+impl KimiProvider {
     pub fn new(api_key: &str) -> Self {
-        let inner = OpenAICompatibleProvider::new(api_key, "https://api.moonshot.cn/v1")
-            .with_user_agent(None);
+        let inner = OpenAICompatibleProvider::new(api_key, "https://api.kimi.com/coding/v1")
+            .with_user_agent(Some("KimiCLI/1.6".to_string()));
         Self { inner }
     }
 }
 
 #[async_trait::async_trait]
-impl Provider for MoonshotProvider {
+impl Provider for KimiProvider {
     fn name() -> &'static str {
-        "moonshot"
+        "kimi"
     }
 
     fn supported_models() -> &'static [Model] {
-        MOONSHOT_SUPPORTED_MODELS
+        KIMI_SUPPORTED_MODELS
     }
 
     async fn generate<'a>(

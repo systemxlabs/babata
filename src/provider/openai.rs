@@ -22,7 +22,8 @@ const OPENAI_SUPPORTED_MODELS: &[Model] = &[Model {
 impl OpenAIProvider {
     pub fn new(api_key: &str) -> Self {
         Self {
-            inner: OpenAICompatibleProvider::new(api_key, "https://api.openai.com/v1"),
+            inner: OpenAICompatibleProvider::new(api_key, "https://api.openai.com/v1")
+                .with_user_agent(None),
         }
     }
 }

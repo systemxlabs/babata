@@ -81,7 +81,7 @@ pub enum ProviderAction {
     Delete {
         #[arg(
             value_name = "PROVIDER_NAME",
-            help = "Provider name, e.g. openai or moonshot"
+            help = "Provider name, e.g. openai, kimi, or moonshot"
         )]
         name: String,
     },

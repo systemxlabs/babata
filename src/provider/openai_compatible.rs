@@ -1,5 +1,5 @@
 use log::{debug, warn};
-use reqwest::{Client, StatusCode};
+use reqwest::{Client, StatusCode, header::USER_AGENT};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -16,6 +16,7 @@ pub struct OpenAICompatibleProvider {
     client: Client,
     api_key: String,
     base_url: String,
+    user_agent: Option<String>,
 }
 
 impl OpenAICompatibleProvider {
@@ -24,7 +25,13 @@ impl OpenAICompatibleProvider {
             client: Client::new(),
             api_key: api_key.to_string(),
             base_url: base_url.to_string(),
+            user_agent: None,
         }
+    }
+
+    pub fn with_user_agent(mut self, user_agent: Option<String>) -> Self {
+        self.user_agent = user_agent;
+        self
     }
 
     fn format_tools(&self, tools: &[ToolSpec]) -> Vec<ChatCompletionTool> {
@@ -152,11 +159,17 @@ impl OpenAICompatibleProvider {
             serde_json::to_string_pretty(&request_body)?
         );
 
-        let response = self
+        let mut request_builder = self
             .client
             .post(format!("{}/chat/completions", self.base_url))
             .header("Authorization", format!("Bearer {}", self.api_key))
-            .header("Content-Type", "application/json")
+            .header("Content-Type", "application/json");
+
+        if let Some(user_agent) = &self.user_agent {
+            request_builder = request_builder.header(USER_AGENT, user_agent);
+        }
+
+        let response = request_builder
             .json(&request_body)
             .send()
             .await
