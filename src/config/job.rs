@@ -26,7 +26,7 @@ impl JobConfig {
         }
 
         match &self.schedule {
-            Schedule::Cron { expr, .. } => {
+            Schedule::Cron { expr } => {
                 let cron = expr.trim();
                 if cron.is_empty() {
                     return Err(BabataError::config(
@@ -53,8 +53,6 @@ impl JobConfig {
 pub enum Schedule {
     Cron {
         expr: String,
-        #[serde(default)]
-        tz: Option<String>,
     },
     At {
         at: DateTime<Local>,
@@ -65,7 +63,7 @@ impl Schedule {
     pub fn next_run_from_now(&self) -> BabataResult<Option<DateTime<Local>>> {
         let now = Local::now();
         match self {
-            Schedule::Cron { expr, .. } => {
+            Schedule::Cron { expr } => {
                 let cron = Cron::new(expr.trim()).parse().map_err(|err| {
                     BabataError::config(format!("Invalid cron expression '{}': {}", expr, err))
                 })?;

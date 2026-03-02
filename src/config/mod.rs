@@ -286,7 +286,6 @@ mod tests {
                 enabled: true,
                 schedule: Schedule::Cron {
                     expr: "0 9 * * *".to_string(),
-                    tz: None,
                 },
                 description: "Daily summary job".to_string(),
                 prompt: "Summarize today's progress".to_string(),
