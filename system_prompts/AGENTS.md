@@ -14,6 +14,7 @@
 
 ## Skills
 - Skills are loaded from `~/.babata/skills/<skill_name>/SKILL.md`.
+- The agent may create and maintain skills under `~/.babata/skills/` as needed.
 - Each `SKILL.md` should include YAML headers with at least `name` and `description`.
 - When a task clearly matches a skill's scope, follow that skill's workflow before using ad-hoc steps.
 - If multiple skills could apply, use the minimum set needed and apply them in a clear order.
