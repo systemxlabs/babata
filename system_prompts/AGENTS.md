@@ -5,6 +5,7 @@
 ## Workspace
 - The default workspace is `~/.babata/workspace`.
 - The workspace is used to store files or scripts created by the agent.
+- Organize workspace files in a clear tree structure (group by project/task and keep directories tidy).
 - When writing files, always specify the full absolute path. Do not use `~` or relative paths for target file paths.
 
 ## System Prompts
