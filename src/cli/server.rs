@@ -1,4 +1,9 @@
-use std::{path::Path, process::Command};
+use std::{
+    path::Path,
+    process::Command,
+    thread,
+    time::{Duration, Instant},
+};
 
 use log::{info, warn};
 
@@ -257,7 +262,9 @@ fn restart_windows() -> BabataResult<()> {
     install_windows_service()?;
 
     let _ = stop_windows_service();
+    wait_for_windows_service_state(WindowsServiceState::Stopped, Duration::from_secs(30))?;
     start_windows_service()?;
+    wait_for_windows_service_state(WindowsServiceState::Running, Duration::from_secs(30))?;
 
     println!(
         "Restarted server with Windows Service: {}",
@@ -271,6 +278,15 @@ fn stop_windows() -> BabataResult<()> {
     stop_windows_running_processes()?;
     println!("Stopped server on Windows");
     Ok(())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WindowsServiceState {
+    Stopped,
+    StartPending,
+    StopPending,
+    Running,
+    Unknown,
 }
 
 fn macos_plist_path() -> BabataResult<std::path::PathBuf> {
@@ -292,6 +308,70 @@ fn windows_service_bin_path(exe_path: &Path, home_dir: &Path) -> String {
         exe_path.to_string_lossy(),
         home_dir.to_string_lossy()
     )
+}
+
+fn wait_for_windows_service_state(
+    target: WindowsServiceState,
+    timeout: Duration,
+) -> BabataResult<()> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        let state = query_windows_service_state()?;
+        if state == target {
+            return Ok(());
+        }
+
+        if Instant::now() >= deadline {
+            return Err(BabataError::internal(format!(
+                "Timed out waiting for Windows service '{}' to reach state {:?}; current state: {:?}",
+                WINDOWS_SERVICE_NAME, target, state
+            )));
+        }
+
+        thread::sleep(Duration::from_millis(500));
+    }
+}
+
+fn query_windows_service_state() -> BabataResult<WindowsServiceState> {
+    let output = Command::new("sc")
+        .args(["query", WINDOWS_SERVICE_NAME])
+        .output()
+        .map_err(|err| {
+            BabataError::internal(format!(
+                "Failed to execute command 'sc query {}': {}",
+                WINDOWS_SERVICE_NAME, err
+            ))
+        })?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let details = if stderr.is_empty() { stdout } else { stderr };
+        return Err(BabataError::internal(format!(
+            "Command 'sc query {}' failed with status {}: {}",
+            WINDOWS_SERVICE_NAME, output.status, details
+        )));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(parse_windows_service_state(&stdout))
+}
+
+fn parse_windows_service_state(sc_query_output: &str) -> WindowsServiceState {
+    let lower = sc_query_output.to_ascii_lowercase();
+    if lower.contains("stop_pending") {
+        return WindowsServiceState::StopPending;
+    }
+    if lower.contains("start_pending") {
+        return WindowsServiceState::StartPending;
+    }
+    if lower.contains("running") {
+        return WindowsServiceState::Running;
+    }
+    if lower.contains("stopped") {
+        return WindowsServiceState::Stopped;
+    }
+    WindowsServiceState::Unknown
 }
 
 fn create_or_update_windows_service(bin_path: &str) -> BabataResult<()> {
@@ -760,7 +840,8 @@ mod tests {
     use crate::message::{Content, Message};
 
     use super::{
-        is_macos_service_not_found_error, service_started_message, windows_service_bin_path,
+        WindowsServiceState, is_macos_service_not_found_error, parse_windows_service_state,
+        service_started_message, windows_service_bin_path,
     };
 
     #[test]
@@ -801,6 +882,33 @@ mod tests {
         assert_eq!(
             cmdline,
             "\"C:\\Users\\alice\\.cargo\\bin\\babata.exe\" server windows-service-host --home-dir \"C:\\Users\\alice\""
+        );
+    }
+
+    #[test]
+    fn parses_windows_service_state_running() {
+        let output = r#"
+SERVICE_NAME: babata.server
+        TYPE               : 10  WIN32_OWN_PROCESS
+        STATE              : 4  RUNNING
+                                (STOPPABLE, NOT_PAUSABLE, ACCEPTS_SHUTDOWN)
+"#;
+        assert_eq!(
+            parse_windows_service_state(output),
+            WindowsServiceState::Running
+        );
+    }
+
+    #[test]
+    fn parses_windows_service_state_stop_pending() {
+        let output = r#"
+SERVICE_NAME: babata.server
+        TYPE               : 10  WIN32_OWN_PROCESS
+        STATE              : 3  STOP_PENDING
+"#;
+        assert_eq!(
+            parse_windows_service_state(output),
+            WindowsServiceState::StopPending
         );
     }
 }
