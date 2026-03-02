@@ -43,7 +43,7 @@ pub fn restart(_args: &Args) {
     }
 }
 
-pub fn windows_service_host(_args: &Args, home_dir: Option<&str>) {
+pub fn windows_service_host(_args: &Args, home_dir: &str) {
     if let Err(err) = run_windows_service_host(home_dir) {
         eprintln!("{err}");
         std::process::exit(1);
@@ -399,12 +399,12 @@ fn stop_windows_running_processes() -> BabataResult<()> {
 }
 
 #[cfg(windows)]
-fn run_windows_service_host(home_dir: Option<&str>) -> BabataResult<()> {
+fn run_windows_service_host(home_dir: &str) -> BabataResult<()> {
     windows_service_host::run(home_dir)
 }
 
 #[cfg(not(windows))]
-fn run_windows_service_host(_home_dir: Option<&str>) -> BabataResult<()> {
+fn run_windows_service_host(_home_dir: &str) -> BabataResult<()> {
     Err(BabataError::config(
         "Windows service host can only run on Windows",
     ))
@@ -535,13 +535,14 @@ mod windows_service_host {
 
     define_windows_service!(ffi_service_main, service_main);
 
-    pub fn run(home_dir: Option<&str>) -> BabataResult<()> {
-        let resolved_home_dir = match home_dir {
-            Some(value) if !value.trim().is_empty() => value.trim().to_string(),
-            _ => crate::utils::resolve_home_dir()?
-                .to_string_lossy()
-                .into_owned(),
-        };
+    pub fn run(home_dir: &str) -> BabataResult<()> {
+        let home_dir = home_dir.trim();
+        if home_dir.is_empty() {
+            return Err(BabataError::config(
+                "Windows service host requires non-empty --home-dir",
+            ));
+        }
+        let resolved_home_dir = home_dir.to_string();
         let _ = SERVICE_HOME_DIR.set(resolved_home_dir);
 
         let exe_path = std::env::current_exe().map_err(|err| {

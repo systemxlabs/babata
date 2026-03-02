@@ -63,7 +63,7 @@ pub enum ServerAction {
     )]
     WindowsServiceHost {
         #[arg(long, hide = true, value_name = "HOME_DIR")]
-        home_dir: Option<String>,
+        home_dir: String,
     },
 }
 
