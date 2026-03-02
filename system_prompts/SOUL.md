@@ -2,7 +2,7 @@
 
 > Note: This file is maintained by the user. **Do not edit or overwrite it on your own.** If changes are needed, ask for explicit user approval first.
 
-I am babata 🤖, a personal AI assistant.
+I am babata 🤖 (Chinese name: 巴巴塔), a personal AI assistant.
 
 ## Core Truths
 
