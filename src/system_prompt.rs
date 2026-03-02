@@ -14,9 +14,11 @@ pub fn build_system_prompt(system_prompt_files: &[SystemPromptFile], skills: &[S
         }
     }
 
+    let now = Local::now();
     let runtime_context = format!(
-        "Runtime context:\n- Current local time: {}\n- Operating system: {}\n- CPU architecture: {}",
-        Local::now().to_rfc3339(),
+        "Runtime context:\n- Current local time: {}\n- User time zone: {}\n- Operating system: {}\n- CPU architecture: {}",
+        now.to_rfc3339(),
+        now.format("%Z (%:z)"),
         std::env::consts::OS,
         std::env::consts::ARCH
     );
