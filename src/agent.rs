@@ -8,7 +8,7 @@ use crate::{
     config::{AgentConfig, Config},
     error::BabataError,
     memory::Memory,
-    message::Message,
+    message::{Content, Message},
     provider::{Provider, build_providers},
     skill::{Skill, load_skills},
     system_prompt::{SystemPromptFile, load_system_prompt_files},
@@ -71,15 +71,27 @@ impl AgentLoop {
                 self.system_prompt_files.clone(),
                 self.skills.clone(),
             );
-            let response = task.run().await?;
+            let response = match task.run().await {
+                Ok(response) => response,
+                Err(err) => {
+                    error!("Agent task failed: {}", err);
+
+                    let error_message = agent_task_failed_message(&err);
+                    if let Err(send_err) = self.send_to_channels(&error_message).await {
+                        error!(
+                            "Failed to send agent task error message to channel(s): {}",
+                            send_err
+                        );
+                    }
+                    continue;
+                }
+            };
             info!("Task run result message: {:?}", response);
 
             self.memory
                 .insert_messages(std::slice::from_ref(&response))?;
 
-            for channel in &self.channels {
-                channel.send(std::slice::from_ref(&response)).await?;
-            }
+            self.send_to_channels(&response).await?;
         }
     }
 
@@ -132,5 +144,33 @@ impl AgentLoop {
             name.eq_ignore_ascii_case(provider_name)
                 .then(|| Arc::clone(provider))
         })
+    }
+
+    async fn send_to_channels(&self, message: &Message) -> BabataResult<()> {
+        let mut send_failures = Vec::new();
+        for channel in &self.channels {
+            if let Err(err) = channel.send(std::slice::from_ref(message)).await {
+                send_failures.push(err.to_string());
+            }
+        }
+
+        if send_failures.is_empty() {
+            return Ok(());
+        }
+
+        Err(BabataError::internal(format!(
+            "Failed to send message to {} channel(s): {}",
+            send_failures.len(),
+            send_failures.join("; ")
+        )))
+    }
+}
+
+fn agent_task_failed_message(err: &BabataError) -> Message {
+    Message::AssistantResponse {
+        content: vec![Content::Text {
+            text: format!("Agent task failed: {}", err),
+        }],
+        reasoning_content: None,
     }
 }
