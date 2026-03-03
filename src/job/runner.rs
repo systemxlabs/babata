@@ -210,7 +210,9 @@ fn is_none_text_response(message: &Message) -> bool {
                     return false;
                 }
             }
-            Content::ImageUrl { .. } | Content::ImageData { .. } => return false,
+            Content::ImageUrl { .. } | Content::ImageData { .. } | Content::AudioData { .. } => {
+                return false;
+            }
         }
     }
 

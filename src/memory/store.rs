@@ -162,7 +162,7 @@ impl MessageStore {
 mod tests {
     use uuid::Uuid;
 
-    use crate::message::{Content, Message, ToolCall};
+    use crate::message::{Content, MediaType, Message, ToolCall};
 
     use super::*;
 
@@ -203,7 +203,7 @@ mod tests {
                     },
                     Content::ImageData {
                         data: "iVBORw0KGgoAAAANSUhEUgAAAAUA".to_string(),
-                        media_type: "image/png".to_string(),
+                        media_type: MediaType::ImagePng,
                     },
                 ],
                 reasoning_content: None,

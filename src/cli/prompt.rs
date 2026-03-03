@@ -90,6 +90,9 @@ fn print_final_message(message: &Message) -> BabataResult<()> {
                     Content::ImageData { media_type, .. } => {
                         println!("[image_data] {media_type}")
                     }
+                    Content::AudioData { media_type, .. } => {
+                        println!("[audio_data] {media_type}")
+                    }
                 }
             }
             Ok(())

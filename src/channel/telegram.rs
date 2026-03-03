@@ -16,7 +16,7 @@ use crate::{
     BabataResult,
     config::{ChannelConfig, Config},
     error::BabataError,
-    message::{Content, Message},
+    message::{Content, MediaType, Message},
 };
 
 #[derive(Debug)]
@@ -165,7 +165,16 @@ impl TelegramChannel {
                     .download_image_as_base64(&image_file_id, &media_type)
                     .await
                 {
-                    Ok(data) => content.push(Content::ImageData { data, media_type }),
+                    Ok(data) => {
+                        let Some(media_type) = MediaType::from_mime(&media_type) else {
+                            warn!(
+                                "Unsupported Telegram image media type '{}'; skipping image content.",
+                                media_type
+                            );
+                            continue;
+                        };
+                        content.push(Content::ImageData { data, media_type });
+                    }
                     Err(err) => {
                         warn!(
                             "Failed to process Telegram image file '{}': {}. Continuing without image.",
@@ -375,7 +384,9 @@ fn extract_outgoing_texts(messages: &[Message]) -> Vec<String> {
                 .iter()
                 .filter_map(|part| match part {
                     Content::Text { text } => Some(text.as_str()),
-                    Content::ImageUrl { .. } | Content::ImageData { .. } => None,
+                    Content::ImageUrl { .. }
+                    | Content::ImageData { .. }
+                    | Content::AudioData { .. } => None,
                 })
                 .collect::<Vec<_>>()
                 .join("\n");

@@ -6,7 +6,7 @@ use serde_json::Value;
 use crate::{
     BabataResult,
     error::BabataError,
-    message::{Content, Message, ToolCall},
+    message::{Content, MediaType, Message, ToolCall},
     provider::{GenerationReqest, GenerationResponse, InteractionRequest, InteractionResponse},
     tool::ToolSpec,
 };
@@ -77,7 +77,18 @@ impl OpenAICompatibleProvider {
                             Content::ImageData { data, media_type } => {
                                 ChatCompletionContentPart::ImageUrl {
                                     image_url: ChatCompletionContentPartImage {
-                                        url: format!("data:{media_type};base64,{data}"),
+                                        url: format!(
+                                            "data:{};base64,{data}",
+                                            media_type.as_mime_str()
+                                        ),
+                                    },
+                                }
+                            }
+                            Content::AudioData { data, media_type } => {
+                                ChatCompletionContentPart::InputAudio {
+                                    input_audio: ChatCompletionContentPartInputAudio {
+                                        data: data.clone(),
+                                        format: audio_format_from_media_type(media_type),
                                     },
                                 }
                             }
@@ -117,9 +128,11 @@ impl OpenAICompatibleProvider {
                             Content::Text { text } => {
                                 parts.push(ChatCompletionContentPart::Text { text: text.clone() })
                             }
-                            Content::ImageUrl { .. } | Content::ImageData { .. } => {
+                            Content::ImageUrl { .. }
+                            | Content::ImageData { .. }
+                            | Content::AudioData { .. } => {
                                 warn!(
-                                    "OpenAI-compatible assistant responses do not support images yet"
+                                    "OpenAI-compatible assistant responses do not support non-text content yet"
                                 );
                             }
                         }
@@ -245,6 +258,13 @@ impl OpenAICompatibleProvider {
     }
 }
 
+fn audio_format_from_media_type(media_type: &MediaType) -> String {
+    if let Some(format) = media_type.audio_format() {
+        return format.to_string();
+    }
+    media_type.as_mime_str()
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ChatCompletionRequest {
     pub model: String,
@@ -279,10 +299,18 @@ pub enum ChatCompletionMessageParam {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ChatCompletionContentPart {
-    Text { text: String },
-    ImageUrl { image_url: ChatCompletionContentPartImage },
-    InputAudio { input_audio: ChatCompletionContentPartInputAudio },
-    File { file: ChatCompletionContentPartFile },
+    Text {
+        text: String,
+    },
+    ImageUrl {
+        image_url: ChatCompletionContentPartImage,
+    },
+    InputAudio {
+        input_audio: ChatCompletionContentPartInputAudio,
+    },
+    File {
+        file: ChatCompletionContentPartFile,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -372,7 +400,10 @@ pub struct ChatCompletionsMessageToolCallFunction {
 mod tests {
     use serde_json::json;
 
-    use crate::tool::ToolSpec;
+    use crate::{
+        message::{Content, MediaType, Message},
+        tool::ToolSpec,
+    };
 
     use super::OpenAICompatibleProvider;
 
@@ -397,5 +428,32 @@ mod tests {
         assert_eq!(payload[0]["type"], json!("function"));
         assert_eq!(payload[0]["function"]["name"], json!("read_file"));
         assert!(payload[0].get("name").is_none());
+    }
+
+    #[test]
+    fn format_messages_maps_audio_data_to_input_audio() {
+        let provider = OpenAICompatibleProvider::new("test-key", "https://example.com/v1");
+        let messages = vec![Message::UserPrompt {
+            content: vec![Content::AudioData {
+                data: "base64-audio".to_string(),
+                media_type: MediaType::AudioMp3,
+            }],
+        }];
+
+        let payload = provider
+            .format_messages("", &messages)
+            .expect("format messages");
+        let payload = serde_json::to_value(payload).expect("serialize formatted messages");
+
+        assert_eq!(payload[0]["role"], json!("user"));
+        assert_eq!(payload[0]["content"][0]["type"], json!("input_audio"));
+        assert_eq!(
+            payload[0]["content"][0]["input_audio"]["data"],
+            json!("base64-audio")
+        );
+        assert_eq!(
+            payload[0]["content"][0]["input_audio"]["format"],
+            json!("mp3")
+        );
     }
 }
