@@ -72,11 +72,11 @@ impl OpenAICompatibleProvider {
                                 ChatCompletionContentPart::Text { text: text.clone() }
                             }
                             Content::ImageUrl { url } => ChatCompletionContentPart::ImageUrl {
-                                image_url: ChatCompletionImageUrl { url: url.clone() },
+                                image_url: ChatCompletionContentPartImage { url: url.clone() },
                             },
                             Content::ImageData { data, media_type } => {
                                 ChatCompletionContentPart::ImageUrl {
-                                    image_url: ChatCompletionImageUrl {
+                                    image_url: ChatCompletionContentPartImage {
                                         url: format!("data:{media_type};base64,{data}"),
                                     },
                                 }
@@ -280,12 +280,27 @@ pub enum ChatCompletionMessageParam {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ChatCompletionContentPart {
     Text { text: String },
-    ImageUrl { image_url: ChatCompletionImageUrl },
+    ImageUrl { image_url: ChatCompletionContentPartImage },
+    InputAudio { input_audio: ChatCompletionContentPartInputAudio },
+    File { file: ChatCompletionContentPartFile },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ChatCompletionImageUrl {
+pub struct ChatCompletionContentPartImage {
     pub url: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ChatCompletionContentPartInputAudio {
+    pub data: String,
+    pub format: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ChatCompletionContentPartFile {
+    pub file_data: Option<String>,
+    pub file_id: Option<String>,
+    pub filename: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
