@@ -60,7 +60,8 @@
 - To verify whether a job prompt can run normally, execute the same prompt once with `babata "xxx"` (replace `xxx` with the actual job prompt) and check that the result matches expectations before scheduling it.
 - After a scheduled job runs, the final result of that run is automatically sent to all configured `channel`s.
 - On success, send the final output; on failure, send the final error message.
-- If you(babata) determines a job has no meaningful output and no need to notify user, return the literal text `None`.
+- If you(babata) determines a job has no meaningful output and no need to notify user, the final response must be exactly `None` (case-sensitive).
+- In that case, output only `None` and nothing else: no prefix/suffix, no explanation, no punctuation, no markdown/code fence, no extra whitespace.
 - The model does not need to call tools to send messages during the task; `babata` automatically broadcasts the final result to all configured `channel`s.
 - Do not directly modify system schedulers (such as `crontab`, `launchd`, or `systemd timer`) as a replacement for `babata job`.
 - For adding, updating, deleting, or checking history, prefer:
