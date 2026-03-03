@@ -100,6 +100,14 @@ impl JobRunner {
 
         let response = task.run().await?;
         info!("Job result: {:?}", response);
+        if is_none_text_response(&response) {
+            info!(
+                "Job '{}' result is literal 'None'; skipping channel notification",
+                self.job_name
+            );
+            return Ok(response);
+        }
+
         let channels = build_channels(&self.config)?;
         let mut send_failures = Vec::new();
 
@@ -186,4 +194,84 @@ fn current_epoch_seconds() -> i64 {
 
 fn elapsed_millis_i64(duration: Duration) -> i64 {
     duration.as_millis().min(i64::MAX as u128) as i64
+}
+
+fn is_none_text_response(message: &Message) -> bool {
+    let Message::AssistantResponse { content, .. } = message else {
+        return false;
+    };
+
+    let mut saw_text = false;
+    for part in content {
+        match part {
+            Content::Text { text } => {
+                saw_text = true;
+                if text != "None" {
+                    return false;
+                }
+            }
+            Content::ImageUrl { .. } | Content::ImageData { .. } => return false,
+        }
+    }
+
+    saw_text
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::message::{Content, Message};
+
+    use super::is_none_text_response;
+
+    #[test]
+    fn is_none_text_response_returns_true_for_literal_none_text() {
+        let message = Message::AssistantResponse {
+            content: vec![Content::Text {
+                text: "None".to_string(),
+            }],
+            reasoning_content: None,
+        };
+
+        assert!(is_none_text_response(&message));
+    }
+
+    #[test]
+    fn is_none_text_response_returns_false_for_non_none_text() {
+        let message = Message::AssistantResponse {
+            content: vec![Content::Text {
+                text: "done".to_string(),
+            }],
+            reasoning_content: None,
+        };
+
+        assert!(!is_none_text_response(&message));
+    }
+
+    #[test]
+    fn is_none_text_response_returns_false_for_non_assistant_response() {
+        let message = Message::UserPrompt {
+            content: vec![Content::Text {
+                text: "None".to_string(),
+            }],
+        };
+
+        assert!(!is_none_text_response(&message));
+    }
+
+    #[test]
+    fn is_none_text_response_returns_false_when_images_exist() {
+        let message = Message::AssistantResponse {
+            content: vec![
+                Content::Text {
+                    text: "None".to_string(),
+                },
+                Content::ImageUrl {
+                    url: "https://example.com/image.png".to_string(),
+                },
+            ],
+            reasoning_content: None,
+        };
+
+        assert!(!is_none_text_response(&message));
+    }
 }

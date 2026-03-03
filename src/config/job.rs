@@ -51,12 +51,8 @@ impl JobConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum Schedule {
-    Cron {
-        expr: String,
-    },
-    At {
-        at: DateTime<Local>,
-    },
+    Cron { expr: String },
+    At { at: DateTime<Local> },
 }
 
 impl Schedule {

@@ -628,13 +628,19 @@ mod windows_service_host {
         }
         let resolved_home_dir = home_dir.to_string();
         let _ = SERVICE_HOME_DIR.set(resolved_home_dir);
-        info!("Windows service host starting with home directory: {}", home_dir);
+        info!(
+            "Windows service host starting with home directory: {}",
+            home_dir
+        );
 
         let exe_path = std::env::current_exe().map_err(|err| {
             BabataError::internal(format!("Failed to resolve current executable path: {err}"))
         })?;
         let _ = SERVICE_EXE_PATH.set(exe_path);
-        info!("Windows service host resolved executable path: {}", SERVICE_EXE_PATH.get().unwrap().display());
+        info!(
+            "Windows service host resolved executable path: {}",
+            SERVICE_EXE_PATH.get().unwrap().display()
+        );
 
         service_dispatcher::start(super::WINDOWS_SERVICE_NAME, ffi_service_main).map_err(|err| {
             BabataError::internal(format!(

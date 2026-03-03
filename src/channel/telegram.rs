@@ -6,7 +6,9 @@ use teloxide::{
     Bot,
     payloads::{GetUpdatesSetters, SendMessageSetters},
     prelude::{Request, Requester},
-    types::{ChatId, ChatKind, Document, Message as TelegramMessage, ParseMode, Update, UpdateKind},
+    types::{
+        ChatId, ChatKind, Document, Message as TelegramMessage, ParseMode, Update, UpdateKind,
+    },
 };
 use tokio::sync::Mutex;
 

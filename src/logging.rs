@@ -42,8 +42,9 @@ fn init_stdio_logger() -> BabataResult<()> {
 
     logforth::starter_log::builder()
         .dispatch(|d| {
-            d.filter(filter)
-                .append(logforth::append::Stdout::default().with_layout(TextLayout::default().no_color()))
+            d.filter(filter).append(
+                logforth::append::Stdout::default().with_layout(TextLayout::default().no_color()),
+            )
         })
         .try_apply()
         .map_err(|err| BabataError::internal(format!("Failed to initialize logger: {err}")))?;
