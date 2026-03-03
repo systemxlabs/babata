@@ -162,23 +162,44 @@ impl TelegramChannel {
                     .image_media_type
                     .unwrap_or_else(|| "image/jpeg".to_string());
                 match self
-                    .download_image_as_base64(&image_file_id, &media_type)
+                    .download_file_as_base64(&image_file_id, &media_type)
                     .await
                 {
-                    Ok(data) => {
-                        let Some(media_type) = MediaType::from_mime(&media_type) else {
-                            warn!(
-                                "Unsupported Telegram image media type '{}'; skipping image content.",
-                                media_type
-                            );
-                            continue;
-                        };
-                        content.push(Content::ImageData { data, media_type });
-                    }
+                    Ok(data) => match MediaType::from_mime(&media_type) {
+                        Some(media_type) => content.push(Content::ImageData { data, media_type }),
+                        None => warn!(
+                            "Unsupported Telegram image media type '{}'; skipping image content.",
+                            media_type
+                        ),
+                    },
                     Err(err) => {
                         warn!(
                             "Failed to process Telegram image file '{}': {}. Continuing without image.",
                             image_file_id, err
+                        );
+                    }
+                }
+            }
+
+            if let Some(audio_file_id) = message.audio_file_id {
+                let media_type = message
+                    .audio_media_type
+                    .unwrap_or_else(|| "audio/ogg".to_string());
+                match self
+                    .download_file_as_base64(&audio_file_id, &media_type)
+                    .await
+                {
+                    Ok(data) => match MediaType::from_mime(&media_type) {
+                        Some(media_type) => content.push(Content::AudioData { data, media_type }),
+                        None => warn!(
+                            "Unsupported Telegram audio media type '{}'; skipping audio content.",
+                            media_type
+                        ),
+                    },
+                    Err(err) => {
+                        warn!(
+                            "Failed to process Telegram audio file '{}': {}. Continuing without audio.",
+                            audio_file_id, err
                         );
                     }
                 }
@@ -198,7 +219,7 @@ impl TelegramChannel {
         Some(messages)
     }
 
-    async fn download_image_as_base64(
+    async fn download_file_as_base64(
         &self,
         file_id: &str,
         media_type: &str,
@@ -294,6 +315,8 @@ struct IncomingPrivateMessage {
     text: Option<String>,
     image_file_id: Option<String>,
     image_media_type: Option<String>,
+    audio_file_id: Option<String>,
+    audio_media_type: Option<String>,
 }
 
 fn extract_private_messages(
@@ -330,8 +353,9 @@ fn extract_private_messages(
             .map(ToString::to_string);
 
         let (image_file_id, image_media_type) = extract_incoming_image(&message);
+        let (audio_file_id, audio_media_type) = extract_incoming_audio(&message);
 
-        if text.is_none() && image_file_id.is_none() {
+        if text.is_none() && image_file_id.is_none() && audio_file_id.is_none() {
             continue;
         }
 
@@ -340,6 +364,8 @@ fn extract_private_messages(
             text,
             image_file_id,
             image_media_type,
+            audio_file_id,
+            audio_media_type,
         });
     }
 
@@ -367,6 +393,43 @@ fn extract_image_document(document: &Document) -> (Option<String>, Option<String
         .as_ref()
         .map(ToString::to_string)
         .filter(|mime| mime.starts_with("image/"));
+
+    if media_type.is_none() {
+        return (None, None);
+    }
+
+    (Some(document.file.id.clone()), media_type)
+}
+
+fn extract_incoming_audio(message: &TelegramMessage) -> (Option<String>, Option<String>) {
+    if let Some(audio) = message.audio() {
+        let media_type = audio
+            .mime_type
+            .as_ref()
+            .map(ToString::to_string)
+            .filter(|mime| mime.starts_with("audio/"))
+            .unwrap_or_else(|| "audio/mpeg".to_string());
+        return (Some(audio.file.id.clone()), Some(media_type));
+    }
+
+    if let Some(voice) = message.voice() {
+        // Telegram voice messages are always encoded as OGG/OPUS.
+        return (Some(voice.file.id.clone()), Some("audio/ogg".to_string()));
+    }
+
+    if let Some(document) = message.document() {
+        return extract_audio_document(document);
+    }
+
+    (None, None)
+}
+
+fn extract_audio_document(document: &Document) -> (Option<String>, Option<String>) {
+    let media_type = document
+        .mime_type
+        .as_ref()
+        .map(ToString::to_string)
+        .filter(|mime| mime.starts_with("audio/"));
 
     if media_type.is_none() {
         return (None, None);
@@ -462,6 +525,7 @@ mod tests {
         assert_eq!(private_messages[0].chat_id, 1001);
         assert_eq!(private_messages[0].text, Some("hello".to_string()));
         assert!(private_messages[0].image_file_id.is_none());
+        assert!(private_messages[0].audio_file_id.is_none());
     }
 
     #[test]
@@ -525,6 +589,7 @@ mod tests {
         assert_eq!(private_messages[0].chat_id, 1001);
         assert_eq!(private_messages[0].text, Some("allow".to_string()));
         assert!(private_messages[0].image_file_id.is_none());
+        assert!(private_messages[0].audio_file_id.is_none());
     }
 
     #[test]
@@ -586,6 +651,7 @@ mod tests {
             private_messages[0].image_media_type,
             Some("image/jpeg".to_string())
         );
+        assert!(private_messages[0].audio_file_id.is_none());
     }
 
     #[test]
@@ -637,6 +703,121 @@ mod tests {
         assert_eq!(
             private_messages[0].image_media_type,
             Some("image/png".to_string())
+        );
+        assert!(private_messages[0].audio_file_id.is_none());
+    }
+
+    #[test]
+    fn extract_private_messages_supports_voice_message() {
+        let update = serde_json::from_str::<Update>(
+            r#"{
+                "message": {
+                    "chat": {
+                        "first_name": "Alice",
+                        "id": 1001,
+                        "type": "private",
+                        "username": "alice"
+                    },
+                    "date": 1700000203,
+                    "from": {
+                        "first_name": "Alice",
+                        "id": 1001,
+                        "is_bot": false,
+                        "language_code": "en",
+                        "username": "alice"
+                    },
+                    "message_id": 303,
+                    "voice": {
+                        "duration": 2,
+                        "file_id": "voice-1",
+                        "file_unique_id": "voice-unique-1",
+                        "mime_type": "audio/ogg",
+                        "file_size": 4096
+                    }
+                },
+                "update_id": 5
+            }"#,
+        )
+        .expect("parse voice update");
+
+        let UpdateKind::Message(parsed_message) = &update.kind else {
+            panic!("expected message update kind");
+        };
+        assert!(
+            parsed_message.voice().is_some(),
+            "expected voice payload to be parsed"
+        );
+
+        let updates = vec![update];
+
+        let allowed_user_ids = HashSet::from([1001]);
+        let (max_id, private_messages) = extract_private_messages(updates, &allowed_user_ids);
+
+        assert_eq!(max_id, Some(5));
+        assert_eq!(private_messages.len(), 1);
+        assert_eq!(private_messages[0].chat_id, 1001);
+        assert!(private_messages[0].text.is_none());
+        assert!(private_messages[0].image_file_id.is_none());
+        assert_eq!(
+            private_messages[0].audio_file_id,
+            Some("voice-1".to_string())
+        );
+        assert_eq!(
+            private_messages[0].audio_media_type,
+            Some("audio/ogg".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_private_messages_supports_audio_document_message() {
+        let updates = vec![
+            serde_json::from_str::<Update>(
+                r#"{
+                "message": {
+                    "chat": {
+                        "first_name": "Alice",
+                        "id": 1001,
+                        "type": "private",
+                        "username": "alice"
+                    },
+                    "date": 1700000204,
+                    "from": {
+                        "first_name": "Alice",
+                        "id": 1001,
+                        "is_bot": false,
+                        "language_code": "en",
+                        "username": "alice"
+                    },
+                    "message_id": 304,
+                    "document": {
+                        "file_id": "doc-audio-1",
+                        "file_unique_id": "doc-audio-unique-1",
+                        "file_size": 4096,
+                        "file_name": "audio.ogg",
+                        "mime_type": "audio/ogg"
+                    }
+                },
+                "update_id": 6
+            }"#,
+            )
+            .expect("parse audio document update"),
+        ];
+
+        let allowed_user_ids = HashSet::from([1001]);
+        let (max_id, private_messages) = extract_private_messages(updates, &allowed_user_ids);
+
+        assert_eq!(max_id, Some(6));
+        assert_eq!(private_messages.len(), 1);
+        assert_eq!(private_messages[0].chat_id, 1001);
+        assert!(private_messages[0].text.is_none());
+        assert!(private_messages[0].image_file_id.is_none());
+        assert_eq!(
+            private_messages[0].audio_file_id,
+            Some("doc-audio-1".to_string())
+        );
+        assert_eq!(
+            private_messages[0].audio_media_type,
+            Some("audio/ogg".to_string())
         );
     }
 
