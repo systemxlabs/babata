@@ -61,8 +61,6 @@ impl AgentLoop {
 
             let context = self.memory.build_context(pending_messages.clone())?;
 
-            self.memory.insert_messages(&pending_messages)?;
-
             let task = AgentTask::new(
                 context,
                 Arc::clone(&provider),
@@ -88,8 +86,9 @@ impl AgentLoop {
             };
             info!("Task run result message: {:?}", response);
 
-            self.memory
-                .insert_messages(std::slice::from_ref(&response))?;
+            let mut completed_messages = pending_messages;
+            completed_messages.push(response.clone());
+            self.memory.insert_messages(&completed_messages)?;
 
             self.send_to_channels(&response).await?;
         }
