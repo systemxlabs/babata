@@ -12,7 +12,7 @@ pub struct MemoryStore {
 }
 
 impl MemoryStore {
-    pub fn new(dimension: usize) -> BabataResult<Self> {
+    pub fn new(db_path: PathBuf, dimension: usize) -> BabataResult<Self> {
         // Enable libsimple for Chinese FTS5
         libsimple::enable_auto_extension()
             .map_err(|e| BabataError::memory(format!("Failed to enable libsimple: {}", e)))?;
@@ -24,25 +24,7 @@ impl MemoryStore {
 
         // Enable sqlite-vec for vector search
         unsafe {
-            sqlite3_auto_extension(Some(std::mem::transmute(
-                sqlite_vec::sqlite3_vec_init as *const (),
-            )));
-        }
-
-        let db_path = Self::default_db_path()?;
-
-        Self::init_schema(&db_path, dimension, &jieba_dir)
-    }
-
-    pub fn new_with_path(dimension: usize, db_path: PathBuf) -> BabataResult<Self> {
-        libsimple::enable_auto_extension()
-            .map_err(|e| BabataError::memory(format!("Failed to enable libsimple: {}", e)))?;
-
-        let jieba_dir = Self::jieba_dict_dir()?;
-        libsimple::release_jieba_dict(&jieba_dir)
-            .map_err(|e| BabataError::memory(format!("Failed to release jieba dict: {}", e)))?;
-
-        unsafe {
+            #[allow(clippy::missing_transmute_annotations)]
             sqlite3_auto_extension(Some(std::mem::transmute(
                 sqlite_vec::sqlite3_vec_init as *const (),
             )));
@@ -51,7 +33,7 @@ impl MemoryStore {
         Self::init_schema(&db_path, dimension, &jieba_dir)
     }
 
-    fn default_db_path() -> BabataResult<PathBuf> {
+    pub fn default_db_path() -> BabataResult<PathBuf> {
         let dir = babata_dir()?;
         let path = dir.join("message.db");
 
@@ -171,7 +153,7 @@ impl MemoryStore {
         Ok(Self { conn, dimension })
     }
 
-    pub fn insert_message_with_embedding(
+    pub fn insert_message(
         &mut self,
         role: &str,
         message_type: &str,
@@ -211,44 +193,6 @@ impl MemoryStore {
             .map_err(|e| BabataError::memory(format!("Failed to commit transaction: {}", e)))?;
 
         Ok(message_id)
-    }
-
-    pub fn insert_message(
-        &mut self,
-        role: &str,
-        message_type: &str,
-        content: &str,
-    ) -> BabataResult<i64> {
-        self.conn
-            .execute(
-                "INSERT INTO messages (role, message_type, content, created_at)
-             VALUES (?1, ?2, ?3, ?4)",
-                params![role, message_type, content, chrono::Utc::now().timestamp(),],
-            )
-            .map_err(|e| BabataError::memory(format!("Failed to insert message: {}", e)))?;
-
-        Ok(self.conn.last_insert_rowid())
-    }
-
-    pub fn insert_embedding(&mut self, message_id: i64, embedding: &[f32]) -> BabataResult<()> {
-        if embedding.len() != self.dimension {
-            return Err(BabataError::memory(format!(
-                "Embedding dimension mismatch: expected {}, got {}",
-                self.dimension,
-                embedding.len()
-            )));
-        }
-
-        let blob = serialize_vector(embedding);
-
-        self.conn
-            .execute(
-                "INSERT INTO vec_messages (message_id, embedding) VALUES (?1, ?2)",
-                params![message_id, blob],
-            )
-            .map_err(|e| BabataError::memory(format!("Failed to insert embedding: {}", e)))?;
-
-        Ok(())
     }
 
     pub fn bm25_search(&self, query: &str, limit: usize) -> BabataResult<Vec<BM25Result>> {
@@ -341,14 +285,15 @@ pub struct VectorResult {
     pub distance: f32,
 }
 
-fn serialize_vector(vec: &[f32]) -> Vec<u8> {
-    vec.iter().flat_map(|f| f.to_le_bytes()).collect()
+fn serialize_vector(vec: &[f32]) -> &[u8] {
+    bytemuck::cast_slice(vec)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::path::PathBuf;
+    use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
     use std::sync::atomic::{AtomicU64, Ordering};
 
     fn temp_db_path() -> PathBuf {
@@ -366,13 +311,31 @@ mod tests {
     }
 
     #[test]
-    fn test_chinese_fts() -> BabataResult<()> {
-        let mut store = MemoryStore::new_with_path(384, temp_db_path())?;
+    fn test_chinese_fts_and_vector_search() -> BabataResult<()> {
+        let mut model = TextEmbedding::try_new(
+            InitOptions::new(EmbeddingModel::BGEM3)
+                .with_cache_dir(std::env::temp_dir().join("fastembed_cache")),
+        )
+        .expect("Failed to create embedding model");
 
-        store.insert_message("user", "text", "中华人民共和国国歌")?;
-        store.insert_message("user", "text", "周杰伦是一位著名歌手")?;
-        store.insert_message("user", "text", "今天天气很好")?;
+        let dimension = 1024;
+        let mut store = MemoryStore::new(temp_db_path(), dimension)?;
 
+        let texts = [
+            "中华人民共和国国歌",
+            "周杰伦是一位著名歌手",
+            "今天天气很好",
+            "人工智能技术",
+            "机器学习算法",
+            "深度学习神经网络",
+        ];
+        let embeddings = model.embed(texts, None).unwrap();
+
+        for (text, embedding) in texts.iter().zip(embeddings.iter()) {
+            store.insert_message("user", "text", text, embedding)?;
+        }
+
+        // Test Chinese FTS
         let results = store.bm25_search("中华国歌", 10)?;
         assert!(!results.is_empty(), "Should find results for '中华国歌'");
         assert_eq!(results[0].content, "中华人民共和国国歌");
@@ -381,29 +344,7 @@ mod tests {
         assert!(!results.is_empty(), "Should find results for '周杰伦'");
         assert!(results[0].content.contains("周杰伦"));
 
-        Ok(())
-    }
-
-    #[test]
-    fn test_vector_search() -> BabataResult<()> {
-        use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
-
-        let mut model = TextEmbedding::try_new(
-            InitOptions::new(EmbeddingModel::BGESmallZHV15)
-                .with_cache_dir(std::env::temp_dir().join("fastembed_cache")),
-        )
-        .expect("Failed to create embedding model");
-
-        let dimension = 512;
-        let mut store = MemoryStore::new_with_path(dimension, temp_db_path())?;
-
-        let texts = ["人工智能技术", "机器学习算法", "深度学习神经网络"];
-        let embeddings = model.embed(texts, None).unwrap();
-
-        for (text, embedding) in texts.iter().zip(embeddings.iter()) {
-            store.insert_message_with_embedding("user", "text", text, embedding)?;
-        }
-
+        // Test vector search
         let query_embedding = model.embed(vec!["人工智能"], None).unwrap();
         let results = store.vector_search(&query_embedding[0], 3)?;
 
@@ -414,37 +355,11 @@ mod tests {
     }
 
     #[test]
-    fn test_insert_embedding_separately() -> BabataResult<()> {
-        use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
-
-        let mut model = TextEmbedding::try_new(
-            InitOptions::new(EmbeddingModel::BGESmallZHV15)
-                .with_cache_dir(std::env::temp_dir().join("fastembed_cache")),
-        )
-        .expect("Failed to create embedding model");
-
-        let dimension = 512;
-        let mut store = MemoryStore::new_with_path(dimension, temp_db_path())?;
-
-        let id = store.insert_message("user", "text", "测试消息")?;
-
-        let embedding = model.embed(vec!["测试消息"], None).unwrap();
-        store.insert_embedding(id, &embedding[0])?;
-
-        let results = store.vector_search(&embedding[0], 1)?;
-        assert_eq!(results.len(), 1);
-        assert_eq!(results[0].message_id, id);
-        assert_eq!(results[0].content, "测试消息");
-
-        Ok(())
-    }
-
-    #[test]
     fn test_embedding_dimension_mismatch() {
-        let mut store = MemoryStore::new_with_path(4, temp_db_path()).unwrap();
+        let mut store = MemoryStore::new(temp_db_path(), 4).unwrap();
 
         let wrong_embedding = [0.1, 0.2, 0.3];
-        let result = store.insert_message_with_embedding("user", "text", "test", &wrong_embedding);
+        let result = store.insert_message("user", "text", "test", &wrong_embedding);
 
         assert!(result.is_err());
     }

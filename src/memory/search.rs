@@ -22,14 +22,16 @@ pub struct HybridSearch<'a> {
     store: &'a MemoryStore,
     bm25_weight: f32,
     vector_weight: f32,
+    rrf_k: f32,
 }
 
 impl<'a> HybridSearch<'a> {
-    pub fn new(store: &'a MemoryStore, bm25_weight: f32, vector_weight: f32) -> Self {
+    pub fn new(store: &'a MemoryStore, bm25_weight: f32, vector_weight: f32, rrf_k: f32) -> Self {
         Self {
             store,
             bm25_weight,
             vector_weight,
+            rrf_k,
         }
     }
 
@@ -57,11 +59,10 @@ impl<'a> HybridSearch<'a> {
         vector_results: &[VectorResult],
         limit: usize,
     ) -> Vec<SearchResult> {
-        let k = 60.0;
         let mut scores: HashMap<i64, (f32, SearchResult)> = HashMap::new();
 
         for (rank, result) in bm25_results.iter().enumerate() {
-            let rrf_score = self.bm25_weight / (k + rank as f32 + 1.0);
+            let rrf_score = self.bm25_weight / (self.rrf_k + rank as f32 + 1.0);
 
             let bonus = if rank < 3 {
                 0.05
@@ -87,7 +88,7 @@ impl<'a> HybridSearch<'a> {
         }
 
         for (rank, result) in vector_results.iter().enumerate() {
-            let rrf_score = self.vector_weight / (k + rank as f32 + 1.0);
+            let rrf_score = self.vector_weight / (self.rrf_k + rank as f32 + 1.0);
 
             scores
                 .entry(result.message_id)
@@ -145,22 +146,22 @@ mod tests {
         use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 
         let mut model = TextEmbedding::try_new(
-            InitOptions::new(EmbeddingModel::BGESmallZHV15)
+            InitOptions::new(EmbeddingModel::BGEM3)
                 .with_cache_dir(std::env::temp_dir().join("fastembed_cache")),
         )
         .expect("Failed to create embedding model");
 
-        let dimension = 512;
-        let mut store = MemoryStore::new_with_path(dimension, temp_db_path())?;
+        let dimension = 1024;
+        let mut store = MemoryStore::new(temp_db_path(), dimension)?;
 
         let texts = ["人工智能技术发展", "机器学习算法", "深度学习神经网络"];
         let embeddings = model.embed(texts, None).unwrap();
 
         for (text, embedding) in texts.iter().zip(embeddings.iter()) {
-            store.insert_message_with_embedding("user", "text", text, embedding)?;
+            store.insert_message("user", "text", text, embedding)?;
         }
 
-        let hybrid = HybridSearch::new(&store, 1.0, 1.0);
+        let hybrid = HybridSearch::new(&store, 1.0, 1.0, 60.0);
 
         let query_embedding = model.embed(vec!["人工智能"], None).unwrap();
         let results = hybrid.search("人工智能", &query_embedding[0], 10, 5)?;
@@ -175,22 +176,22 @@ mod tests {
         use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 
         let mut model = TextEmbedding::try_new(
-            InitOptions::new(EmbeddingModel::BGESmallZHV15)
+            InitOptions::new(EmbeddingModel::BGEM3)
                 .with_cache_dir(std::env::temp_dir().join("fastembed_cache")),
         )
         .expect("Failed to create embedding model");
 
-        let dimension = 512;
-        let mut store = MemoryStore::new_with_path(dimension, temp_db_path())?;
+        let dimension = 1024;
+        let mut store = MemoryStore::new(temp_db_path(), dimension)?;
 
         let texts = ["Rust编程语言", "Python编程"];
         let embeddings = model.embed(texts, None).unwrap();
 
         for (text, embedding) in texts.iter().zip(embeddings.iter()) {
-            store.insert_message_with_embedding("user", "text", text, embedding)?;
+            store.insert_message("user", "text", text, embedding)?;
         }
 
-        let hybrid = HybridSearch::new(&store, 1.0, 1.0);
+        let hybrid = HybridSearch::new(&store, 1.0, 1.0, 60.0);
 
         let query_embedding = model.embed(vec!["Rust编程"], None).unwrap();
         let results = hybrid.search("Rust编程", &query_embedding[0], 10, 5)?;
@@ -211,19 +212,19 @@ mod tests {
         use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 
         let mut model = TextEmbedding::try_new(
-            InitOptions::new(EmbeddingModel::BGESmallZHV15)
+            InitOptions::new(EmbeddingModel::BGEM3)
                 .with_cache_dir(std::env::temp_dir().join("fastembed_cache")),
         )
         .expect("Failed to create embedding model");
 
-        let dimension = 512;
-        let mut store = MemoryStore::new_with_path(dimension, temp_db_path())?;
+        let dimension = 1024;
+        let mut store = MemoryStore::new(temp_db_path(), dimension)?;
 
         let embedding = model.embed(vec!["测试消息"], None).unwrap();
-        store.insert_message_with_embedding("user", "text", "测试消息", &embedding[0])?;
+        store.insert_message("user", "text", "测试消息", &embedding[0])?;
 
-        let hybrid_bm25_heavy = HybridSearch::new(&store, 2.0, 0.5);
-        let hybrid_vector_heavy = HybridSearch::new(&store, 0.5, 2.0);
+        let hybrid_bm25_heavy = HybridSearch::new(&store, 2.0, 0.5, 60.0);
+        let hybrid_vector_heavy = HybridSearch::new(&store, 0.5, 2.0, 60.0);
 
         let results1 = hybrid_bm25_heavy.search("测试", &embedding[0], 10, 5)?;
         let results2 = hybrid_vector_heavy.search("测试", &embedding[0], 10, 5)?;
@@ -236,9 +237,9 @@ mod tests {
 
     #[test]
     fn test_reciprocal_rank_fusion() -> BabataResult<()> {
-        let dimension = 512;
-        let store = MemoryStore::new_with_path(dimension, temp_db_path())?;
-        let hybrid = HybridSearch::new(&store, 1.0, 1.0);
+        let dimension = 1024;
+        let store = MemoryStore::new(temp_db_path(), dimension)?;
+        let hybrid = HybridSearch::new(&store, 1.0, 1.0, 60.0);
 
         let bm25_results = vec![
             BM25Result {

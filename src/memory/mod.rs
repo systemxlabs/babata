@@ -6,13 +6,18 @@ pub use embedding::{Embedder, ProviderEmbedder};
 pub use search::{HybridSearch, MatchType, SearchResult};
 pub use store::MemoryStore;
 
-use crate::{BabataResult, config::Config, error::BabataError, message::Message};
+use crate::{
+    BabataResult,
+    config::Config,
+    error::BabataError,
+    message::{Content, Message},
+};
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::Mutex;
 
 #[derive(Clone)]
 pub struct Memory {
-    store: Arc<RwLock<MemoryStore>>,
+    store: Arc<Mutex<MemoryStore>>,
     embedder: Arc<dyn Embedder>,
     config: MemoryConfig,
 }
@@ -21,6 +26,7 @@ pub struct Memory {
 pub struct MemoryConfig {
     pub bm25_weight: f32,
     pub vector_weight: f32,
+    pub rrf_k: f32,
     pub top_k_candidates: usize,
     pub final_results: usize,
     pub max_retries: usize,
@@ -30,10 +36,11 @@ pub struct MemoryConfig {
 impl Default for MemoryConfig {
     fn default() -> Self {
         Self {
-            bm25_weight: 0.5,
-            vector_weight: 0.5,
-            top_k_candidates: 30,
-            final_results: 5,
+            bm25_weight: 0.6,
+            vector_weight: 0.4,
+            rrf_k: 60.0,
+            top_k_candidates: 40,
+            final_results: 10,
             max_retries: 3,
             retry_delay_ms: 100,
         }
@@ -43,10 +50,11 @@ impl Default for MemoryConfig {
 impl Memory {
     pub fn new(embedder: Arc<dyn Embedder>) -> BabataResult<Self> {
         let dimension = embedder.dimension();
-        let store = MemoryStore::new(dimension)?;
+        let db_path = MemoryStore::default_db_path()?;
+        let store = MemoryStore::new(db_path, dimension)?;
 
         Ok(Self {
-            store: Arc::new(RwLock::new(store)),
+            store: Arc::new(Mutex::new(store)),
             embedder,
             config: MemoryConfig::default(),
         })
@@ -66,16 +74,22 @@ impl Memory {
             Message::ToolResult { .. } => "tool_result",
         };
 
-        // Retry logic for indexing
+        // Generate embedding first (outside of lock)
         let mut last_error = None;
         for attempt in 0..self.config.max_retries {
-            match self.try_index_message(&role, message_type, &content).await {
-                Ok(_) => return Ok(()),
+            match self.embedder.embed(&content).await {
+                Ok(embedding) => {
+                    // Now acquire lock and insert
+                    let mut store = self.store.lock().await;
+                    return store
+                        .insert_message(&role, message_type, &content, &embedding)
+                        .map(|_| ());
+                }
                 Err(e) => {
                     last_error = Some(e);
                     if attempt < self.config.max_retries - 1 {
                         log::warn!(
-                            "Failed to index message (attempt {}/{}), retrying...",
+                            "Failed to generate embedding (attempt {}/{}), retrying...",
                             attempt + 1,
                             self.config.max_retries
                         );
@@ -88,31 +102,19 @@ impl Memory {
             }
         }
 
-        Err(last_error.unwrap_or_else(|| BabataError::memory("Unknown indexing error")))
-    }
-
-    async fn try_index_message(
-        &self,
-        role: &str,
-        message_type: &str,
-        content: &str,
-    ) -> BabataResult<()> {
-        // Generate embedding first (outside of lock)
-        let embedding = self.embedder.embed(content).await?;
-
-        // Use write lock for transaction
-        let mut store = self.store.write().await;
-        store
-            .insert_message_with_embedding(role, message_type, content, &embedding)
-            .map(|_| ())
+        Err(last_error.unwrap_or_else(|| BabataError::memory("Unknown embedding error")))
     }
 
     pub async fn search(&self, query: &str) -> BabataResult<Vec<SearchResult>> {
         let query_embedding = self.embedder.embed(query).await?;
 
-        let store = self.store.read().await;
-        let searcher =
-            HybridSearch::new(&store, self.config.bm25_weight, self.config.vector_weight);
+        let store = self.store.lock().await;
+        let searcher = HybridSearch::new(
+            &store,
+            self.config.bm25_weight,
+            self.config.vector_weight,
+            self.config.rrf_k,
+        );
 
         searcher.search(
             query,
@@ -146,8 +148,6 @@ impl Memory {
 }
 
 fn extract_text_from_message(message: &Message) -> String {
-    use crate::message::Content;
-
     match message {
         Message::UserPrompt { content } | Message::AssistantResponse { content, .. } => content
             .iter()
@@ -159,7 +159,7 @@ fn extract_text_from_message(message: &Message) -> String {
             .join("\n"),
         Message::ToolResult { result, .. } => {
             if result.len() > 1000 {
-                format!("{}...", &result[..1000])
+                result.chars().take(1000).collect::<String>() + "..."
             } else {
                 result.clone()
             }
