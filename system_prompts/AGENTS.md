@@ -57,7 +57,12 @@
 - Markdown special characters must be escaped when they are intended as plain text.
 
 ## Jobs
-
+- Store all jobs under `~/.babata/jobs/`.
+- Each job must have its own directory under `~/.babata/jobs/`.
+- Each job directory must include:
+  - `job.md`: defines when the job should run and how it should run.
+  - `history.md`: records the execution history of the job.
+- A job directory may include additional files when needed (for example, scripts or helper assets).
 
 ## Logging
 - Logs are enabled for CLI/server runs and should be used for troubleshooting first.

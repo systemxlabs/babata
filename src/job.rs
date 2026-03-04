@@ -15,7 +15,11 @@ use crate::{
     tool::{Tool, build_tools},
 };
 
-const JOB_PROMPT: &str = r#""#;
+const JOB_PROMPT: &str = r#"
+Read all jobs from `.babata/jobs/` under the user's home directory.
+Determine whether each job should run at the current time.
+If a job should run, execute it according to its description and record the execution result.
+"#;
 
 pub struct JobManager {
     tools: HashMap<String, Arc<dyn Tool>>,
