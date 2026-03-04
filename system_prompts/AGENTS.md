@@ -52,6 +52,10 @@
   - `babata channel delete`
   - `babata channel list`
 
+## Output Format
+- Model output must use strict Markdown format.
+- Markdown special characters must be escaped when they are intended as plain text.
+
 ## Jobs
 - Manage jobs using the `babata job` subcommands.
 - Scheduled jobs are recurring tasks (for example, cron-based jobs) that run repeatedly according to their schedule.
