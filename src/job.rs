@@ -20,6 +20,8 @@ Read all jobs from `.babata/jobs/` under the user's home directory.
 Determine whether each job should run at the current time.
 If a job should run, execute it according to its description and record the execution result.
 "#;
+const JOB_CHECK_INTERVAL: Duration = Duration::from_secs(30);
+const JOB_MANAGER_CHECK_INTERVAL: Duration = Duration::from_secs(10 * 60);
 
 pub struct JobManager {
     tools: HashMap<String, Arc<dyn Tool>>,
@@ -39,19 +41,21 @@ impl JobManager {
         let tools = self.tools.clone();
         tokio::spawn(async move {
             loop {
-                let mut guard = job_loop.lock().await;
-                let need_spawn = match guard.as_ref() {
-                    Some(handle) => handle.is_finished(),
-                    None => true,
-                };
+                {
+                    let mut guard = job_loop.lock().await;
+                    let need_spawn = match guard.as_ref() {
+                        Some(handle) => handle.is_finished(),
+                        None => true,
+                    };
 
-                if need_spawn {
-                    info!("Spawning new job loop");
-                    let new_handle = start_job_loop(tools.clone()).await;
-                    *guard = Some(new_handle);
+                    if need_spawn {
+                        info!("Spawning new job loop");
+                        let new_handle = start_job_loop(tools.clone()).await;
+                        *guard = Some(new_handle);
+                    }
                 }
 
-                tokio::time::sleep(Duration::from_secs(10 * 60)).await;
+                tokio::time::sleep(JOB_MANAGER_CHECK_INTERVAL).await;
             }
         });
     }
@@ -65,12 +69,18 @@ impl Default for JobManager {
 
 async fn start_job_loop(tools: HashMap<String, Arc<dyn Tool>>) -> JoinHandle<()> {
     tokio::spawn(async move {
-        info!("Start running job loop iteration");
+        info!("Start running job checker loop");
+        let mut interval = tokio::time::interval(JOB_CHECK_INTERVAL);
+
         loop {
-            if let Err(err) = run_job(tools.clone()).await {
-                error!("Job run failed: {}", err);
-            }
-            tokio::time::sleep(Duration::from_secs(60)).await;
+            interval.tick().await;
+
+            let tools = tools.clone();
+            tokio::spawn(async move {
+                if let Err(err) = run_job(tools).await {
+                    error!("Job run failed: {}", err);
+                };
+            });
         }
     })
 }
