@@ -13,6 +13,8 @@ pub enum ProviderConfig {
     Moonshot(MoonshotProviderConfig),
     #[serde(rename = "deepseek")]
     DeepSeek(DeepSeekProviderConfig),
+    #[serde(rename = "anthropic")]
+    Anthropic(AnthropicProviderConfig),
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -35,6 +37,11 @@ pub struct DeepSeekProviderConfig {
     pub api_key: String,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+pub struct AnthropicProviderConfig {
+    pub api_key: String,
+}
+
 impl ProviderConfig {
     pub fn validate(&self) -> BabataResult<()> {
         let api_key = self.api_key().trim();
@@ -52,6 +59,7 @@ impl ProviderConfig {
             ProviderConfig::Kimi(config) => &config.api_key,
             ProviderConfig::Moonshot(config) => &config.api_key,
             ProviderConfig::DeepSeek(config) => &config.api_key,
+            ProviderConfig::Anthropic(config) => &config.api_key,
         }
     }
 
@@ -61,6 +69,7 @@ impl ProviderConfig {
             ProviderConfig::Kimi(_) => "kimi",
             ProviderConfig::Moonshot(_) => "moonshot",
             ProviderConfig::DeepSeek(_) => "deepseek",
+            ProviderConfig::Anthropic(_) => "anthropic",
         }
     }
 
