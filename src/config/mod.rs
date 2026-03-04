@@ -1,9 +1,7 @@
 mod channel;
-mod job;
 mod provider;
 
 pub use channel::*;
-pub use job::*;
 pub use provider::*;
 
 use std::collections::HashSet;
@@ -25,8 +23,6 @@ pub struct Config {
     pub agents: Vec<AgentConfig>,
     #[serde(default)]
     pub channels: Vec<ChannelConfig>,
-    #[serde(default)]
-    pub jobs: Vec<JobConfig>,
 }
 
 impl Config {
@@ -43,7 +39,6 @@ impl Config {
                 providers: Vec::new(),
                 agents: Vec::new(),
                 channels: Vec::new(),
-                jobs: Vec::new(),
             })
         }
     }
@@ -147,23 +142,6 @@ impl Config {
             }
         }
 
-        let mut job_names = HashSet::new();
-        for job in &self.jobs {
-            job.validate()?;
-            if !self.agents.iter().any(|agent| agent.name == job.agent_name) {
-                return Err(BabataError::config(format!(
-                    "Job '{}' references unknown agent '{}'",
-                    job.name, job.agent_name
-                )));
-            }
-            if !job_names.insert(job.name.clone()) {
-                return Err(BabataError::config(format!(
-                    "Duplicate job name '{}' found in configuration",
-                    job.name
-                )));
-            }
-        }
-
         Ok(())
     }
 
@@ -192,19 +170,6 @@ impl Config {
         }
 
         self.channels.push(channel_config);
-    }
-
-    pub fn upsert_job(&mut self, job_config: JobConfig) {
-        if let Some(existing) = self
-            .jobs
-            .iter_mut()
-            .find(|existing| existing.name == job_config.name)
-        {
-            *existing = job_config;
-            return;
-        }
-
-        self.jobs.push(job_config);
     }
 
     pub fn upsert_agent(&mut self, agent_config: AgentConfig) {
@@ -247,7 +212,6 @@ mod tests {
                 model: "gpt-4.1".to_string(),
             }],
             channels: Vec::new(),
-            jobs: Vec::new(),
         };
 
         let json = serde_json::to_string(&config).expect("serialize config to json");
@@ -268,36 +232,8 @@ mod tests {
                 model: "test-model".to_string(),
             }],
             channels: Vec::new(),
-            jobs: Vec::new(),
         };
 
         config.validate().expect("provider URL no longer validated");
-    }
-
-    #[test]
-    fn validate_rejects_job_with_unknown_agent() {
-        let config = Config {
-            providers: vec![ProviderConfig::OpenAI(OpenAIProviderConfig {
-                api_key: "test-api-key".to_string(),
-            })],
-            agents: vec![AgentConfig {
-                name: "main".to_string(),
-                provider: "openai".to_string(),
-                model: "test-model".to_string(),
-            }],
-            channels: Vec::new(),
-            jobs: vec![JobConfig {
-                name: "daily-summary".to_string(),
-                agent_name: "non-existent-agent".to_string(),
-                enabled: true,
-                schedule: Schedule::Cron {
-                    expr: "0 9 * * *".to_string(),
-                },
-                description: "Daily summary job".to_string(),
-                prompt: "Summarize today's progress".to_string(),
-            }],
-        };
-
-        assert!(config.validate().is_err());
     }
 }

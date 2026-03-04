@@ -37,11 +37,6 @@ pub enum Command {
         #[command(subcommand)]
         action: ProviderAction,
     },
-    #[command(about = "Job management (add/delete/list/history)")]
-    Job {
-        #[command(subcommand)]
-        action: JobAction,
-    },
     #[command(about = "Interactive setup (provider/agent/channel/service)")]
     Onboard,
 }
@@ -125,35 +120,4 @@ pub enum AgentAction {
     },
     #[command(about = "List all agent configs (one JSON per line)")]
     List,
-}
-
-#[derive(Subcommand, Debug)]
-pub enum JobAction {
-    #[command(about = "Add or update job config (JSON)")]
-    Add {
-        #[arg(
-            value_name = "JOB_CONFIG_JSON",
-            help = "Job config JSON, e.g. {\"name\":\"daily\",\"agent_name\":\"main\",\"enabled\":true,\"schedule\":{\"kind\":\"cron\",\"expr\":\"0 9 * * *\"},\"description\":\"Daily summary\",\"prompt\":\"...\"}"
-        )]
-        job_config_json: String,
-    },
-    #[command(about = "Delete a job by name")]
-    Delete {
-        #[arg(value_name = "JOB_NAME", help = "Job name")]
-        name: String,
-    },
-    #[command(about = "List all job configs (one JSON per line)")]
-    List,
-    #[command(about = "Query job execution history from sqlite")]
-    History {
-        #[arg(long, value_name = "JOB_NAME", help = "Filter by job name (optional)")]
-        name: Option<String>,
-        #[arg(
-            long,
-            default_value_t = 20,
-            value_name = "LIMIT",
-            help = "Maximum number of history rows to return"
-        )]
-        limit: usize,
-    },
 }
