@@ -7,6 +7,7 @@ use crate::{
     channel::build_channels,
     config::{AgentConfig, Config, JobConfig, ProviderConfig},
     error::BabataError,
+    memory::Memory,
     message::{Content, Message},
     provider::create_provider,
     skill::load_skills,
@@ -90,7 +91,7 @@ impl JobRunner {
         info!("Job prompt: {}", job_config.prompt);
 
         let task = AgentTask::new(
-            vec![user_message],
+            vec![user_message.clone()],
             provider,
             agent_config.model.clone(),
             build_tools(),
@@ -107,6 +108,8 @@ impl JobRunner {
             );
             return Ok(response);
         }
+
+        self.persist_job_memory(&[user_message, response.clone()]);
 
         let channels = build_channels(&self.config)?;
         let mut send_failures = Vec::new();
@@ -127,6 +130,28 @@ impl JobRunner {
         }
 
         Ok(response)
+    }
+
+    fn persist_job_memory(&self, messages: &[Message]) {
+        let memory = match Memory::new() {
+            Ok(memory) => memory,
+            Err(err) => {
+                error!(
+                    "Failed to open memory store for job '{}'; skipping memory insert: {}",
+                    self.job_name, err
+                );
+                return;
+            }
+        };
+
+        if let Err(err) = memory.insert_messages(messages) {
+            error!(
+                "Failed to insert {} message(s) into memory for job '{}': {}",
+                messages.len(),
+                self.job_name,
+                err
+            );
+        }
     }
 
     fn require_job(&self) -> BabataResult<&JobConfig> {
