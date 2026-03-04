@@ -57,22 +57,7 @@
 - Markdown special characters must be escaped when they are intended as plain text.
 
 ## Jobs
-- Manage jobs using the `babata job` subcommands.
-- Scheduled jobs are recurring tasks (for example, cron-based jobs) that run repeatedly according to their schedule.
-- One-shot jobs are single-run tasks (for example, `at`-style jobs) that run once at a specified time and do not repeat.
-- A job's `prompt` is the task instruction for the model, describing what to do and what to output.
-- To verify whether a job prompt can run normally, execute the same prompt once with `babata "xxx"` (replace `xxx` with the actual job prompt) and check that the result matches expectations before scheduling it.
-- After a scheduled job runs, the final result of that run is automatically sent to all configured `channel`s.
-- On success, send the final output; on failure, send the final error message.
-- If you(babata) determines a job has no meaningful output and no need to notify user, the final response must be exactly `None` (case-sensitive).
-- In that case, output only `None` and nothing else: no prefix/suffix, no explanation, no punctuation, no markdown/code fence, no extra whitespace.
-- The model does not need to call tools to send messages during the task; `babata` automatically broadcasts the final result to all configured `channel`s.
-- Do not directly modify system schedulers (such as `crontab`, `launchd`, or `systemd timer`) as a replacement for `babata job`.
-- For adding, updating, deleting, or checking history, prefer:
-  - `babata job add`
-  - `babata job delete`
-  - `babata job list`
-  - `babata job history`
+
 
 ## Logging
 - Logs are enabled for CLI/server runs and should be used for troubleshooting first.

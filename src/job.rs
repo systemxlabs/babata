@@ -17,12 +17,12 @@ use crate::{
 
 const JOB_PROMPT: &str = r#""#;
 
-pub struct JobV2Manager {
+pub struct JobManager {
     tools: HashMap<String, Arc<dyn Tool>>,
     job_loop: Arc<Mutex<Option<JoinHandle<()>>>>,
 }
 
-impl JobV2Manager {
+impl JobManager {
     pub fn new() -> Self {
         Self {
             tools: build_tools(),
@@ -53,7 +53,7 @@ impl JobV2Manager {
     }
 }
 
-impl Default for JobV2Manager {
+impl Default for JobManager {
     fn default() -> Self {
         Self::new()
     }
