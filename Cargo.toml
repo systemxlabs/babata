@@ -20,6 +20,7 @@ tokio = { version = "1", features = ["full"] }
 chrono = { version = "0.4", features = ["serde"] }
 reqwest = { version = "0.12", features = ["json", "stream"] }
 teloxide = "0.13"
+telegram-markdown-v2 = "0.2"
 uuid = { version = "1.20", features = ["v4"] }
 shellexpand = "3.1"
 rusqlite = { version = "0.32", features = ["bundled"] }

@@ -2,6 +2,7 @@ use std::collections::HashSet;
 
 use log::warn;
 use reqwest::{Client, StatusCode};
+use telegram_markdown_v2::{UnsupportedTagsStrategy, convert_with_strategy};
 use teloxide::{
     Bot,
     payloads::{GetUpdatesSetters, SendMessageSetters},
@@ -111,9 +112,20 @@ impl TelegramChannel {
     }
 
     async fn send_text(&self, chat_id: i64, text: &str) -> BabataResult<()> {
+        let markdown_text = match convert_with_strategy(text, UnsupportedTagsStrategy::Escape) {
+            Ok(markdown) => markdown,
+            Err(err) => {
+                warn!(
+                    "Failed to convert message into Telegram MarkdownV2, sending raw text to markdown path: {}",
+                    err
+                );
+                text.to_string()
+            }
+        };
+
         let markdown_result = self
             .bot
-            .send_message(ChatId(chat_id), text.to_string())
+            .send_message(ChatId(chat_id), markdown_text)
             .parse_mode(ParseMode::MarkdownV2)
             .send()
             .await;
