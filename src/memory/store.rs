@@ -292,8 +292,8 @@ fn serialize_vector(vec: &[f32]) -> &[u8] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
     use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
+    use std::path::PathBuf;
     use std::sync::atomic::{AtomicU64, Ordering};
 
     fn temp_db_path() -> PathBuf {
