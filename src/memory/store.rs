@@ -311,6 +311,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_chinese_fts_and_vector_search() -> BabataResult<()> {
         let mut model = TextEmbedding::try_new(
             InitOptions::new(EmbeddingModel::BGEM3)

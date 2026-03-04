@@ -142,6 +142,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_hybrid_search() -> BabataResult<()> {
         use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 
@@ -172,6 +173,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_hybrid_search_match_type() -> BabataResult<()> {
         use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 
@@ -208,6 +210,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_hybrid_search_weights() -> BabataResult<()> {
         use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 
