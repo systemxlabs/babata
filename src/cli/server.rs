@@ -7,10 +7,10 @@ use std::{
 
 use log::{info, warn};
 
-use crate::job::start_job_scheduler;
 use crate::message::{Content, Message};
 use crate::utils::babata_dir;
 use crate::{BabataResult, agent::AgentLoop, config::Config, error::BabataError};
+use crate::{job::start_job_scheduler, jobv2::JobV2Manager};
 
 use super::Args;
 
@@ -90,6 +90,7 @@ fn run_serve(_args: &Args) -> BabataResult<()> {
 
     let config = Config::load()?;
     let agent_loop = AgentLoop::new(config.clone())?;
+    let jobv2_manager = JobV2Manager::new();
 
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -100,6 +101,7 @@ fn run_serve(_args: &Args) -> BabataResult<()> {
 
     runtime.block_on(async move {
         start_job_scheduler();
+        jobv2_manager.start();
         broadcast_service_started(&agent_loop.channels).await;
         agent_loop.run().await
     })?;

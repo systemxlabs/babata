@@ -223,6 +223,12 @@ impl Config {
     pub fn get_agent(&self, agent_name: &str) -> Option<&AgentConfig> {
         self.agents.iter().find(|agent| agent.name == agent_name)
     }
+
+    pub fn get_provider(&self, provider_name: &str) -> Option<&ProviderConfig> {
+        self.providers
+            .iter()
+            .find(|provider| provider.matches_name(provider_name))
+    }
 }
 
 #[cfg(test)]
