@@ -17,14 +17,13 @@ backon = "1.6"
 log = "0.4"
 logforth = { version = "0.29.1", features = ["starter-log"] }
 tokio = { version = "1", features = ["full"] }
-chrono = { version = "0.4", features = ["serde"] }
+chrono = "0.4"
 reqwest = { version = "0.12", features = ["json", "stream"] }
 teloxide = "0.13"
 telegram-markdown-v2 = "0.2"
 uuid = { version = "1.20", features = ["v4"] }
 shellexpand = "3.1"
 rusqlite = { version = "0.32", features = ["bundled"] }
-croner = { version = "2.2", features = ["serde"] }
 rust-embed = { version = "8", features = ["include-flate", "include-exclude", "interpolate-folder-path"] }
 
 [target.'cfg(windows)'.dependencies]
