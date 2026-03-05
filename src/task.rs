@@ -58,8 +58,7 @@ impl AgentTask {
 
         let mut messages = self.messages.clone();
         let tool_specs = self.collect_tool_specs();
-        let system_prompt =
-            build_system_prompt(&self.config, &self.system_prompt_files, &self.skills);
+        let system_prompt = build_system_prompt(&self.system_prompt_files, &self.skills)?;
 
         for _ in 0..self.max_steps {
             let message = self
@@ -249,7 +248,6 @@ mod tests {
             Vec::new(),
             Vec::new(),
             Config {
-                user_home: "C:/Users/test".to_string(),
                 providers: Vec::new(),
                 agents: Vec::new(),
                 channels: Vec::new(),
