@@ -27,8 +27,8 @@ pub fn build_system_prompt(
 - User time zone: {}
 - Operating system: {}
 - CPU architecture: {}"#,
-        config.home_dir,
-        format!("{}/.babata/", config.home_dir),
+        config.user_home,
+        format!("{}/.babata/", config.user_home),
         now.to_rfc3339(),
         now.format("%Z (%:z)"),
         std::env::consts::OS,

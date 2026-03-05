@@ -249,7 +249,7 @@ mod tests {
             Vec::new(),
             Vec::new(),
             Config {
-                home_dir: "C:/Users/test".to_string(),
+                user_home: "C:/Users/test".to_string(),
                 providers: Vec::new(),
                 agents: Vec::new(),
                 channels: Vec::new(),
