@@ -4,14 +4,14 @@ use crate::{
     BabataResult,
     channel::{Channel, TelegramChannel},
     config::{
-        AgentConfig, AnthropicProviderConfig, ChannelConfig, Config, DeepSeekProviderConfig,
-        KimiProviderConfig, MoonshotProviderConfig, OpenAIProviderConfig, ProviderConfig,
-        TelegramChannelConfig,
+        AgentConfig, AnthropicProviderConfig, ChannelConfig, CompatibleApi, Config,
+        CustomProviderConfig, DeepSeekProviderConfig, KimiProviderConfig, MoonshotProviderConfig,
+        OpenAIProviderConfig, ProviderConfig, TelegramChannelConfig,
     },
     error::BabataError,
     provider::{
-        AnthropicProvider, DeepSeekProvider, KimiProvider, Model, MoonshotProvider, OpenAIProvider,
-        Provider,
+        AnthropicProvider, CustomProvider, DeepSeekProvider, KimiProvider, Model, MoonshotProvider,
+        OpenAIProvider, Provider,
     },
 };
 
@@ -222,6 +222,17 @@ fn prompt_provider_setup() -> BabataResult<Option<ProviderConfig>> {
         return Err(BabataError::config("Invalid provider selection"));
     };
 
+    if provider_name.eq_ignore_ascii_case(CustomProvider::name()) {
+        let compatible_api = prompt_custom_compatible_api()?;
+        let base_url = prompt_line("Base URL")?;
+        let api_key = prompt_line("API key")?;
+        return Ok(Some(ProviderConfig::Custom(CustomProviderConfig {
+            api_key,
+            base_url,
+            compatible_api,
+        })));
+    }
+
     let api_key = prompt_line("API key")?;
     Ok(Some(build_provider_config(provider_name, api_key)?))
 }
@@ -233,7 +244,23 @@ fn available_provider_names() -> Vec<String> {
         MoonshotProvider::name().to_string(),
         DeepSeekProvider::name().to_string(),
         AnthropicProvider::name().to_string(),
+        CustomProvider::name().to_string(),
     ]
+}
+
+fn prompt_custom_compatible_api() -> BabataResult<CompatibleApi> {
+    let value = prompt_line("Compatible API (openai/anthropic)")?;
+    if value.eq_ignore_ascii_case("openai") {
+        return Ok(CompatibleApi::Openai);
+    }
+
+    if value.eq_ignore_ascii_case("anthropic") {
+        return Ok(CompatibleApi::Anthropic);
+    }
+
+    Err(BabataError::config(
+        "Invalid compatible API, expected 'openai' or 'anthropic'",
+    ))
 }
 
 fn prompt_main_agent_setup(config: &Config) -> BabataResult<Option<AgentConfig>> {
@@ -287,7 +314,11 @@ fn prompt_main_agent_setup(config: &Config) -> BabataResult<Option<AgentConfig>>
 fn prompt_model_setup(provider_config: &ProviderConfig) -> BabataResult<String> {
     let supported_models = supported_models_for_provider(provider_config);
     if supported_models.is_empty() {
-        return Err(BabataError::config("Provider has no supported models"));
+        let model = prompt_line("Model name (free form)")?;
+        if model.trim().is_empty() {
+            return Err(BabataError::config("Model name cannot be empty"));
+        }
+        return Ok(model);
     }
 
     println!("Select model for main agent:");
@@ -319,6 +350,7 @@ fn supported_models_for_provider(provider_config: &ProviderConfig) -> &'static [
         ProviderConfig::Moonshot(_) => MoonshotProvider::supported_models(),
         ProviderConfig::DeepSeek(_) => DeepSeekProvider::supported_models(),
         ProviderConfig::Anthropic(_) => AnthropicProvider::supported_models(),
+        ProviderConfig::Custom(_) => CustomProvider::supported_models(),
     }
 }
 
