@@ -108,12 +108,13 @@ fn spawn_shell_command(
     let mut process = match std::env::consts::OS {
         "windows" => {
             let mut cmd = tokio::process::Command::new("powershell.exe");
+            let wrapped_command = build_windows_command(command);
             cmd.arg("-NoProfile")
                 .arg("-NonInteractive")
                 .arg("-ExecutionPolicy")
                 .arg("Bypass")
                 .arg("-Command")
-                .arg(command);
+                .arg(wrapped_command);
             cmd
         }
         _ => {
@@ -124,4 +125,28 @@ fn spawn_shell_command(
     };
 
     process.output()
+}
+
+fn build_windows_command(command: &str) -> String {
+    let utf8_session_setup = r#"$utf8NoBom = [System.Text.UTF8Encoding]::new($false);
+$OutputEncoding = $utf8NoBom;
+[Console]::InputEncoding = $utf8NoBom;
+[Console]::OutputEncoding = $utf8NoBom;
+$PSDefaultParameterValues['Out-File:Encoding'] = 'utf8';
+$PSDefaultParameterValues['Set-Content:Encoding'] = 'utf8';
+$PSDefaultParameterValues['Add-Content:Encoding'] = 'utf8';"#;
+    format!("{utf8_session_setup}\n{command}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build_windows_command;
+
+    #[test]
+    fn build_windows_command_includes_utf8_setup_and_original_command() {
+        let wrapped = build_windows_command("Write-Output 'hello'");
+        assert!(wrapped.contains("$OutputEncoding"));
+        assert!(wrapped.contains("Set-Content:Encoding"));
+        assert!(wrapped.contains("Write-Output 'hello'"));
+    }
 }

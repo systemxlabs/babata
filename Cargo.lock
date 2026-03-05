@@ -146,7 +146,6 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "clap",
- "croner",
  "log",
  "logforth",
  "reqwest 0.12.28",
@@ -256,7 +255,6 @@ dependencies = [
  "iana-time-zone",
  "js-sys",
  "num-traits",
- "serde",
  "wasm-bindgen",
  "windows-link",
 ]
@@ -363,16 +361,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9481c1c90cbf2ac953f07c8d4a58aa3945c425b7185c9154d67a65e4230da511"
 dependencies = [
  "cfg-if",
-]
-
-[[package]]
-name = "croner"
-version = "2.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c344b0690c1ad1c7176fe18eb173e0c927008fdaaa256e40dfd43ddd149c0843"
-dependencies = [
- "chrono",
- "serde",
 ]
 
 [[package]]
