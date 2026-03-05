@@ -5,6 +5,7 @@ use log::{info, warn};
 
 use crate::{
     BabataResult,
+    config::Config,
     error::BabataError,
     message::Message,
     provider::{GenerationReqest, Provider},
@@ -20,6 +21,7 @@ pub struct AgentTask {
     pub tools: HashMap<String, Arc<dyn Tool>>,
     pub system_prompt_files: Vec<SystemPromptFile>,
     pub skills: Vec<Skill>,
+    pub config: Config,
     pub max_steps: usize,
 }
 
@@ -35,6 +37,7 @@ impl AgentTask {
         tools: HashMap<String, Arc<dyn Tool>>,
         system_prompt_files: Vec<SystemPromptFile>,
         skills: Vec<Skill>,
+        config: Config,
     ) -> Self {
         AgentTask {
             messages,
@@ -43,6 +46,7 @@ impl AgentTask {
             tools,
             system_prompt_files,
             skills,
+            config,
             max_steps: 100,
         }
     }
@@ -54,7 +58,8 @@ impl AgentTask {
 
         let mut messages = self.messages.clone();
         let tool_specs = self.collect_tool_specs();
-        let system_prompt = build_system_prompt(&self.system_prompt_files, &self.skills);
+        let system_prompt =
+            build_system_prompt(&self.config, &self.system_prompt_files, &self.skills);
 
         for _ in 0..self.max_steps {
             let message = self
@@ -151,6 +156,7 @@ mod tests {
 
     use super::AgentTask;
     use crate::{
+        config::Config,
         error::BabataError,
         message::{Content, Message},
         provider::{
@@ -242,6 +248,12 @@ mod tests {
             HashMap::new(),
             Vec::new(),
             Vec::new(),
+            Config {
+                home_dir: "C:/Users/test".to_string(),
+                providers: Vec::new(),
+                agents: Vec::new(),
+                channels: Vec::new(),
+            },
         )
     }
 

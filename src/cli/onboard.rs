@@ -13,6 +13,7 @@ use crate::{
         AnthropicProvider, CustomProvider, DeepSeekProvider, KimiProvider, Model, MoonshotProvider,
         OpenAIProvider, Provider,
     },
+    utils::resolve_home_dir,
 };
 
 use super::Args;
@@ -49,6 +50,8 @@ fn run_onboard() -> BabataResult<()> {
     ensure_default_directories()?;
 
     let mut config = Config::load_or_init()?;
+
+    config.home_dir = prompt_home_dir_setup(&config.home_dir)?;
 
     if let Some(provider_config) = prompt_provider_setup()? {
         config.upsert_provider(provider_config);
@@ -194,6 +197,27 @@ fn overwrite_embedded_file(path: &Path, content: &str, kind: &str) -> BabataResu
     })?;
     println!("Overwrote default {} {}", kind, path.display());
     Ok(())
+}
+
+fn prompt_home_dir_setup(existing_home_dir: &str) -> BabataResult<String> {
+    let default_home_dir = if existing_home_dir.is_empty() {
+        resolve_home_dir()?.to_string_lossy().to_string()
+    } else {
+        existing_home_dir.to_string()
+    };
+    let home_dir = prompt_line(&format!(
+        "User home directory (press Enter to use default {default_home_dir})"
+    ))?;
+
+    if home_dir.is_empty() {
+        return Ok(default_home_dir);
+    }
+
+    if home_dir.trim().is_empty() {
+        return Err(BabataError::config("Invalid home directory"));
+    }
+
+    Ok(home_dir)
 }
 
 fn prompt_provider_setup() -> BabataResult<Option<ProviderConfig>> {

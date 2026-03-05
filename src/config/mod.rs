@@ -19,6 +19,7 @@ pub struct AgentConfig {
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct Config {
+    pub home_dir: String,
     pub providers: Vec<ProviderConfig>,
     pub agents: Vec<AgentConfig>,
     #[serde(default)]
@@ -36,6 +37,7 @@ impl Config {
             Self::load()
         } else {
             Ok(Self {
+                home_dir: String::new(),
                 providers: Vec::new(),
                 agents: Vec::new(),
                 channels: Vec::new(),
@@ -90,6 +92,10 @@ impl Config {
     }
 
     pub fn validate(&self) -> BabataResult<()> {
+        if self.home_dir.is_empty() {
+            return Err(BabataError::config("Home directory cannot be empty"));
+        }
+
         let mut provider_names = HashSet::new();
         for provider in &self.providers {
             provider.validate()?;
@@ -203,6 +209,7 @@ mod tests {
     #[test]
     fn config_json_roundtrip() {
         let config = Config {
+            home_dir: "C:/Users/test".to_string(),
             providers: vec![ProviderConfig::OpenAI(OpenAIProviderConfig {
                 api_key: "test-api-key".to_string(),
             })],
@@ -223,6 +230,7 @@ mod tests {
     #[test]
     fn validate_rejects_invalid_provider_url() {
         let config = Config {
+            home_dir: "C:/Users/test".to_string(),
             providers: vec![ProviderConfig::OpenAI(OpenAIProviderConfig {
                 api_key: "test-api-key".to_string(),
             })],
