@@ -20,7 +20,7 @@ Read all jobs from `.babata/jobs/` under the user's home directory.
 Determine whether each job should run at the current time.
 If a job should run, execute it according to its description and record the execution result.
 "#;
-const JOB_CHECK_INTERVAL: Duration = Duration::from_secs(30);
+const JOB_CHECK_INTERVAL: Duration = Duration::from_secs(45);
 const JOB_MANAGER_CHECK_INTERVAL: Duration = Duration::from_secs(10 * 60);
 
 pub struct JobManager {

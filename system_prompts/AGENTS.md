@@ -61,7 +61,10 @@
 - Each job must have its own directory under `~/.babata/jobs/`.
 - Each job directory must include:
   - `job.md`: defines when the job should run and how it should run.
-  - `history.md`: records the execution history of the job.
+  - history file(s) that record execution history.
+- Split history files by day or by month based on the job's execution frequency.
+  - Daily split example: `history-20260305.md`
+  - Monthly split example: `history-202603.md`
 - A job directory may include additional files when needed (for example, scripts or helper assets).
 - Record execution history only when a job is actually executed. If a job is checked but not executed, do not append history.
 
