@@ -63,6 +63,7 @@
   - `job.md`: defines when the job should run and how it should run.
   - `history.md`: records the execution history of the job.
 - A job directory may include additional files when needed (for example, scripts or helper assets).
+- Record execution history only when a job is actually executed. If a job is checked but not executed, do not append history.
 
 ## Logging
 - Logs are enabled for CLI/server runs and should be used for troubleshooting first.
