@@ -10,8 +10,8 @@ use crate::{
     },
     error::BabataError,
     provider::{
-        AnthropicProvider, DeepSeekProvider, KimiProvider, Model, MoonshotProvider,
-        OpenAIProvider, Provider,
+        AnthropicProvider, DeepSeekProvider, KimiProvider, Model, MoonshotProvider, OpenAIProvider,
+        Provider,
     },
 };
 
@@ -340,7 +340,9 @@ fn build_provider_config(provider_name: &str, api_key: String) -> BabataResult<P
     }
 
     if provider_name.eq_ignore_ascii_case(AnthropicProvider::name()) {
-        return Ok(ProviderConfig::Anthropic(AnthropicProviderConfig { api_key }));
+        return Ok(ProviderConfig::Anthropic(AnthropicProviderConfig {
+            api_key,
+        }));
     }
 
     Err(BabataError::config(format!(

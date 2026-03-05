@@ -12,7 +12,7 @@ use crate::{
 };
 
 const ANTHROPIC_API_VERSION: &str = "2023-06-01";
-const DEFAULT_MAX_TOKENS: u32 = 4096;
+const DEFAULT_MAX_TOKENS: u32 = 8192;
 
 #[derive(Debug)]
 pub struct AnthropicCompatibleProvider {
@@ -44,11 +44,17 @@ impl AnthropicCompatibleProvider {
     fn format_content_block(&self, content: &Content) -> BabataResult<AnthropicContentBlock> {
         match content {
             Content::Text { text } => Ok(AnthropicContentBlock::Text { text: text.clone() }),
-            Content::ImageUrl { url } => Ok(AnthropicContentBlock::Image {
-                source: AnthropicImageSource::Url { url: url.clone() },
-            }),
+            Content::ImageUrl { .. } => {
+                warn!(
+                    "Anthropic-compatible API does not support image URL source, only base64 - skipping image content"
+                );
+                Err(BabataError::provider(
+                    "Anthropic-compatible API does not support image URL source, only base64",
+                ))
+            }
             Content::ImageData { data, media_type } => Ok(AnthropicContentBlock::Image {
-                source: AnthropicImageSource::Base64 {
+                source: AnthropicImageSource {
+                    source_type: "base64".to_string(),
                     media_type: media_type.as_mime_str(),
                     data: data.clone(),
                 },
@@ -65,25 +71,22 @@ impl AnthropicCompatibleProvider {
     }
 
     fn format_messages(&self, messages: &[Message]) -> BabataResult<Vec<AnthropicMessage>> {
-        let mut request_messages = Vec::with_capacity(messages.len());
+        let mut request_messages: Vec<AnthropicMessage> = Vec::with_capacity(messages.len());
 
         for message in messages {
-            match message {
+            let (role, blocks) = match message {
                 Message::UserPrompt { content } => {
                     let mut blocks = Vec::new();
                     for part in content {
                         match self.format_content_block(part) {
                             Ok(block) => blocks.push(block),
-                            Err(_) => continue, // Skip unsupported content types
+                            Err(e) => {
+                                warn!("Skipping unsupported content in user message: {e}");
+                                continue;
+                            }
                         }
                     }
-
-                    if !blocks.is_empty() {
-                        request_messages.push(AnthropicMessage {
-                            role: "user".to_string(),
-                            content: blocks,
-                        });
-                    }
+                    ("user", blocks)
                 }
                 Message::AssistantToolCalls {
                     calls,
@@ -101,11 +104,7 @@ impl AnthropicCompatibleProvider {
                             }
                         })
                         .collect();
-
-                    request_messages.push(AnthropicMessage {
-                        role: "assistant".to_string(),
-                        content: blocks,
-                    });
+                    ("assistant", blocks)
                 }
                 Message::AssistantResponse {
                     content,
@@ -115,27 +114,39 @@ impl AnthropicCompatibleProvider {
                     for part in content {
                         match self.format_content_block(part) {
                             Ok(block) => blocks.push(block),
-                            Err(_) => continue,
+                            Err(e) => {
+                                warn!("Skipping unsupported content in assistant message: {e}");
+                                continue;
+                            }
                         }
                     }
+                    ("assistant", blocks)
+                }
+                Message::ToolResult { call, result } => (
+                    "user",
+                    vec![AnthropicContentBlock::ToolResult {
+                        tool_use_id: call.call_id.clone(),
+                        content: result.clone(),
+                    }],
+                ),
+            };
 
-                    if !blocks.is_empty() {
-                        request_messages.push(AnthropicMessage {
-                            role: "assistant".to_string(),
-                            content: blocks,
-                        });
-                    }
-                }
-                Message::ToolResult { call, result } => {
-                    request_messages.push(AnthropicMessage {
-                        role: "user".to_string(),
-                        content: vec![AnthropicContentBlock::ToolResult {
-                            tool_use_id: call.call_id.clone(),
-                            content: result.clone(),
-                        }],
-                    });
-                }
+            if blocks.is_empty() {
+                continue;
             }
+
+            // Merge consecutive messages with the same role
+            if let Some(last) = request_messages.last_mut()
+                && last.role == role
+            {
+                last.content.extend(blocks);
+                continue;
+            }
+
+            request_messages.push(AnthropicMessage {
+                role: role.to_string(),
+                content: blocks,
+            });
         }
 
         Ok(request_messages)
@@ -223,10 +234,22 @@ impl AnthropicCompatibleProvider {
         }
 
         if !tool_calls.is_empty() {
+            let reasoning_content = if text_content.is_empty() {
+                None
+            } else {
+                let texts: Vec<String> = text_content
+                    .into_iter()
+                    .filter_map(|c| match c {
+                        Content::Text { text } => Some(text),
+                        _ => None,
+                    })
+                    .collect();
+                Some(texts.join("\n"))
+            };
             return Ok(GenerationResponse {
                 message: Message::AssistantToolCalls {
                     calls: tool_calls,
-                    reasoning_content: None,
+                    reasoning_content,
                 },
             });
         }
@@ -291,10 +314,11 @@ enum AnthropicContentBlock {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-enum AnthropicImageSource {
-    Url { url: String },
-    Base64 { media_type: String, data: String },
+struct AnthropicImageSource {
+    #[serde(rename = "type")]
+    source_type: String,
+    media_type: String,
+    data: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -326,7 +350,7 @@ mod tests {
 
     #[tokio::test]
     #[ignore]
-    async fn integration_test_generate_simple_text() {
+    async fn test_generate_simple_text() {
         let base_url = std::env::var("ANTHROPIC_BASE_URL")
             .expect("ANTHROPIC_BASE_URL environment variable not set");
         let api_key = std::env::var("ANTHROPIC_API_KEY")
@@ -366,7 +390,7 @@ mod tests {
 
     #[tokio::test]
     #[ignore]
-    async fn integration_test_generate_with_tools() {
+    async fn test_generate_with_tools() {
         let base_url = std::env::var("ANTHROPIC_BASE_URL")
             .expect("ANTHROPIC_BASE_URL environment variable not set");
         let api_key = std::env::var("ANTHROPIC_API_KEY")
@@ -405,23 +429,13 @@ mod tests {
 
         let response = provider.generate(request).await.expect("generate failed");
 
-        // Extract tool calls
-        let tool_calls = match response.message {
+        // Extract tool call
+        let tool_call = match response.message {
             Message::AssistantToolCalls {
                 calls,
                 reasoning_content,
             } => {
                 assert!(!calls.is_empty());
-                println!("\n=== Tool Calls ===");
-                for (i, call) in calls.iter().enumerate() {
-                    println!("Call #{}: {}", i + 1, call.tool_name);
-                    println!("  ID: {}", call.call_id);
-                    println!("  Arguments: {}", call.args);
-                }
-                if let Some(reasoning) = &reasoning_content {
-                    println!("\n=== Reasoning Content ===");
-                    println!("{}", reasoning);
-                }
                 assert_eq!(calls[0].tool_name, "get_weather");
 
                 // Add assistant's tool calls to message history
@@ -429,30 +443,23 @@ mod tests {
                     calls: calls.clone(),
                     reasoning_content,
                 });
-                calls
+                calls[0].clone()
             }
             _ => panic!("Expected AssistantToolCalls"),
         };
 
-        // Simulate tool execution and add results
-        for call in tool_calls {
-            let mock_result = json!({
-                "location": "San Francisco",
-                "temperature": 18,
-                "condition": "Sunny",
-                "humidity": 65
-            })
-            .to_string();
-
-            println!("\n=== Tool Result ===");
-            println!("Tool: {}", call.tool_name);
-            println!("Result: {}", mock_result);
-
-            messages.push(Message::ToolResult {
-                call,
-                result: mock_result,
-            });
-        }
+        // Simulate tool execution and add result
+        let mock_result = json!({
+            "location": "San Francisco",
+            "temperature": 18,
+            "condition": "Sunny",
+            "humidity": 65
+        })
+        .to_string();
+        messages.push(Message::ToolResult {
+            call: tool_call,
+            result: mock_result,
+        });
 
         // Second request: get final response with tool results
         let request = crate::provider::GenerationReqest {
@@ -466,21 +473,15 @@ mod tests {
 
         // Get final text response
         match response.message {
-            Message::AssistantResponse {
-                content,
-                reasoning_content,
-            } => {
-                println!("\n=== Final Response ===");
-                for part in &content {
-                    if let Content::Text { text } = part {
-                        println!("{}", text);
-                    }
-                }
-                if let Some(reasoning) = reasoning_content {
-                    println!("\n=== Final Reasoning ===");
-                    println!("{}", reasoning);
-                }
+            Message::AssistantResponse { content, .. } => {
                 assert!(!content.is_empty());
+                match &content[0] {
+                    Content::Text { text } => {
+                        assert!(!text.is_empty());
+                        println!("Assistant: {}", text);
+                    }
+                    other => panic!("Expected Content::Text, got {:?}", other),
+                }
             }
             _ => panic!("Expected AssistantResponse with final answer"),
         }

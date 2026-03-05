@@ -7,11 +7,11 @@ mod openai;
 mod openai_compatible;
 
 pub use anthropic::*;
+pub(crate) use anthropic_compatible::*;
 pub use deepseek::*;
 pub use kimi::*;
 pub use moonshot::*;
 pub use openai::*;
-pub(crate) use anthropic_compatible::*;
 pub(crate) use openai_compatible::*;
 
 use std::{collections::HashMap, fmt::Debug, sync::Arc};
