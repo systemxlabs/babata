@@ -21,12 +21,14 @@ pub fn build_system_prompt(
     let now = Local::now();
     let runtime_context = format!(
         r#"Runtime context:
-- User home directory: {}
+- User home directory(USER_HOME): {}
+- Babata home directory(BABATA_HOME): {}
 - Current local time: {}
 - User time zone: {}
 - Operating system: {}
 - CPU architecture: {}"#,
         config.home_dir,
+        format!("{}/.babata/", config.home_dir),
         now.to_rfc3339(),
         now.format("%Z (%:z)"),
         std::env::consts::OS,
