@@ -15,6 +15,8 @@ pub enum ProviderConfig {
     DeepSeek(DeepSeekProviderConfig),
     #[serde(rename = "anthropic")]
     Anthropic(AnthropicProviderConfig),
+    #[serde(rename = "custom")]
+    Custom(CustomProviderConfig),
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -42,6 +44,20 @@ pub struct AnthropicProviderConfig {
     pub api_key: String,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+pub struct CustomProviderConfig {
+    pub api_key: String,
+    pub base_url: String,
+    pub compatible_api: CompatibleApi,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum CompatibleApi {
+    Openai,
+    Anthropic,
+}
+
 impl ProviderConfig {
     pub fn validate(&self) -> BabataResult<()> {
         let api_key = self.api_key().trim();
@@ -50,6 +66,16 @@ impl ProviderConfig {
                 "Provider api_key cannot be empty or whitespace",
             ));
         }
+
+        if let ProviderConfig::Custom(config) = self {
+            let base_url = config.base_url.trim();
+            if base_url.is_empty() {
+                return Err(BabataError::config(
+                    "Custom provider base_url cannot be empty or whitespace",
+                ));
+            }
+        }
+
         Ok(())
     }
 
@@ -60,6 +86,7 @@ impl ProviderConfig {
             ProviderConfig::Moonshot(config) => &config.api_key,
             ProviderConfig::DeepSeek(config) => &config.api_key,
             ProviderConfig::Anthropic(config) => &config.api_key,
+            ProviderConfig::Custom(config) => &config.api_key,
         }
     }
 
@@ -70,10 +97,50 @@ impl ProviderConfig {
             ProviderConfig::Moonshot(_) => "moonshot",
             ProviderConfig::DeepSeek(_) => "deepseek",
             ProviderConfig::Anthropic(_) => "anthropic",
+            ProviderConfig::Custom(_) => "custom",
         }
     }
 
     pub fn matches_name(&self, name: &str) -> bool {
         self.provider_name().eq_ignore_ascii_case(name)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_custom_provider_rejects_empty_base_url() {
+        let config = ProviderConfig::Custom(CustomProviderConfig {
+            api_key: "test-key".to_string(),
+            base_url: "   ".to_string(),
+            compatible_api: CompatibleApi::Openai,
+        });
+
+        let result = config.validate();
+        assert!(result.is_err());
+        let err = result.expect_err("expected base_url validation error");
+        assert!(err.to_string().contains("base_url"));
+    }
+
+    #[test]
+    fn parse_custom_provider_config_from_json() {
+        let payload = r#"{
+            "name": "custom",
+            "api_key": "test-key",
+            "base_url": "https://example.com/v1",
+            "compatible_api": "openai"
+        }"#;
+        let parsed: ProviderConfig = serde_json::from_str(payload).expect("parse provider json");
+
+        match parsed {
+            ProviderConfig::Custom(config) => {
+                assert_eq!(config.api_key, "test-key");
+                assert_eq!(config.base_url, "https://example.com/v1");
+                assert_eq!(config.compatible_api, CompatibleApi::Openai);
+            }
+            _ => panic!("expected ProviderConfig::Custom"),
+        }
     }
 }
