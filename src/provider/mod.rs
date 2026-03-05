@@ -1,9 +1,13 @@
+mod anthropic;
+mod anthropic_compatible;
 mod deepseek;
 mod kimi;
 mod moonshot;
 mod openai;
 mod openai_compatible;
 
+pub use anthropic::*;
+pub(crate) use anthropic_compatible::*;
 pub use deepseek::*;
 pub use kimi::*;
 pub use moonshot::*;
@@ -63,6 +67,7 @@ pub fn create_provider(provider_config: &ProviderConfig) -> BabataResult<Arc<dyn
         ProviderConfig::Kimi(config) => Ok(Arc::new(KimiProvider::new(&config.api_key))),
         ProviderConfig::Moonshot(config) => Ok(Arc::new(MoonshotProvider::new(&config.api_key))),
         ProviderConfig::DeepSeek(config) => Ok(Arc::new(DeepSeekProvider::new(&config.api_key))),
+        ProviderConfig::Anthropic(config) => Ok(Arc::new(AnthropicProvider::new(&config.api_key))),
     }
 }
 
