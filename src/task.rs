@@ -54,7 +54,7 @@ impl AgentTask {
 
         let mut messages = self.messages.clone();
         let tool_specs = self.collect_tool_specs();
-        let system_prompt = build_system_prompt(&self.system_prompt_files, &self.skills);
+        let system_prompt = build_system_prompt(&self.system_prompt_files, &self.skills)?;
 
         for _ in 0..self.max_steps {
             let message = self

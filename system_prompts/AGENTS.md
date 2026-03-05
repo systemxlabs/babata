@@ -2,20 +2,34 @@
 
 > Note: This file is maintained by the user. **Do not edit or overwrite it on your own.** If changes are needed, ask for explicit user approval first.
 
+## Babata Home
+Babata home is stored under the user's home directory: `{USER_HOME}/.babata/`. We use `{BABATA_HOME}` as a placeholder for this path in prompts.
+
+```text
+{BABATA_HOME}
+├─ config.json
+├─ workspace/
+├─ system_prompts/
+├─ skills/
+├─ jobs/
+├─ logs/
+└─ source/
+```
+
 ## Workspace
-- The default workspace is `~/.babata/workspace`.
+- The default workspace is `{BABATA_HOME}/workspace`.
 - The workspace is used to store files or scripts created by the agent.
 - Organize workspace files in a clear tree structure (group by project/task and keep directories tidy).
 - When writing files, always specify the full absolute path. Do not use `~` or relative paths for target file paths.
 
 ## System Prompts
-- All Markdown files (`*.md`) under `~/.babata/system_prompts/` are loaded as system prompts.
-- The model may **create** new system prompt files as needed(`~/.babata/system_prompts/*.md`). Example: for user preferences, create a file like `~/.babata/system_prompts/USER.md` and maintain it as needed.
+- All Markdown files (`*.md`) under `{BABATA_HOME}/system_prompts/` are loaded as system prompts.
+- The model may **create** new system prompt files as needed(`{BABATA_HOME}/system_prompts/*.md`). Example: for user preferences, create a file like `{BABATA_HOME}/system_prompts/USER.md` and maintain it as needed.
 - New files should use clear names and include their purpose, avoiding overlap with existing files.
 
 ## Skills
-- Skills are loaded from `~/.babata/skills/<skill_name>/SKILL.md`.
-- The agent may create and maintain skills under `~/.babata/skills/` as needed.
+- Skills are loaded from `{BABATA_HOME}/skills/<skill_name>/SKILL.md`.
+- The agent may create and maintain skills under `{BABATA_HOME}/skills/` as needed.
 - Each `SKILL.md` should include YAML headers with at least `name` and `description`.
 - When a task clearly matches a skill's scope, follow that skill's workflow before using ad-hoc steps.
 - If multiple skills could apply, use the minimum set needed and apply them in a clear order.
@@ -25,7 +39,7 @@
 ## Providers
 - Manage providers using the `babata provider` subcommands.
 - Providers define which model backend and API credentials the agent uses.
-- Prefer CLI-based provider management instead of directly editing `~/.babata/config.json`.
+- Prefer CLI-based provider management instead of directly editing `{BABATA_HOME}/config.json`.
 - For adding, deleting, or listing providers, prefer:
   - `babata provider add`
   - `babata provider delete`
@@ -46,7 +60,7 @@
 - Manage channels using the `babata channel` subcommands.
 - Users communicate with the system through configured channels.
 - Channels are used to deliver final task/job results to external destinations (for example, Telegram).
-- Prefer CLI-based channel management instead of directly editing `~/.babata/config.json`.
+- Prefer CLI-based channel management instead of directly editing `{BABATA_HOME}/config.json`.
 - For adding, deleting, or listing channels, prefer:
   - `babata channel add`
   - `babata channel delete`
@@ -57,8 +71,8 @@
 - Markdown special characters must be escaped when they are intended as plain text.
 
 ## Jobs
-- Store all jobs under `~/.babata/jobs/`.
-- Each job must have its own directory under `~/.babata/jobs/`.
+- Store all jobs under `{BABATA_HOME}/jobs/`.
+- Each job must have its own directory under `{BABATA_HOME}/jobs/`.
 - Each job directory must include:
   - `job.md`: defines when the job should run and how it should run.
   - history file(s) that record execution history.
@@ -70,12 +84,12 @@
 
 ## Logging
 - Logs are enabled for CLI/server runs and should be used for troubleshooting first.
-- Default log output is files under `~/.babata/logs/`.
+- Default log output is files under `{BABATA_HOME}/logs/`.
 - Set `LOG_OUTPUT=stdio` to print logs to standard output; use `LOG_OUTPUT=file` (or leave unset) for file logs.
 - Log filtering uses environment settings with a default level of `debug`.
 - File logs rotate daily and keep minimal history (current behavior keeps one log file).
 
 ## Source
-- The agent source code is under `~/.babata/source/`.
+- The agent source code is under `{BABATA_HOME}/source/`.
 - The source code is read-only and serves as reference only.
 - The source directory includes all project files (src, Cargo.toml, etc.) excluding build artifacts.

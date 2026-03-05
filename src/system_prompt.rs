@@ -2,9 +2,17 @@ use std::path::{Path, PathBuf};
 
 use chrono::Local;
 
-use crate::{BabataResult, error::BabataError, skill::Skill, utils::babata_dir};
+use crate::{
+    BabataResult,
+    error::BabataError,
+    skill::Skill,
+    utils::{babata_dir, resolve_home_dir},
+};
 
-pub fn build_system_prompt(system_prompt_files: &[SystemPromptFile], skills: &[Skill]) -> String {
+pub fn build_system_prompt(
+    system_prompt_files: &[SystemPromptFile],
+    skills: &[Skill],
+) -> BabataResult<String> {
     let mut sections = Vec::new();
 
     for prompt_file in system_prompt_files {
@@ -16,7 +24,15 @@ pub fn build_system_prompt(system_prompt_files: &[SystemPromptFile], skills: &[S
 
     let now = Local::now();
     let runtime_context = format!(
-        "Runtime context:\n- Current local time: {}\n- User time zone: {}\n- Operating system: {}\n- CPU architecture: {}",
+        r#"Runtime context:
+- User home directory(USER_HOME): {}
+- Babata home directory(BABATA_HOME): {}
+- Current local time: {}
+- User time zone: {}
+- Operating system: {}
+- CPU architecture: {}"#,
+        resolve_home_dir()?.display(),
+        babata_dir()?.display(),
         now.to_rfc3339(),
         now.format("%Z (%:z)"),
         std::env::consts::OS,
@@ -38,7 +54,7 @@ pub fn build_system_prompt(system_prompt_files: &[SystemPromptFile], skills: &[S
         sections.push(format!("Available skills:\n{}", skill_summaries.join("\n")));
     }
 
-    sections.join("\n\n")
+    Ok(sections.join("\n\n"))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
