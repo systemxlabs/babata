@@ -68,6 +68,7 @@ impl AgentLoop {
                 self.tools.clone(),
                 self.system_prompt_files.clone(),
                 self.skills.clone(),
+                self.config.clone(),
             );
             let response = match task.run().await {
                 Ok(response) => response,

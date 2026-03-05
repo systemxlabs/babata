@@ -2,9 +2,13 @@ use std::path::{Path, PathBuf};
 
 use chrono::Local;
 
-use crate::{BabataResult, error::BabataError, skill::Skill, utils::babata_dir};
+use crate::{BabataResult, config::Config, error::BabataError, skill::Skill, utils::babata_dir};
 
-pub fn build_system_prompt(system_prompt_files: &[SystemPromptFile], skills: &[Skill]) -> String {
+pub fn build_system_prompt(
+    config: &Config,
+    system_prompt_files: &[SystemPromptFile],
+    skills: &[Skill],
+) -> String {
     let mut sections = Vec::new();
 
     for prompt_file in system_prompt_files {
@@ -16,7 +20,13 @@ pub fn build_system_prompt(system_prompt_files: &[SystemPromptFile], skills: &[S
 
     let now = Local::now();
     let runtime_context = format!(
-        "Runtime context:\n- Current local time: {}\n- User time zone: {}\n- Operating system: {}\n- CPU architecture: {}",
+        r#"Runtime context:
+- User home directory: {}
+- Current local time: {}
+- User time zone: {}
+- Operating system: {}
+- CPU architecture: {}"#,
+        config.home_dir,
         now.to_rfc3339(),
         now.format("%Z (%:z)"),
         std::env::consts::OS,

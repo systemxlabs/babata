@@ -64,6 +64,7 @@ fn run_prompt(args: &Args) -> BabataResult<()> {
         build_tools(),
         load_system_prompt_files()?,
         load_skills()?,
+        config.clone(),
     );
 
     let runtime = tokio::runtime::Builder::new_current_thread()
