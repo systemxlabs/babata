@@ -12,7 +12,6 @@ use crate::{
 pub fn build_system_prompt(
     system_prompt_files: &[SystemPromptFile],
     skills: &[Skill],
-    memory_context: Option<&str>,
 ) -> BabataResult<String> {
     let mut sections = Vec::new();
 
@@ -40,13 +39,6 @@ pub fn build_system_prompt(
         std::env::consts::ARCH
     );
     sections.push(runtime_context);
-
-    if let Some(context) = memory_context {
-        let context = context.trim();
-        if !context.is_empty() {
-            sections.push(context.to_string());
-        }
-    }
 
     let mut skill_summaries = Vec::new();
     for skill in skills {

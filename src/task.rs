@@ -6,8 +6,7 @@ use log::{info, warn};
 use crate::{
     BabataResult,
     error::BabataError,
-    memory::Memory,
-    message::{Content, Message},
+    message::Message,
     provider::{GenerationReqest, Provider},
     skill::Skill,
     system_prompt::{SystemPromptFile, build_system_prompt},
@@ -21,7 +20,6 @@ pub struct AgentTask {
     pub tools: HashMap<String, Arc<dyn Tool>>,
     pub system_prompt_files: Vec<SystemPromptFile>,
     pub skills: Vec<Skill>,
-    pub memory: Option<Memory>,
     pub max_steps: usize,
 }
 
@@ -37,7 +35,6 @@ impl AgentTask {
         tools: HashMap<String, Arc<dyn Tool>>,
         system_prompt_files: Vec<SystemPromptFile>,
         skills: Vec<Skill>,
-        memory: Option<Memory>,
     ) -> Self {
         AgentTask {
             messages,
@@ -46,7 +43,6 @@ impl AgentTask {
             tools,
             system_prompt_files,
             skills,
-            memory,
             max_steps: 100,
         }
     }
@@ -59,25 +55,7 @@ impl AgentTask {
         let mut messages = self.messages.clone();
         let tool_specs = self.collect_tool_specs();
 
-        // Retrieve memory context before first generation
-        let memory_context = if let Some(ref memory) = self.memory {
-            let query = extract_query_from_messages(&messages);
-            match memory.get_context_for_prompt(&query).await {
-                Ok(context) => Some(context),
-                Err(e) => {
-                    warn!("Failed to retrieve memory context: {}", e);
-                    None
-                }
-            }
-        } else {
-            None
-        };
-
-        let system_prompt = build_system_prompt(
-            &self.system_prompt_files,
-            &self.skills,
-            memory_context.as_deref(),
-        )?;
+        let system_prompt = build_system_prompt(&self.system_prompt_files, &self.skills)?;
 
         for _ in 0..self.max_steps {
             let message = self
@@ -160,32 +138,6 @@ impl AgentTask {
         specs.sort_by(|a, b| a.name.cmp(&b.name));
         specs
     }
-}
-
-fn extract_query_from_messages(messages: &[Message]) -> String {
-    for message in messages.iter().rev() {
-        if let Message::UserPrompt { content } = message {
-            let text: String = content
-                .iter()
-                .filter_map(|c| match c {
-                    Content::Text { text } => Some(text.as_str()),
-                    _ => None,
-                })
-                .collect::<Vec<_>>()
-                .join(" ");
-
-            if !text.is_empty() {
-                // Limit query length to avoid excessive search time
-                const MAX_QUERY_LENGTH: usize = 200;
-                if text.len() > MAX_QUERY_LENGTH {
-                    return text.chars().take(MAX_QUERY_LENGTH).collect();
-                }
-                return text;
-            }
-        }
-    }
-
-    String::new()
 }
 
 #[cfg(test)]
@@ -291,7 +243,6 @@ mod tests {
             HashMap::new(),
             Vec::new(),
             Vec::new(),
-            None, // No memory for tests
         )
     }
 

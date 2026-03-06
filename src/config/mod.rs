@@ -1,9 +1,9 @@
 mod channel;
-mod embedding;
+mod memory;
 mod provider;
 
 pub use channel::*;
-pub use embedding::*;
+pub use memory::*;
 pub use provider::*;
 
 use std::collections::HashSet;
@@ -26,7 +26,7 @@ pub struct Config {
     #[serde(default)]
     pub channels: Vec<ChannelConfig>,
     #[serde(default)]
-    pub embeddings: Vec<EmbeddingConfig>,
+    pub memory: MemoryConfig,
 }
 
 impl Config {
@@ -43,7 +43,7 @@ impl Config {
                 providers: Vec::new(),
                 agents: Vec::new(),
                 channels: Vec::new(),
-                embeddings: Vec::new(),
+                memory: MemoryConfig::default(),
             })
         }
     }
@@ -199,23 +199,6 @@ impl Config {
             .iter()
             .find(|provider| provider.matches_name(provider_name))
     }
-
-    pub fn get_embedding_config(&self) -> Option<&EmbeddingConfig> {
-        self.embeddings.first()
-    }
-
-    pub fn upsert_embedding(&mut self, embedding_config: EmbeddingConfig) {
-        if let Some(existing) = self
-            .embeddings
-            .iter_mut()
-            .find(|existing| existing.matches_name(embedding_config.embedding_name()))
-        {
-            *existing = embedding_config;
-            return;
-        }
-
-        self.embeddings.push(embedding_config);
-    }
 }
 
 #[cfg(test)]
@@ -234,7 +217,7 @@ mod tests {
                 model: "gpt-4.1".to_string(),
             }],
             channels: Vec::new(),
-            embeddings: Vec::new(),
+            memory: MemoryConfig::default(),
         };
 
         let json = serde_json::to_string(&config).expect("serialize config to json");
@@ -255,7 +238,7 @@ mod tests {
                 model: "test-model".to_string(),
             }],
             channels: Vec::new(),
-            embeddings: Vec::new(),
+            memory: MemoryConfig::default(),
         };
 
         config.validate().expect("provider URL no longer validated");

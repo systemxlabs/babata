@@ -138,7 +138,6 @@ async fn run_job(tools: HashMap<String, Arc<dyn Tool>>) -> BabataResult<()> {
         tools.clone(),
         load_system_prompt_files()?,
         load_skills()?,
-        None, // Jobs don't use memory for now
     );
 
     let now = Instant::now();
