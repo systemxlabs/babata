@@ -25,6 +25,8 @@ use crate::{
 const JOB_PROMPT: &str = r#"
 The job definitions are already loaded below from `{BABATA_HOME}/jobs/<job_name>/job.md`.
 For each loaded job, determine whether it should run at the current time.
+When checking schedule matching, only compare the minute of the current local time with the minute required by the job schedule.
+Example: if the current local time is `2026-03-06T17:15:22.838327+08:00`, a job with cron `0 * * * *` should not run, a job with cron `*/5 * * * *` should run.
 If a job should run, execute it according to the loaded job definition and record the execution result in history files.
 If a job has invalid configuration, missing files, or any other issue, skip that job and continue with others, DO NOT TRY to fix job.
 You MUST NOT create, modify, or delete any `job.md` file.
