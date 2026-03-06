@@ -7,7 +7,7 @@ use crate::{
     channel::{Channel, build_channels},
     config::{AgentConfig, Config},
     error::BabataError,
-    memory::Memory,
+    memory::{Memory, build_memory},
     message::{Content, Message},
     provider::{Provider, build_providers},
     skill::{Skill, load_skills},
@@ -30,7 +30,7 @@ impl AgentLoop {
     pub fn new(config: Config) -> BabataResult<Self> {
         let providers = build_providers(&config)?;
         let channels = build_channels(&config)?;
-        let memory = Memory::new()?;
+        let memory = build_memory(&config)?;
         let tools = build_tools();
         let system_prompt_files = load_system_prompt_files()?;
         let skills = load_skills()?;
@@ -59,15 +59,20 @@ impl AgentLoop {
             }
             info!("Channel messages: {:?}", pending_messages);
 
-            let context = self.memory.build_context(pending_messages.clone())?;
+            for msg in &pending_messages {
+                if let Err(err) = self.memory.index_message(msg).await {
+                    error!("Failed to index message: {}", err);
+                }
+            }
 
             let task = AgentTask::new(
-                context,
+                pending_messages,
                 Arc::clone(&provider),
                 agent_config.model.clone(),
                 self.tools.clone(),
                 self.system_prompt_files.clone(),
                 self.skills.clone(),
+                Some(self.memory.clone()),
             );
             let response = match task.run().await {
                 Ok(response) => response,
@@ -86,9 +91,9 @@ impl AgentLoop {
             };
             info!("Task run result message: {:?}", response);
 
-            let mut completed_messages = pending_messages;
-            completed_messages.push(response.clone());
-            self.memory.insert_messages(&completed_messages)?;
+            if let Err(err) = self.memory.index_message(&response).await {
+                error!("Failed to index response: {}", err);
+            }
 
             self.send_to_channels(&response).await?;
         }

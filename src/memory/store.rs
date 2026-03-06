@@ -1,27 +1,42 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-use rusqlite::{Connection, params};
-
+use crate::BabataResult;
+use crate::error::BabataError;
 use crate::utils::babata_dir;
-use crate::{BabataResult, error::BabataError, message::Message};
+use rusqlite::ffi::sqlite3_auto_extension;
+use rusqlite::{Connection, Result, params};
 
-pub struct MessageStore {
+pub struct MemoryStore {
     conn: Connection,
+    dimension: usize,
 }
 
-impl MessageStore {
-    pub fn new() -> BabataResult<Self> {
-        let db_path = Self::default_db_path()?;
-        Self::open(db_path)
+impl MemoryStore {
+    pub fn new(db_path: PathBuf, dimension: usize) -> BabataResult<Self> {
+        // Enable libsimple for Chinese FTS5
+        libsimple::enable_auto_extension()
+            .map_err(|e| BabataError::memory(format!("Failed to enable libsimple: {}", e)))?;
+
+        // Release jieba dictionary files
+        let jieba_dir = Self::jieba_dict_dir()?;
+        libsimple::release_jieba_dict(&jieba_dir)
+            .map_err(|e| BabataError::memory(format!("Failed to release jieba dict: {}", e)))?;
+
+        // Enable sqlite-vec for vector search
+        unsafe {
+            #[allow(clippy::missing_transmute_annotations)]
+            sqlite3_auto_extension(Some(std::mem::transmute(
+                sqlite_vec::sqlite3_vec_init as *const (),
+            )));
+        }
+
+        Self::init_schema(&db_path, dimension, &jieba_dir)
     }
 
-    fn default_db_path() -> BabataResult<PathBuf> {
+    pub fn default_db_path() -> BabataResult<PathBuf> {
         let dir = babata_dir()?;
-        Ok(dir.join("message.db"))
-    }
+        let path = dir.join("message.db");
 
-    fn open(path: impl AsRef<Path>) -> BabataResult<Self> {
-        let path = path.as_ref();
         let Some(parent) = path.parent() else {
             return Err(BabataError::memory(format!(
                 "Invalid sqlite path '{}'",
@@ -37,6 +52,25 @@ impl MessageStore {
             ))
         })?;
 
+        Ok(path)
+    }
+
+    fn jieba_dict_dir() -> BabataResult<PathBuf> {
+        let dir = babata_dir()?;
+        let path = dir.join("jieba_dict");
+
+        std::fs::create_dir_all(&path).map_err(|err| {
+            BabataError::memory(format!(
+                "Failed to create jieba dict directory '{}': {}",
+                path.display(),
+                err
+            ))
+        })?;
+
+        Ok(path)
+    }
+
+    fn init_schema(path: &PathBuf, dimension: usize, jieba_dir: &PathBuf) -> BabataResult<Self> {
         let conn = Connection::open(path).map_err(|err| {
             BabataError::memory(format!(
                 "Failed to open message db '{}': {}",
@@ -45,236 +79,289 @@ impl MessageStore {
             ))
         })?;
 
+        // Set jieba dictionary for this connection
+        libsimple::set_jieba_dict(&conn, jieba_dir)
+            .map_err(|e| BabataError::memory(format!("Failed to set jieba dict: {}", e)))?;
+
+        // Enable WAL mode for better concurrency and set synchronous to NORMAL
+        conn.execute_batch(
+            "PRAGMA journal_mode=WAL;
+            PRAGMA synchronous=NORMAL;
+            PRAGMA foreign_keys=ON;",
+        )
+        .map_err(|e| BabataError::memory(format!("Failed to set PRAGMA: {}", e)))?;
+
         conn.execute(
             "CREATE TABLE IF NOT EXISTS messages (
+                id INTEGER PRIMARY KEY,
                 role TEXT NOT NULL,
-                message TEXT NOT NULL,
-                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+                message_type TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at INTEGER NOT NULL
             )",
             [],
         )
-        .map_err(|err| {
-            BabataError::memory(format!("Failed to initialize messages table: {}", err))
-        })?;
+        .map_err(|e| BabataError::memory(format!("Failed to create messages table: {}", e)))?;
 
-        Ok(Self { conn })
+        conn.execute(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+                content='messages',
+                content_rowid='id',
+                content,
+                tokenize='simple'
+            )",
+            [],
+        )
+        .map_err(|e| BabataError::memory(format!("Failed to create FTS5 table: {}", e)))?;
+
+        // Dynamic vector table creation with configurable dimension
+        let vec_table_sql = format!(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS vec_messages USING vec0(
+                message_id INTEGER PRIMARY KEY,
+                embedding FLOAT[{}]
+            )",
+            dimension
+        );
+        conn.execute(&vec_table_sql, [])
+            .map_err(|e| BabataError::memory(format!("Failed to create vector table: {}", e)))?;
+
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_messages_created
+             ON messages(created_at)",
+            [],
+        )
+        .map_err(|e| BabataError::memory(format!("Failed to create index: {}", e)))?;
+
+        // Index for filtering by role and message_type
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_messages_role_type
+             ON messages(role, message_type)",
+            [],
+        )
+        .map_err(|e| BabataError::memory(format!("Failed to create index: {}", e)))?;
+
+        conn.execute(
+            "CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages
+             BEGIN
+                 INSERT INTO messages_fts(rowid, content)
+                 VALUES (new.id, new.content);
+             END",
+            [],
+        )
+        .map_err(|e| BabataError::memory(format!("Failed to create trigger: {}", e)))?;
+
+        Ok(Self { conn, dimension })
     }
 
-    pub fn insert_messages(&self, messages: &[Message]) -> BabataResult<()> {
-        if messages.is_empty() {
-            return Ok(());
+    pub fn insert_message(
+        &mut self,
+        role: &str,
+        message_type: &str,
+        content: &str,
+        embedding: &[f32],
+    ) -> BabataResult<i64> {
+        if embedding.len() != self.dimension {
+            return Err(BabataError::memory(format!(
+                "Embedding dimension mismatch: expected {}, got {}",
+                self.dimension,
+                embedding.len()
+            )));
         }
+
+        let tx = self
+            .conn
+            .transaction()
+            .map_err(|e| BabataError::memory(format!("Failed to begin transaction: {}", e)))?;
+
+        tx.execute(
+            "INSERT INTO messages (role, message_type, content, created_at)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![role, message_type, content, chrono::Utc::now().timestamp(),],
+        )
+        .map_err(|e| BabataError::memory(format!("Failed to insert message: {}", e)))?;
+
+        let message_id = tx.last_insert_rowid();
+
+        let blob = serialize_vector(embedding);
+        tx.execute(
+            "INSERT INTO vec_messages (message_id, embedding) VALUES (?1, ?2)",
+            params![message_id, blob],
+        )
+        .map_err(|e| BabataError::memory(format!("Failed to insert embedding: {}", e)))?;
+
+        tx.commit()
+            .map_err(|e| BabataError::memory(format!("Failed to commit transaction: {}", e)))?;
+
+        Ok(message_id)
+    }
+
+    pub fn bm25_search(&self, query: &str, limit: usize) -> BabataResult<Vec<BM25Result>> {
+        let sql = "SELECT
+                fts.rowid as message_id,
+                m.content,
+                bm25(messages_fts) as score,
+                snippet(messages_fts, 0, '<mark>', '</mark>', '...', 32) as snippet
+             FROM messages_fts fts
+             JOIN messages m ON fts.rowid = m.id
+             WHERE messages_fts MATCH jieba_query(?1)
+             ORDER BY score
+             LIMIT ?2";
 
         let mut stmt = self
             .conn
-            .prepare("INSERT INTO messages (role, message) VALUES (?1, ?2)")
-            .map_err(|err| {
-                BabataError::memory(format!(
-                    "Failed to prepare message insert statement: {}",
-                    err
-                ))
-            })?;
+            .prepare(sql)
+            .map_err(|e| BabataError::memory(format!("Failed to prepare BM25 query: {}", e)))?;
 
-        for message in messages {
-            let role = message.role().to_string();
-            let payload = serde_json::to_string(message).map_err(|err| {
-                BabataError::memory(format!(
-                    "Failed to serialize message payload into JSON: {}",
-                    err
-                ))
-            })?;
-            stmt.execute(params![role, payload]).map_err(|err| {
-                BabataError::memory(format!("Failed to insert message row: {}", err))
-            })?;
-        }
-
-        Ok(())
-    }
-
-    pub fn scan_messages(&self, limit: Option<usize>) -> BabataResult<Vec<Message>> {
-        if limit == Some(0) {
-            return Ok(Vec::new());
-        }
-
-        let (query, limit_param) = match limit {
-            Some(limit) => (
-                "SELECT role, message FROM (
-                    SELECT role, message, created_at, rowid
-                    FROM messages
-                    ORDER BY datetime(created_at) DESC, rowid DESC
-                    LIMIT ?1
-                )
-                ORDER BY datetime(created_at), rowid",
-                Some(limit.min(i64::MAX as usize) as i64),
-            ),
-            None => (
-                "SELECT role, message FROM messages ORDER BY datetime(created_at), rowid",
-                None,
-            ),
+        let mapper = |row: &rusqlite::Row| {
+            Ok(BM25Result {
+                message_id: row.get(0)?,
+                content: row.get(1)?,
+                score: row.get(2)?,
+                snippet: row.get(3)?,
+            })
         };
 
-        let mut stmt = self.conn.prepare(query).map_err(|err| {
-            BabataError::memory(format!("Failed to prepare message scan statement: {}", err))
-        })?;
+        let results = stmt
+            .query_map(params![query, limit], mapper)
+            .map_err(|e| BabataError::memory(format!("Failed to execute BM25 query: {}", e)))?;
 
-        let mut rows = match limit_param {
-            Some(limit) => stmt.query(params![limit]).map_err(|err| {
-                BabataError::memory(format!("Failed to query messages from sqlite: {}", err))
-            })?,
-            None => stmt.query([]).map_err(|err| {
-                BabataError::memory(format!("Failed to query messages from sqlite: {}", err))
-            })?,
+        results
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| BabataError::memory(format!("Failed to collect BM25 results: {}", e)))
+    }
+
+    pub fn vector_search(
+        &self,
+        query_embedding: &[f32],
+        k: usize,
+    ) -> BabataResult<Vec<VectorResult>> {
+        let query_blob = serialize_vector(query_embedding);
+
+        let sql = "SELECT
+                v.message_id,
+                m.content,
+                distance
+             FROM vec_messages v
+             JOIN messages m ON v.message_id = m.id
+             WHERE v.embedding MATCH ?1
+             AND k = ?2
+             ORDER BY distance";
+
+        let mut stmt = self
+            .conn
+            .prepare(sql)
+            .map_err(|e| BabataError::memory(format!("Failed to prepare vector query: {}", e)))?;
+
+        let mapper = |row: &rusqlite::Row| {
+            Ok(VectorResult {
+                message_id: row.get(0)?,
+                content: row.get(1)?,
+                distance: row.get(2)?,
+            })
         };
 
-        let mut messages = Vec::new();
-        while let Some(row) = rows.next().map_err(|err| {
-            BabataError::memory(format!("Failed to scan sqlite message row: {}", err))
-        })? {
-            let role: String = row.get(0).map_err(|err| {
-                BabataError::memory(format!("Failed to read message role from row: {}", err))
-            })?;
-            let payload: String = row.get(1).map_err(|err| {
-                BabataError::memory(format!("Failed to read message payload from row: {}", err))
-            })?;
+        let results = stmt
+            .query_map(params![query_blob, k], mapper)
+            .map_err(|e| BabataError::memory(format!("Failed to execute vector query: {}", e)))?;
 
-            let parsed: Message = serde_json::from_str(&payload).map_err(|err| {
-                BabataError::memory(format!(
-                    "Failed to parse message payload JSON '{}': {}",
-                    payload, err
-                ))
-            })?;
-            let expected = parsed.role().to_string();
-            if role != expected {
-                return Err(BabataError::memory(format!(
-                    "Corrupted message row: role '{}' does not match message payload role '{}'",
-                    role, expected
-                )));
-            }
-
-            messages.push(parsed);
-        }
-
-        Ok(messages)
+        results
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| BabataError::memory(format!("Failed to collect vector results: {}", e)))
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct BM25Result {
+    pub message_id: i64,
+    pub content: String,
+    pub score: f64,
+    pub snippet: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct VectorResult {
+    pub message_id: i64,
+    pub content: String,
+    pub distance: f32,
+}
+
+fn serialize_vector(vec: &[f32]) -> &[u8] {
+    bytemuck::cast_slice(vec)
 }
 
 #[cfg(test)]
 mod tests {
-    use uuid::Uuid;
-
-    use crate::message::{Content, MediaType, Message, ToolCall};
-
     use super::*;
+    use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU64, Ordering};
 
-    #[test]
-    fn insert_and_scan_messages_roundtrip() {
-        let db_path = std::env::temp_dir()
-            .join("babata-tests")
-            .join(format!("message-store-{}.db", Uuid::new_v4()));
-
-        let store = MessageStore::open(&db_path).expect("open sqlite message store");
-
-        let messages = vec![
-            Message::UserPrompt {
-                content: vec![Content::Text {
-                    text: "hello".to_string(),
-                }],
-            },
-            Message::AssistantToolCalls {
-                calls: vec![ToolCall {
-                    call_id: "call-1".to_string(),
-                    tool_name: "read_file".to_string(),
-                    args: r#"{"path": "README.md"}"#.to_string(),
-                }],
-                reasoning_content: None,
-            },
-            Message::ToolResult {
-                call: ToolCall {
-                    call_id: "call-1".to_string(),
-                    tool_name: "read_file".to_string(),
-                    args: r#"{ "path": "README.md" }"#.to_string(),
-                },
-                result: "file content".to_string(),
-            },
-            Message::AssistantResponse {
-                content: vec![
-                    Content::Text {
-                        text: "done".to_string(),
-                    },
-                    Content::ImageData {
-                        data: "iVBORw0KGgoAAAANSUhEUgAAAAUA".to_string(),
-                        media_type: MediaType::ImagePng,
-                    },
-                ],
-                reasoning_content: None,
-            },
-        ];
-
-        store
-            .insert_messages(&messages)
-            .expect("insert messages into sqlite");
-        let scanned = store
-            .scan_messages(None)
-            .expect("scan messages from sqlite");
-
-        assert_eq!(messages, scanned);
-
-        let _ = std::fs::remove_file(db_path);
+    fn temp_db_path() -> PathBuf {
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let id = COUNTER.fetch_add(1, Ordering::SeqCst);
+        std::env::temp_dir().join(format!(
+            "babata_test_{}_{}_{}.db",
+            std::process::id(),
+            id,
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ))
     }
 
     #[test]
-    fn scan_messages_with_limit_returns_latest_messages_in_order() {
-        let db_path = std::env::temp_dir()
-            .join("babata-tests")
-            .join(format!("message-store-{}.db", Uuid::new_v4()));
+    #[ignore]
+    fn test_chinese_fts_and_vector_search() -> BabataResult<()> {
+        let mut model = TextEmbedding::try_new(
+            InitOptions::new(EmbeddingModel::BGEM3)
+                .with_cache_dir(std::env::temp_dir().join("fastembed_cache")),
+        )
+        .expect("Failed to create embedding model");
 
-        let store = MessageStore::open(&db_path).expect("open sqlite message store");
-        let messages = vec![
-            Message::UserPrompt {
-                content: vec![Content::Text {
-                    text: "m1".to_string(),
-                }],
-            },
-            Message::UserPrompt {
-                content: vec![Content::Text {
-                    text: "m2".to_string(),
-                }],
-            },
-            Message::UserPrompt {
-                content: vec![Content::Text {
-                    text: "m3".to_string(),
-                }],
-            },
+        let dimension = 1024;
+        let mut store = MemoryStore::new(temp_db_path(), dimension)?;
+
+        let texts = [
+            "中华人民共和国国歌",
+            "周杰伦是一位著名歌手",
+            "今天天气很好",
+            "人工智能技术",
+            "机器学习算法",
+            "深度学习神经网络",
         ];
+        let embeddings = model.embed(texts, None).unwrap();
 
-        store
-            .insert_messages(&messages)
-            .expect("insert messages into sqlite");
+        for (text, embedding) in texts.iter().zip(embeddings.iter()) {
+            store.insert_message("user", "text", text, embedding)?;
+        }
 
-        let scanned = store
-            .scan_messages(Some(2))
-            .expect("scan limited messages from sqlite");
-        assert_eq!(scanned.len(), 2);
-        assert_eq!(scanned[0], messages[1]);
-        assert_eq!(scanned[1], messages[2]);
+        // Test Chinese FTS
+        let results = store.bm25_search("中华国歌", 10)?;
+        assert!(!results.is_empty(), "Should find results for '中华国歌'");
+        assert_eq!(results[0].content, "中华人民共和国国歌");
 
-        let scanned_empty = store
-            .scan_messages(Some(0))
-            .expect("scan zero messages from sqlite");
-        assert!(scanned_empty.is_empty());
+        let results = store.bm25_search("周杰伦", 10)?;
+        assert!(!results.is_empty(), "Should find results for '周杰伦'");
+        assert!(results[0].content.contains("周杰伦"));
 
-        let _ = std::fs::remove_file(db_path);
+        // Test vector search
+        let query_embedding = model.embed(vec!["人工智能"], None).unwrap();
+        let results = store.vector_search(&query_embedding[0], 3)?;
+
+        assert!(!results.is_empty(), "Should find vector search results");
+        assert_eq!(results[0].content, "人工智能技术");
+
+        Ok(())
     }
 
     #[test]
-    fn message_json_has_type_tag() {
-        let message = Message::UserPrompt {
-            content: vec![Content::Text {
-                text: "hello".to_string(),
-            }],
-        };
+    fn test_embedding_dimension_mismatch() {
+        let mut store = MemoryStore::new(temp_db_path(), 4).unwrap();
 
-        let payload = serde_json::to_value(&message).expect("serialize message into json");
-        assert_eq!(payload["type"], "user_prompt");
+        let wrong_embedding = [0.1, 0.2, 0.3];
+        let result = store.insert_message("user", "text", "test", &wrong_embedding);
+
+        assert!(result.is_err());
     }
 }
