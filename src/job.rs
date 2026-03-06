@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{collections::HashMap, sync::Arc, time::{Duration, Instant}};
 
 use chrono::Local;
 use log::{error, info};
@@ -17,13 +17,13 @@ use crate::{
 };
 
 const JOB_PROMPT: &str = r#"
-Read all `job.md` files from `{BABATA_HOME}/jobs/`.
+Read all `job.md` files from `{BABATA_HOME}/jobs/<job_name>/job.md`.
 Determine whether each job should run at the current time.
 If a job should run, execute it according to `job.md` and record the execution result in history files.
+If a job has invalid configuration, missing files, or any other issue, skip that job and continue with others, DO NOT TRY to fix job.
 You MUST NOT create, modify, or delete any `job.md` file.
 YOU MUST NOT create folder under `{BABATA_HOME}/jobs/`.
 You are ONLY allowed to create/write/edit/delete job history files.
-If a job has invalid configuration, missing files, or any other issue, skip that job and continue with others, DO NOT TRY to fix job.
 "#;
 const JOB_CHECK_INTERVAL: Duration = Duration::from_secs(30);
 const JOB_MANAGER_CHECK_INTERVAL: Duration = Duration::from_secs(10 * 60);
@@ -97,6 +97,7 @@ async fn start_job_loop(tools: HashMap<String, Arc<dyn Tool>>) -> JoinHandle<()>
 }
 
 async fn run_job(tools: HashMap<String, Arc<dyn Tool>>) -> BabataResult<()> {
+    info!("Starting to run job");
     let config = Config::load()?;
     let agent_config = config
         .get_agent("main")
@@ -122,7 +123,9 @@ async fn run_job(tools: HashMap<String, Arc<dyn Tool>>) -> BabataResult<()> {
         load_skills()?,
     );
 
+    let now = Instant::now();
     task.run().await?;
+    info!("Job run completed in {} seconds", now.elapsed().as_secs_f32());
 
     Ok(())
 }
