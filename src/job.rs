@@ -1,5 +1,6 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
+use chrono::Local;
 use log::{error, info};
 use tokio::{sync::Mutex, task::JoinHandle};
 
@@ -20,10 +21,11 @@ Read all `job.md` files from `{BABATA_HOME}/jobs/`.
 Determine whether each job should run at the current time.
 If a job should run, execute it according to `job.md` and record the execution result in history files.
 You MUST NOT create, modify, or delete any `job.md` file.
-You are ONLY allowed to create/write/edit/delete history files.
+YOU MUST NOT create folder under `{BABATA_HOME}/jobs/`.
+You are ONLY allowed to create/write/edit/delete job history files.
 If a job has invalid configuration, missing files, or any other issue, skip that job and continue with others, DO NOT TRY to fix job.
 "#;
-const JOB_CHECK_INTERVAL: Duration = Duration::from_secs(60);
+const JOB_CHECK_INTERVAL: Duration = Duration::from_secs(30);
 const JOB_MANAGER_CHECK_INTERVAL: Duration = Duration::from_secs(10 * 60);
 
 pub struct JobManager {
@@ -73,10 +75,16 @@ impl Default for JobManager {
 async fn start_job_loop(tools: HashMap<String, Arc<dyn Tool>>) -> JoinHandle<()> {
     tokio::spawn(async move {
         info!("Start running job checker loop");
-        let mut interval = tokio::time::interval(JOB_CHECK_INTERVAL);
+        
+        let mut last_run_minute = Local::now().timestamp() / 60;
 
         loop {
-            interval.tick().await;
+            let current_minute = Local::now().timestamp() / 60;
+            if current_minute == last_run_minute {
+                tokio::time::sleep(JOB_CHECK_INTERVAL).await;
+                continue;
+            }
+            last_run_minute = current_minute;
 
             let tools = tools.clone();
             tokio::spawn(async move {
