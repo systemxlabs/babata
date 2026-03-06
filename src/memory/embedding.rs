@@ -1,10 +1,14 @@
 use crate::BabataResult;
 use crate::error::BabataError;
+use crate::utils::babata_dir;
 use async_trait::async_trait;
+use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
+use std::{path::PathBuf, str::FromStr};
+use tokio::sync::Mutex;
 
 #[async_trait]
 pub trait Embedder: Send + Sync {
-    async fn embed(&self, text: &str) -> BabataResult<Vec<f32>>;
+    async fn embed(&self, texts: &[&str]) -> BabataResult<Vec<f32>>;
     fn dimension(&self) -> usize;
 }
 
@@ -40,14 +44,14 @@ impl ProviderEmbedder {
 
 #[async_trait]
 impl Embedder for ProviderEmbedder {
-    async fn embed(&self, text: &str) -> BabataResult<Vec<f32>> {
+    async fn embed(&self, texts: &[&str]) -> BabataResult<Vec<f32>> {
         let response = self
             .client
             .post(format!("{}/embeddings", self.base_url))
             .header("Authorization", format!("Bearer {}", self.api_key))
             .json(&serde_json::json!({
                 "model": self.model,
-                "input": text,
+                "input": texts,
             }))
             .send()
             .await
@@ -81,6 +85,56 @@ impl Embedder for ProviderEmbedder {
     }
 }
 
+pub struct LocalEmbedder {
+    model: Mutex<TextEmbedding>,
+    dimension: usize,
+}
+
+impl LocalEmbedder {
+    pub fn new(model_name: &str) -> BabataResult<Self> {
+        let cache_dir = babata_dir()?.join("models/embedding");
+        Self::new_with_cache_dir(model_name, cache_dir)
+    }
+
+    pub fn new_with_cache_dir(model_name: &str, cache_dir: PathBuf) -> BabataResult<Self> {
+        let model = EmbeddingModel::from_str(model_name).map_err(|e| {
+            BabataError::internal(format!("Invalid model name '{}': {}", model_name, e))
+        })?;
+        let dimension = TextEmbedding::get_model_info(&model).unwrap().dim;
+
+        let embedding_model = TextEmbedding::try_new(
+            InitOptions::new(model).with_cache_dir(cache_dir),
+        )
+        .map_err(|e| {
+            BabataError::internal(format!("Failed to initialize local embedding model: {}", e))
+        })?;
+
+        Ok(Self {
+            model: Mutex::new(embedding_model),
+            dimension,
+        })
+    }
+}
+
+#[async_trait]
+impl Embedder for LocalEmbedder {
+    async fn embed(&self, texts: &[&str]) -> BabataResult<Vec<f32>> {
+        let embeddings =
+            self.model.lock().await.embed(texts, None).map_err(|e| {
+                BabataError::internal(format!("Failed to generate embedding: {}", e))
+            })?;
+
+        embeddings
+            .into_iter()
+            .next()
+            .ok_or_else(|| BabataError::internal("No embedding returned"))
+    }
+
+    fn dimension(&self) -> usize {
+        self.dimension
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -97,7 +151,7 @@ mod tests {
         // Test basic English text
         let text_en = "Hello, world!";
         let embedding_en = embedder
-            .embed(text_en)
+            .embed(&[text_en])
             .await
             .expect("Failed to get embedding");
 
@@ -106,7 +160,7 @@ mod tests {
         // Test Chinese text
         let text_cn = "你好，世界！";
         let embedding_cn = embedder
-            .embed(text_cn)
+            .embed(&[text_cn])
             .await
             .expect("Failed to get Chinese embedding");
 
@@ -119,7 +173,7 @@ mod tests {
                          as long as it's within the model's token limit.";
 
         let embedding_long = embedder
-            .embed(text_long)
+            .embed(&[text_long])
             .await
             .expect("Failed to get long text embedding");
 
@@ -146,15 +200,15 @@ mod tests {
         let text3 = "The weather is nice today";
 
         let emb1 = embedder
-            .embed(text1)
+            .embed(&[text1])
             .await
             .expect("Failed to get embedding 1");
         let emb2 = embedder
-            .embed(text2)
+            .embed(&[text2])
             .await
             .expect("Failed to get embedding 2");
         let emb3 = embedder
-            .embed(text3)
+            .embed(&[text3])
             .await
             .expect("Failed to get embedding 3");
 
@@ -165,6 +219,58 @@ mod tests {
         println!("Similarity between different texts: {}", sim_13);
 
         // Similar texts should have higher similarity than different texts
+        assert!(
+            sim_12 > sim_13,
+            "Similar texts should have higher similarity. Got sim_12={}, sim_13={}",
+            sim_12,
+            sim_13
+        );
+    }
+
+    #[tokio::test]
+    async fn test_local_embedding() {
+        let embedder = LocalEmbedder::new("baai/bge-m3").expect("Failed to create local embedder");
+
+        let text = "Hello, world!";
+        let embedding = embedder
+            .embed(&[text])
+            .await
+            .expect("Failed to get embedding");
+
+        assert_eq!(embedding.len(), embedder.dimension());
+        assert!(
+            embedding.iter().any(|&x| x != 0.0),
+            "Embedding should not be all zeros"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_local_embedding_similarity() {
+        let embedder = LocalEmbedder::new("baai/bge-m3").expect("Failed to create local embedder");
+
+        let text1 = "The cat sits on the mat";
+        let text2 = "A cat is sitting on a mat";
+        let text3 = "The weather is nice today";
+
+        let emb1 = embedder
+            .embed(&[text1])
+            .await
+            .expect("Failed to get embedding 1");
+        let emb2 = embedder
+            .embed(&[text2])
+            .await
+            .expect("Failed to get embedding 2");
+        let emb3 = embedder
+            .embed(&[text3])
+            .await
+            .expect("Failed to get embedding 3");
+
+        let sim_12 = cosine_similarity(&emb1, &emb2);
+        let sim_13 = cosine_similarity(&emb1, &emb3);
+
+        println!("Similarity between similar texts: {}", sim_12);
+        println!("Similarity between different texts: {}", sim_13);
+
         assert!(
             sim_12 > sim_13,
             "Similar texts should have higher similarity. Got sim_12={}, sim_13={}",

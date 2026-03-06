@@ -2,13 +2,13 @@ mod embedding;
 mod search;
 mod store;
 
-pub use embedding::{Embedder, ProviderEmbedder};
+pub use embedding::{Embedder, LocalEmbedder, ProviderEmbedder};
 pub use search::{HybridSearch, MatchType, SearchResult};
 pub use store::MemoryStore;
 
 use crate::{
     BabataResult,
-    config::Config,
+    config::{Config, EmbeddingConfig},
     error::BabataError,
     message::{Content, Message},
 };
@@ -77,7 +77,7 @@ impl Memory {
         // Generate embedding first (outside of lock)
         let mut last_error = None;
         for attempt in 0..self.config.max_retries {
-            match self.embedder.embed(&content).await {
+            match self.embedder.embed(&[content.as_str()]).await {
                 Ok(embedding) => {
                     // Now acquire lock and insert
                     let mut store = self.store.lock().await;
@@ -106,7 +106,7 @@ impl Memory {
     }
 
     pub async fn search(&self, query: &str) -> BabataResult<Vec<SearchResult>> {
-        let query_embedding = self.embedder.embed(query).await?;
+        let query_embedding = self.embedder.embed(&[query]).await?;
 
         let store = self.store.lock().await;
         let searcher = HybridSearch::new(
@@ -174,16 +174,18 @@ pub fn build_memory(config: &Config) -> BabataResult<Memory> {
 }
 
 fn create_embedder(config: &Config) -> BabataResult<Arc<dyn Embedder>> {
-    if let Some(embedding_config) = config.get_embedding_config() {
-        return Ok(Arc::new(ProviderEmbedder::new(
-            embedding_config.api_key.clone(),
-            embedding_config.base_url.clone(),
-            embedding_config.model.clone(),
-            embedding_config.dimension,
-        )));
-    }
+    let embedding_config = config.get_embedding_config().cloned().unwrap_or_default();
 
-    Err(BabataError::config(
-        "No embedding configuration found. Please add 'embedding' section to config.json",
-    ))
+    match embedding_config {
+        EmbeddingConfig::Local(local_config) => {
+            let embedder = LocalEmbedder::new(&local_config.model)?;
+            Ok(Arc::new(embedder))
+        }
+        EmbeddingConfig::Remote(remote_config) => Ok(Arc::new(ProviderEmbedder::new(
+            remote_config.api_key,
+            remote_config.base_url,
+            remote_config.model,
+            remote_config.dimension,
+        ))),
+    }
 }

@@ -37,6 +37,11 @@ pub enum Command {
         #[command(subcommand)]
         action: ProviderAction,
     },
+    #[command(about = "Embedding config management (add/delete/show)")]
+    Embedding {
+        #[command(subcommand)]
+        action: EmbeddingAction,
+    },
     #[command(about = "Interactive setup (provider/agent/channel/service)")]
     Onboard,
 }
@@ -119,5 +124,24 @@ pub enum AgentAction {
         name: String,
     },
     #[command(about = "List all agent configs (one JSON per line)")]
+    List,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum EmbeddingAction {
+    #[command(about = "Add or update embedding config (JSON)")]
+    Add {
+        #[arg(
+            value_name = "EMBEDDING_CONFIG_JSON",
+            help = "Embedding config JSON, e.g. {\"type\":\"local\",\"name\":\"default\",\"model\":\"baai/bge-m3\",\"cache_dir\":\"~/.babata/models/embedding\"}"
+        )]
+        embedding_config_json: String,
+    },
+    #[command(about = "Delete embedding config by name")]
+    Delete {
+        #[arg(value_name = "EMBEDDING_NAME", help = "Embedding name")]
+        name: String,
+    },
+    #[command(about = "List all embedding configs (one JSON per line)")]
     List,
 }

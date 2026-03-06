@@ -42,6 +42,15 @@ fn main() {
             }
             babata::cli::ProviderAction::List => babata::cli::provider::list(&args),
         },
+        Some(babata::cli::Command::Embedding { action }) => match action {
+            babata::cli::EmbeddingAction::Add {
+                embedding_config_json,
+            } => babata::cli::embedding::add(&args, embedding_config_json),
+            babata::cli::EmbeddingAction::Delete { name } => {
+                babata::cli::embedding::delete(&args, name)
+            }
+            babata::cli::EmbeddingAction::List => babata::cli::embedding::list(&args),
+        },
         Some(babata::cli::Command::Onboard) => babata::cli::onboard::run(&args),
         None => babata::cli::prompt::run(&args),
     }

@@ -5,8 +5,9 @@ use crate::{
     channel::{Channel, TelegramChannel},
     config::{
         AgentConfig, AnthropicProviderConfig, ChannelConfig, CompatibleApi, Config,
-        CustomProviderConfig, DeepSeekProviderConfig, KimiProviderConfig, MoonshotProviderConfig,
-        OpenAIProviderConfig, ProviderConfig, TelegramChannelConfig,
+        CustomProviderConfig, DeepSeekProviderConfig, EmbeddingConfig, KimiProviderConfig,
+        LocalEmbeddingConfig, MoonshotProviderConfig, OpenAIProviderConfig, ProviderConfig,
+        RemoteEmbeddingConfig, TelegramChannelConfig,
     },
     error::BabataError,
     provider::{
@@ -60,6 +61,10 @@ fn run_onboard() -> BabataResult<()> {
 
     if let Some(channel_config) = prompt_channel_setup()? {
         config.upsert_channel(channel_config);
+    }
+
+    if let Some(embedding_config) = prompt_embedding_setup()? {
+        config.upsert_embedding(embedding_config);
     }
 
     config.validate()?;
@@ -478,6 +483,65 @@ fn parse_allowed_user_ids(raw: &str) -> BabataResult<Vec<i64>> {
     }
 
     Ok(values)
+}
+
+fn prompt_embedding_setup() -> BabataResult<Option<EmbeddingConfig>> {
+    let selection = prompt_line(
+        "Configure embedding for memory? (Press Enter to use default local model, Y for custom)",
+    )?;
+    match selection.trim() {
+        "" => {
+            println!("Using default local embedding model: baai/bge-m3");
+            return Ok(Some(EmbeddingConfig::default()));
+        }
+        "N" | "n" | "no" => return Ok(None),
+        "Y" | "y" | "yes" => {}
+        _ => return Err(BabataError::config("Invalid selection")),
+    }
+
+    println!("Select embedding type:");
+    println!("1. Local model (baai/bge-m3, no API key needed)");
+    println!("2. Remote API (Qwen, OpenAI, etc.)");
+
+    let type_choice = prompt_line("Choice (1-2)")?;
+    match type_choice.trim() {
+        "1" => {
+            let model = prompt_line("Model name (press Enter for baai/bge-m3)")?;
+            let model = if model.trim().is_empty() {
+                "baai/bge-m3".to_string()
+            } else {
+                model
+            };
+
+            let config = EmbeddingConfig::Local(LocalEmbeddingConfig { model });
+            config.validate()?;
+            Ok(Some(config))
+        }
+        "2" => {
+            println!("\nRemote embedding provider examples:");
+            println!("- Qwen: https://dashscope.aliyuncs.com/compatible-mode/v1");
+            println!("- OpenAI: https://api.openai.com/v1");
+
+            let api_key = prompt_line("API key")?;
+            let base_url = prompt_line("Base URL")?;
+            let model = prompt_line("Model name (e.g., text-embedding-v3)")?;
+            let dimension_str = prompt_line("Embedding dimension (e.g., 1024)")?;
+
+            let dimension: usize = dimension_str.trim().parse().map_err(|_| {
+                BabataError::config("Invalid dimension, must be a positive integer")
+            })?;
+
+            let config = EmbeddingConfig::Remote(RemoteEmbeddingConfig {
+                api_key,
+                base_url,
+                model,
+                dimension,
+            });
+            config.validate()?;
+            Ok(Some(config))
+        }
+        _ => Err(BabataError::config("Invalid choice")),
+    }
 }
 
 fn prompt_background_service_setup() -> BabataResult<bool> {

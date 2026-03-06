@@ -28,10 +28,7 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 rust-embed = { version = "8", features = ["include-flate", "include-exclude", "interpolate-folder-path"] }
 libsimple = "0.7"
 sqlite-vec = "0.1"
-fastembed = { version = "5.11", optional = true }
-
-[features]
-fastembed = ["dep:fastembed"]
+fastembed = "5.11"
 
 [target.'cfg(windows)'.dependencies]
 windows-service = "0.8"

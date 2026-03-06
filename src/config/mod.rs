@@ -1,21 +1,15 @@
 mod channel;
+mod embedding;
 mod provider;
 
 pub use channel::*;
+pub use embedding::*;
 pub use provider::*;
 
 use std::collections::HashSet;
 
 use crate::{BabataResult, error::BabataError, utils::babata_dir};
 use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-pub struct EmbeddingConfig {
-    pub api_key: String,
-    pub base_url: String,
-    pub model: String,
-    pub dimension: usize,
-}
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct AgentConfig {
@@ -32,7 +26,7 @@ pub struct Config {
     #[serde(default)]
     pub channels: Vec<ChannelConfig>,
     #[serde(default)]
-    pub embedding: Option<EmbeddingConfig>,
+    pub embeddings: Vec<EmbeddingConfig>,
 }
 
 impl Config {
@@ -49,7 +43,7 @@ impl Config {
                 providers: Vec::new(),
                 agents: Vec::new(),
                 channels: Vec::new(),
-                embedding: None,
+                embeddings: Vec::new(),
             })
         }
     }
@@ -207,7 +201,20 @@ impl Config {
     }
 
     pub fn get_embedding_config(&self) -> Option<&EmbeddingConfig> {
-        self.embedding.as_ref()
+        self.embeddings.first()
+    }
+
+    pub fn upsert_embedding(&mut self, embedding_config: EmbeddingConfig) {
+        if let Some(existing) = self
+            .embeddings
+            .iter_mut()
+            .find(|existing| existing.matches_name(embedding_config.embedding_name()))
+        {
+            *existing = embedding_config;
+            return;
+        }
+
+        self.embeddings.push(embedding_config);
     }
 }
 
@@ -227,7 +234,7 @@ mod tests {
                 model: "gpt-4.1".to_string(),
             }],
             channels: Vec::new(),
-            embedding: None,
+            embeddings: Vec::new(),
         };
 
         let json = serde_json::to_string(&config).expect("serialize config to json");
@@ -248,7 +255,7 @@ mod tests {
                 model: "test-model".to_string(),
             }],
             channels: Vec::new(),
-            embedding: None,
+            embeddings: Vec::new(),
         };
 
         config.validate().expect("provider URL no longer validated");
