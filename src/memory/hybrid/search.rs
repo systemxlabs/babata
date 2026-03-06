@@ -1,5 +1,5 @@
+use super::store::{BM25Result, MemoryStore, VectorResult};
 use crate::BabataResult;
-use crate::memory::store::{BM25Result, MemoryStore, VectorResult};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
@@ -123,7 +123,7 @@ impl<'a> HybridSearch<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::memory::store::MemoryStore;
+    use crate::memory::hybrid::store::MemoryStore;
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicU64, Ordering};
 

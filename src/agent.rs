@@ -20,7 +20,7 @@ pub struct AgentLoop {
     pub config: Config,
     pub providers: HashMap<String, Arc<dyn Provider>>,
     pub channels: Vec<Arc<dyn Channel>>,
-    pub memory: Memory,
+    pub memory: Box<dyn Memory>,
     pub tools: HashMap<String, Arc<dyn Tool>>,
     pub system_prompt_files: Vec<SystemPromptFile>,
     pub skills: Vec<Skill>,
@@ -51,28 +51,25 @@ impl AgentLoop {
         let provider = self.require_provider_for_agent(agent_config)?;
 
         loop {
-            let pending_messages = self.collect_messages_from_channels().await;
+            let prompt_messages = self.collect_messages_from_channels().await;
 
-            if pending_messages.is_empty() {
+            if prompt_messages.is_empty() {
                 tokio::time::sleep(Duration::from_millis(200)).await;
                 continue;
             }
-            info!("Channel messages: {:?}", pending_messages);
+            info!("Channel messages: {:?}", prompt_messages);
 
-            for msg in &pending_messages {
-                if let Err(err) = self.memory.index_message(msg).await {
-                    error!("Failed to index message: {}", err);
-                }
-            }
+            let context = self.memory.build_context(&prompt_messages).await?;
+            let mut prompt_with_ctx = prompt_messages.clone();
+            prompt_with_ctx.extend(context);
 
             let task = AgentTask::new(
-                pending_messages,
+                prompt_with_ctx,
                 Arc::clone(&provider),
                 agent_config.model.clone(),
                 self.tools.clone(),
                 self.system_prompt_files.clone(),
                 self.skills.clone(),
-                Some(self.memory.clone()),
             );
             let response = match task.run().await {
                 Ok(response) => response,
@@ -91,8 +88,11 @@ impl AgentLoop {
             };
             info!("Task run result message: {:?}", response);
 
-            if let Err(err) = self.memory.index_message(&response).await {
-                error!("Failed to index response: {}", err);
+            if let Err(err) = self.memory.insert_messages(prompt_messages).await {
+                error!("Failed to insert prompt messages: {}", err);
+            }
+            if let Err(err) = self.memory.insert_messages(vec![response.clone()]).await {
+                error!("Failed to insert response message: {}", err);
             }
 
             self.send_to_channels(&response).await?;
