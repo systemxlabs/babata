@@ -2,21 +2,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::{BabataResult, error::BabataError};
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Default, Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum MemoryConfig {
-    Simple(SimpleMemoryConfig),
+    #[default]
+    Simple,
     Hybrid(HybridMemoryConfig),
 }
-
-impl Default for MemoryConfig {
-    fn default() -> Self {
-        MemoryConfig::Simple(SimpleMemoryConfig {})
-    }
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-pub struct SimpleMemoryConfig {}
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct HybridMemoryConfig {
