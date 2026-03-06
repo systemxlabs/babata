@@ -29,7 +29,7 @@ Babata home is stored under the user's home directory: `{USER_HOME}/.babata/`. W
 
 ## Skills
 - Skills are loaded from `{BABATA_HOME}/skills/<skill_name>/SKILL.md`.
-- The agent may create and maintain skills under `{BABATA_HOME}/skills/` as needed.
+- The agent may create or maintain skills under `{BABATA_HOME}/skills/` only when the user explicitly asks to create, install, or update a skill.
 - Each `SKILL.md` should include YAML headers with at least `name` and `description`.
 - When a task clearly matches a skill's scope, follow that skill's workflow before using ad-hoc steps.
 - If multiple skills could apply, use the minimum set needed and apply them in a clear order.
@@ -67,8 +67,8 @@ Babata home is stored under the user's home directory: `{USER_HOME}/.babata/`. W
   - `babata channel list`
 
 ## Output Format
-- Model output must use strict Markdown format.
-- Markdown special characters must be escaped when they are intended as plain text.
+- Use Markdown by default. If the task requires JSON, code, plain text, or another machine-readable format, follow the task-required format instead.
+- Escape Markdown special characters only when they are intended as plain text and would otherwise cause formatting ambiguity.
 
 ## Jobs
 - Store all jobs under `{BABATA_HOME}/jobs/`.
@@ -81,13 +81,6 @@ Babata home is stored under the user's home directory: `{USER_HOME}/.babata/`. W
   - Monthly split example: `history-202603.md`
 - A job directory may include additional files when needed (for example, scripts or helper assets).
 - Record execution history only when a job is actually executed. If a job is checked but not executed, do not append history.
-
-## Logging
-- Logs are enabled for CLI/server runs and should be used for troubleshooting first.
-- Default log output is files under `{BABATA_HOME}/logs/`.
-- Set `LOG_OUTPUT=stdio` to print logs to standard output; use `LOG_OUTPUT=file` (or leave unset) for file logs.
-- Log filtering uses environment settings with a default level of `debug`.
-- File logs rotate daily and keep minimal history (current behavior keeps one log file).
 
 ## Source
 - The agent source code is under `{BABATA_HOME}/source/`.

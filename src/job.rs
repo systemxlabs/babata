@@ -1,4 +1,8 @@
-use std::{collections::HashMap, sync::Arc, time::{Duration, Instant}};
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use chrono::Local;
 use log::{error, info};
@@ -75,7 +79,7 @@ impl Default for JobManager {
 async fn start_job_loop(tools: HashMap<String, Arc<dyn Tool>>) -> JoinHandle<()> {
     tokio::spawn(async move {
         info!("Start running job checker loop");
-        
+
         let mut last_run_minute = Local::now().timestamp() / 60;
 
         loop {
@@ -125,7 +129,10 @@ async fn run_job(tools: HashMap<String, Arc<dyn Tool>>) -> BabataResult<()> {
 
     let now = Instant::now();
     task.run().await?;
-    info!("Job run completed in {} seconds", now.elapsed().as_secs_f32());
+    info!(
+        "Job run completed in {} seconds",
+        now.elapsed().as_secs_f32()
+    );
 
     Ok(())
 }
