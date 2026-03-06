@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    path::{Path, PathBuf},
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -18,12 +19,13 @@ use crate::{
     system_prompt::load_system_prompt_files,
     task::AgentTask,
     tool::{Tool, build_tools},
+    utils::babata_dir,
 };
 
 const JOB_PROMPT: &str = r#"
-Read all `job.md` files from `{BABATA_HOME}/jobs/<job_name>/job.md`.
-Determine whether each job should run at the current time.
-If a job should run, execute it according to `job.md` and record the execution result in history files.
+The job definitions are already loaded below from `{BABATA_HOME}/jobs/<job_name>/job.md`.
+For each loaded job, determine whether it should run at the current time.
+If a job should run, execute it according to the loaded job definition and record the execution result in history files.
 If a job has invalid configuration, missing files, or any other issue, skip that job and continue with others, DO NOT TRY to fix job.
 You MUST NOT create, modify, or delete any `job.md` file.
 YOU MUST NOT create folder under `{BABATA_HOME}/jobs/`.
@@ -102,6 +104,15 @@ async fn start_job_loop(tools: HashMap<String, Arc<dyn Tool>>) -> JoinHandle<()>
 
 async fn run_job(tools: HashMap<String, Arc<dyn Tool>>) -> BabataResult<()> {
     info!("Starting to run job");
+    let jobs = load_jobs()?;
+    if jobs.is_empty() {
+        info!(
+            "No jobs found under '{}/jobs', skipping job run",
+            babata_dir()?.display()
+        );
+        return Ok(());
+    }
+
     let config = Config::load()?;
     let agent_config = config
         .get_agent("main")
@@ -114,7 +125,7 @@ async fn run_job(tools: HashMap<String, Arc<dyn Tool>>) -> BabataResult<()> {
 
     let user_message = Message::UserPrompt {
         content: vec![Content::Text {
-            text: JOB_PROMPT.to_string(),
+            text: build_job_prompt(&jobs),
         }],
     };
 
@@ -135,4 +146,148 @@ async fn run_job(tools: HashMap<String, Arc<dyn Tool>>) -> BabataResult<()> {
     );
 
     Ok(())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Job {
+    job_name: String,
+    job_dir: PathBuf,
+    job_definition: String,
+    job_definition_path: PathBuf,
+}
+
+fn build_job_prompt(jobs: &[Job]) -> String {
+    let jobs_context = jobs
+        .iter()
+        .map(|job| {
+            format!(
+                r#"## Job: {}
+Job dir: `{}`
+`job.md` path: `{}`
+`job.md` content:
+{}"#,
+                job.job_name,
+                job.job_dir.display(),
+                job.job_definition_path.display(),
+                job.job_definition
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n");
+
+    format!("{JOB_PROMPT}\nLoaded jobs:\n\n{jobs_context}")
+}
+
+fn load_jobs() -> BabataResult<Vec<Job>> {
+    load_jobs_from_dir(&babata_dir()?.join("jobs"))
+}
+
+fn load_jobs_from_dir(dir: &Path) -> BabataResult<Vec<Job>> {
+    if !dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    if !dir.is_dir() {
+        return Err(BabataError::config(format!(
+            "Jobs path '{}' is not a directory",
+            dir.display()
+        )));
+    }
+
+    let entries = std::fs::read_dir(dir).map_err(|err| {
+        BabataError::config(format!(
+            "Failed to read jobs directory '{}': {}",
+            dir.display(),
+            err
+        ))
+    })?;
+
+    let mut jobs = Vec::new();
+
+    for entry in entries {
+        let entry = entry.map_err(|err| {
+            BabataError::config(format!(
+                "Failed to read jobs directory entry in '{}': {}",
+                dir.display(),
+                err
+            ))
+        })?;
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+
+        let job_path = path.join("job.md");
+        if !job_path.is_file() {
+            continue;
+        }
+
+        let job_name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| {
+                BabataError::config(format!(
+                    "Failed to resolve job name from path '{}'",
+                    path.display()
+                ))
+            })?
+            .to_string();
+        let job_definition = std::fs::read_to_string(&job_path).map_err(|err| {
+            BabataError::config(format!(
+                "Failed to read job file '{}': {}",
+                job_path.display(),
+                err
+            ))
+        })?;
+        jobs.push(Job {
+            job_name,
+            job_dir: path,
+            job_definition,
+            job_definition_path: job_path,
+        });
+    }
+
+    Ok(jobs)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{fs, path::PathBuf};
+
+    use super::load_jobs_from_dir;
+
+    fn temp_jobs_dir() -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("babata-job-test-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn returns_empty_when_no_job_md_exists() {
+        let dir = temp_jobs_dir();
+        fs::create_dir_all(dir.join("job-a")).unwrap();
+
+        let jobs = load_jobs_from_dir(&dir).unwrap();
+
+        fs::remove_dir_all(&dir).unwrap();
+        assert!(jobs.is_empty());
+    }
+
+    #[test]
+    fn loads_job_name_path_and_content() {
+        let dir = temp_jobs_dir();
+        let job_dir = dir.join("job-a");
+        fs::create_dir_all(&job_dir).unwrap();
+        let job_path = job_dir.join("job.md");
+        fs::write(&job_path, "# job").unwrap();
+
+        let jobs = load_jobs_from_dir(&dir).unwrap();
+
+        fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(jobs.len(), 1);
+        assert_eq!(jobs[0].job_name, "job-a");
+        assert_eq!(jobs[0].job_dir, job_dir);
+        assert_eq!(jobs[0].job_definition_path, job_path);
+        assert_eq!(jobs[0].job_definition, "# job");
+    }
 }
