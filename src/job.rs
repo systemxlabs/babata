@@ -16,14 +16,14 @@ use crate::{
 };
 
 const JOB_PROMPT: &str = r#"
-Read all jobs from `.babata/jobs/` under the user's home directory.
+Read all `job.md` files from `{BABATA_HOME}/jobs/`.
 Determine whether each job should run at the current time.
-You must NOT create, modify, or delete any job definitions.
-You may only read and execute jobs, and write/update/clean job execution history records.
-If a job should run, execute it according to its description and record the execution result.
-If a job has invalid configuration, missing files, or any other issue, skip that job and continue with others.
+If a job should run, execute it according to `job.md` and record the execution result in history files.
+You MUST NOT create, modify, or delete any `job.md` file.
+You are ONLY allowed to create/write/edit/delete history files.
+If a job has invalid configuration, missing files, or any other issue, skip that job and continue with others, DO NOT TRY to fix job.
 "#;
-const JOB_CHECK_INTERVAL: Duration = Duration::from_secs(45);
+const JOB_CHECK_INTERVAL: Duration = Duration::from_secs(60);
 const JOB_MANAGER_CHECK_INTERVAL: Duration = Duration::from_secs(10 * 60);
 
 pub struct JobManager {
