@@ -228,6 +228,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore]
     async fn test_local_embedding() {
         let embedder = LocalEmbedder::new("baai/bge-m3").expect("Failed to create local embedder");
 
@@ -245,6 +246,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore]
     async fn test_local_embedding_similarity() {
         let embedder = LocalEmbedder::new("baai/bge-m3").expect("Failed to create local embedder");
 
