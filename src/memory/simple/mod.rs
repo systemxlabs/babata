@@ -1,10 +1,8 @@
 mod store;
 
-use std::path::PathBuf;
-
 pub use store::*;
 
-use crate::{BabataResult, memory::Memory, message::Message, utils::babata_dir};
+use crate::{BabataResult, memory::Memory, message::Message};
 
 #[derive(Debug)]
 pub struct SimpleMemory {
@@ -18,11 +16,6 @@ impl SimpleMemory {
         Ok(Self {
             message_store: MessageStore::new()?,
         })
-    }
-
-    pub fn default_db_path() -> BabataResult<PathBuf> {
-        let dir = babata_dir()?;
-        Ok(dir.join("memory").join("message.db"))
     }
 }
 

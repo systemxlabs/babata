@@ -1,5 +1,6 @@
-pub mod hybrid;
-pub mod simple;
+#[cfg(feature = "mem-hybrid")]
+mod hybrid;
+mod simple;
 
 use crate::{
     BabataResult,
