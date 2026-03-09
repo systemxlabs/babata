@@ -78,11 +78,14 @@ impl HybridMemory {
         let mut last_error = None;
         for attempt in 0..self.config.max_retries {
             match self.embedder.embed(&[content.as_str()]).await {
-                Ok(embedding) => {
+                Ok(embeddings) => {
+                    let embedding = embeddings
+                        .first()
+                        .ok_or(BabataError::memory("No embedding returned"))?;
                     // Now acquire lock and insert
                     let mut store = self.store.lock().await;
                     return store
-                        .insert_message(&role, message_type, &content, &embedding)
+                        .insert_message(&role, message_type, &content, embedding)
                         .map(|_| ());
                 }
                 Err(e) => {
@@ -106,7 +109,10 @@ impl HybridMemory {
     }
 
     pub async fn search(&self, query: &str) -> BabataResult<Vec<SearchResult>> {
-        let query_embedding = self.embedder.embed(&[query]).await?;
+        let embeddings = self.embedder.embed(&[query]).await?;
+        let query_embedding = embeddings
+            .first()
+            .ok_or(BabataError::memory("No embedding returned"))?;
 
         let store = self.store.lock().await;
         let searcher = HybridSearch::new(

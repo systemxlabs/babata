@@ -124,6 +124,7 @@ impl<'a> HybridSearch<'a> {
 mod tests {
     use super::*;
     use crate::memory::hybrid::store::MemoryStore;
+    use crate::memory::hybrid::{Embedder, LocalEmbedder};
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -141,22 +142,16 @@ mod tests {
         ))
     }
 
-    #[test]
+    #[tokio::test]
     #[ignore]
-    fn test_hybrid_search() -> BabataResult<()> {
-        use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
+    async fn test_hybrid_search() -> BabataResult<()> {
+        let embedder = LocalEmbedder::new("baai/bge-m3").expect("Failed to create local embedder");
 
-        let mut model = TextEmbedding::try_new(
-            InitOptions::new(EmbeddingModel::BGEM3)
-                .with_cache_dir(std::env::temp_dir().join("fastembed_cache")),
-        )
-        .expect("Failed to create embedding model");
-
-        let dimension = 1024;
+        let dimension = embedder.dimension();
         let mut store = MemoryStore::new(temp_db_path(), dimension)?;
 
         let texts = ["人工智能技术发展", "机器学习算法", "深度学习神经网络"];
-        let embeddings = model.embed(texts, None).unwrap();
+        let embeddings = embedder.embed(&texts).await.unwrap();
 
         for (text, embedding) in texts.iter().zip(embeddings.iter()) {
             store.insert_message("user", "text", text, embedding)?;
@@ -164,30 +159,24 @@ mod tests {
 
         let hybrid = HybridSearch::new(&store, 1.0, 1.0, 60.0);
 
-        let query_embedding = model.embed(vec!["人工智能"], None).unwrap();
-        let results = hybrid.search("人工智能", &query_embedding[0], 10, 5)?;
+        let query_embeddings = embedder.embed(&["人工智能"]).await.unwrap();
+        let results = hybrid.search("人工智能", &query_embeddings[0], 10, 5)?;
 
         assert!(!results.is_empty(), "Should find hybrid search results");
 
         Ok(())
     }
 
-    #[test]
+    #[tokio::test]
     #[ignore]
-    fn test_hybrid_search_match_type() -> BabataResult<()> {
-        use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
+    async fn test_hybrid_search_match_type() -> BabataResult<()> {
+        let embedder = LocalEmbedder::new("baai/bge-m3").expect("Failed to create local embedder");
 
-        let mut model = TextEmbedding::try_new(
-            InitOptions::new(EmbeddingModel::BGEM3)
-                .with_cache_dir(std::env::temp_dir().join("fastembed_cache")),
-        )
-        .expect("Failed to create embedding model");
-
-        let dimension = 1024;
+        let dimension = embedder.dimension();
         let mut store = MemoryStore::new(temp_db_path(), dimension)?;
 
         let texts = ["Rust编程语言", "Python编程"];
-        let embeddings = model.embed(texts, None).unwrap();
+        let embeddings = embedder.embed(&texts).await.unwrap();
 
         for (text, embedding) in texts.iter().zip(embeddings.iter()) {
             store.insert_message("user", "text", text, embedding)?;
@@ -195,8 +184,8 @@ mod tests {
 
         let hybrid = HybridSearch::new(&store, 1.0, 1.0, 60.0);
 
-        let query_embedding = model.embed(vec!["Rust编程"], None).unwrap();
-        let results = hybrid.search("Rust编程", &query_embedding[0], 10, 5)?;
+        let query_embeddings = embedder.embed(&["Rust编程"]).await.unwrap();
+        let results = hybrid.search("Rust编程", &query_embeddings[0], 10, 5)?;
 
         if !results.is_empty() {
             let first = &results[0];
@@ -209,28 +198,22 @@ mod tests {
         Ok(())
     }
 
-    #[test]
+    #[tokio::test]
     #[ignore]
-    fn test_hybrid_search_weights() -> BabataResult<()> {
-        use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
+    async fn test_hybrid_search_weights() -> BabataResult<()> {
+        let embedder = LocalEmbedder::new("baai/bge-m3").expect("Failed to create local embedder");
 
-        let mut model = TextEmbedding::try_new(
-            InitOptions::new(EmbeddingModel::BGEM3)
-                .with_cache_dir(std::env::temp_dir().join("fastembed_cache")),
-        )
-        .expect("Failed to create embedding model");
-
-        let dimension = 1024;
+        let dimension = embedder.dimension();
         let mut store = MemoryStore::new(temp_db_path(), dimension)?;
 
-        let embedding = model.embed(vec!["测试消息"], None).unwrap();
-        store.insert_message("user", "text", "测试消息", &embedding[0])?;
+        let embedding = &embedder.embed(&["测试消息"]).await.unwrap()[0];
+        store.insert_message("user", "text", "测试消息", embedding)?;
 
         let hybrid_bm25_heavy = HybridSearch::new(&store, 2.0, 0.5, 60.0);
         let hybrid_vector_heavy = HybridSearch::new(&store, 0.5, 2.0, 60.0);
 
-        let results1 = hybrid_bm25_heavy.search("测试", &embedding[0], 10, 5)?;
-        let results2 = hybrid_vector_heavy.search("测试", &embedding[0], 10, 5)?;
+        let results1 = hybrid_bm25_heavy.search("测试", embedding, 10, 5)?;
+        let results2 = hybrid_vector_heavy.search("测试", embedding, 10, 5)?;
 
         assert!(!results1.is_empty());
         assert!(!results2.is_empty());
