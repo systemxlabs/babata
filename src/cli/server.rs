@@ -124,7 +124,15 @@ async fn broadcast_service_started(channels: &[std::sync::Arc<dyn crate::channel
 }
 
 fn service_started_message() -> Message {
-    let text = "Babata server started. This is a startup notification.".to_string();
+    let babata_home = match crate::utils::babata_dir() {
+        Ok(path) => path.display().to_string(),
+        Err(err) => format!("unavailable ({err})"),
+    };
+    let text = format!(
+        "Babata server started.\nVersion: {}\nBabata home: {}",
+        env!("CARGO_PKG_VERSION"),
+        babata_home
+    );
 
     info!("{text}");
 
@@ -877,6 +885,8 @@ mod tests {
             })
             .expect("text content");
         assert!(text.contains("Babata server started."));
+        assert!(text.contains(&format!("Version: {}", env!("CARGO_PKG_VERSION"))));
+        assert!(text.contains("Babata home:"));
         assert!(!text.contains("Job scheduler"));
     }
 
