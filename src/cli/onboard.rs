@@ -351,10 +351,13 @@ fn prompt_model_setup(provider_config: &ProviderConfig) -> BabataResult<String> 
 }
 
 fn prompt_memory_embedding_setup(config: &Config) -> BabataResult<String> {
-    let memory_names: Vec<String> = config
+    let memory_names: Vec<&str> = config
         .memory
         .iter()
-        .map(|m| m.memory_name().to_string())
+        .map(|m| match m {
+            MemoryConfig::Simple => "simple",
+            MemoryConfig::Hybrid(_) => "hybrid",
+        })
         .collect();
 
     if memory_names.is_empty() {
@@ -384,7 +387,7 @@ fn prompt_memory_embedding_setup(config: &Config) -> BabataResult<String> {
         return Err(BabataError::config("Invalid memory choice"));
     };
 
-    Ok(name.clone())
+    Ok(name.to_string())
 }
 
 fn supported_models_for_provider(provider_config: &ProviderConfig) -> &'static [Model] {
@@ -593,25 +596,7 @@ fn prompt_hybrid_memory_config() -> BabataResult<HybridMemoryConfig> {
         _ => return Err(BabataError::config("Invalid embedding type selection")),
     };
 
-    let name = match &embedding {
-        EmbeddingConfig::Local(c) => format!("local_{}", sanitize_name(&c.model)),
-        EmbeddingConfig::Remote(c) => format!("remote_{}", sanitize_name(&c.model)),
-    };
-
-    Ok(HybridMemoryConfig { name, embedding })
-}
-
-fn sanitize_name(s: &str) -> String {
-    s.to_lowercase()
-        .chars()
-        .map(|c| {
-            if c.is_alphanumeric() || c == '-' {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect()
+    Ok(HybridMemoryConfig { embedding })
 }
 
 fn prompt_line(label: &str) -> BabataResult<String> {

@@ -197,25 +197,25 @@ impl Config {
     }
 
     pub fn upsert_memory(&mut self, memory_config: MemoryConfig) {
-        let pos = self
-            .memory
-            .iter()
-            .position(|existing| match (existing, &memory_config) {
-                (MemoryConfig::Simple, MemoryConfig::Simple) => true,
-                (MemoryConfig::Hybrid(a), MemoryConfig::Hybrid(b)) => a.name == b.name,
-                _ => false,
-            });
-
-        match pos {
-            Some(i) => self.memory[i] = memory_config,
-            None => self.memory.push(memory_config),
+        if let Some(existing) = self.memory.iter_mut().find(|existing| {
+            matches!(
+                (&**existing, &memory_config),
+                (MemoryConfig::Simple, MemoryConfig::Simple)
+                    | (MemoryConfig::Hybrid(_), MemoryConfig::Hybrid(_))
+            )
+        }) {
+            *existing = memory_config;
+            return;
         }
+
+        self.memory.push(memory_config);
     }
 
     pub fn get_memory(&self, memory_name: &str) -> Option<&MemoryConfig> {
-        self.memory
-            .iter()
-            .find(|memory| memory.matches_name(memory_name))
+        self.memory.iter().find(|memory| match memory {
+            MemoryConfig::Simple => memory_name.eq_ignore_ascii_case("simple"),
+            MemoryConfig::Hybrid(_) => memory_name.eq_ignore_ascii_case("hybrid"),
+        })
     }
 
     pub fn get_agent(&self, agent_name: &str) -> BabataResult<&AgentConfig> {
