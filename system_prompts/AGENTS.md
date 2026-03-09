@@ -59,7 +59,6 @@ Babata home is stored under the user's home directory: `{USER_HOME}/.babata/`. W
 ## Channels
 - Manage channels using the `babata channel` subcommands.
 - Users communicate with the system through configured channels.
-- Channels are used to deliver final task/job results to external destinations (for example, Telegram).
 - Prefer CLI-based channel management instead of directly editing `{BABATA_HOME}/config.json`.
 - For adding, deleting, or listing channels, prefer:
   - `babata channel add`
