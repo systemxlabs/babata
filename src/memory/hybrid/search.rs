@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct SearchResult {
-    pub message_id: i64,
+    pub _message_id: i64,
     pub content: String,
     pub score: f32,
     pub match_type: MatchType,
@@ -73,11 +73,11 @@ impl<'a> HybridSearch<'a> {
             };
 
             scores.insert(
-                result.message_id,
+                result._message_id,
                 (
                     rrf_score + bonus,
                     SearchResult {
-                        message_id: result.message_id,
+                        _message_id: result._message_id,
                         content: result.content.clone(),
                         score: rrf_score + bonus,
                         match_type: MatchType::BM25,
@@ -100,7 +100,7 @@ impl<'a> HybridSearch<'a> {
                 .or_insert((
                     rrf_score,
                     SearchResult {
-                        message_id: result.message_id,
+                        _message_id: result.message_id,
                         content: result.content.clone(),
                         score: rrf_score,
                         match_type: MatchType::Vector,
@@ -229,15 +229,15 @@ mod tests {
 
         let bm25_results = vec![
             BM25Result {
-                message_id: 1,
+                _message_id: 1,
                 content: "First BM25".to_string(),
-                score: -5.0,
+                _score: -5.0,
                 snippet: "First".to_string(),
             },
             BM25Result {
-                message_id: 2,
+                _message_id: 2,
                 content: "Second BM25".to_string(),
-                score: -4.0,
+                _score: -4.0,
                 snippet: "Second".to_string(),
             },
         ];
@@ -246,12 +246,12 @@ mod tests {
             VectorResult {
                 message_id: 2,
                 content: "Second BM25".to_string(),
-                distance: 0.1,
+                _distance: 0.1,
             },
             VectorResult {
                 message_id: 3,
                 content: "Third Vector".to_string(),
-                distance: 0.2,
+                _distance: 0.2,
             },
         ];
 
@@ -259,7 +259,7 @@ mod tests {
 
         assert!(!fused.is_empty());
 
-        let msg2_result = fused.iter().find(|r| r.message_id == 2);
+        let msg2_result = fused.iter().find(|r| r._message_id == 2);
         assert!(msg2_result.is_some());
         assert_eq!(msg2_result.unwrap().match_type, MatchType::Hybrid);
 

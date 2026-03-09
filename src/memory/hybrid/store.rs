@@ -214,9 +214,9 @@ impl MemoryStore {
 
         let mapper = |row: &rusqlite::Row| {
             Ok(BM25Result {
-                message_id: row.get(0)?,
+                _message_id: row.get(0)?,
                 content: row.get(1)?,
-                score: row.get(2)?,
+                _score: row.get(2)?,
                 snippet: row.get(3)?,
             })
         };
@@ -256,7 +256,7 @@ impl MemoryStore {
             Ok(VectorResult {
                 message_id: row.get(0)?,
                 content: row.get(1)?,
-                distance: row.get(2)?,
+                _distance: row.get(2)?,
             })
         };
 
@@ -272,9 +272,9 @@ impl MemoryStore {
 
 #[derive(Debug, Clone)]
 pub struct BM25Result {
-    pub message_id: i64,
+    pub _message_id: i64,
     pub content: String,
-    pub score: f64,
+    pub _score: f64,
     pub snippet: String,
 }
 
@@ -282,7 +282,7 @@ pub struct BM25Result {
 pub struct VectorResult {
     pub message_id: i64,
     pub content: String,
-    pub distance: f32,
+    pub _distance: f32,
 }
 
 fn serialize_vector(vec: &[f32]) -> &[u8] {

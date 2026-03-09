@@ -21,7 +21,8 @@ pub struct ProviderEmbedder {
 }
 
 impl ProviderEmbedder {
-    pub fn new_qwen(api_key: String) -> Self {
+    #[cfg(test)]
+    fn new_qwen(api_key: String) -> Self {
         Self {
             client: reqwest::Client::new(),
             api_key,

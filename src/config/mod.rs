@@ -17,6 +17,12 @@ pub struct AgentConfig {
     // If None, use default skills
     pub provider: String,
     pub model: String,
+    #[serde(default = "default_memory")]
+    pub memory_embedding: String,
+}
+
+fn default_memory() -> String {
+    "simple".to_string()
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -26,7 +32,7 @@ pub struct Config {
     #[serde(default)]
     pub channels: Vec<ChannelConfig>,
     #[serde(default)]
-    pub memory: MemoryConfig,
+    pub memory: Vec<MemoryConfig>,
 }
 
 impl Config {
@@ -43,7 +49,7 @@ impl Config {
                 providers: Vec::new(),
                 agents: Vec::new(),
                 channels: Vec::new(),
-                memory: MemoryConfig::default(),
+                memory: Vec::new(),
             })
         }
     }
@@ -190,6 +196,28 @@ impl Config {
         self.agents.push(agent_config);
     }
 
+    pub fn upsert_memory(&mut self, memory_config: MemoryConfig) {
+        if let Some(existing) = self.memory.iter_mut().find(|existing| {
+            matches!(
+                (&**existing, &memory_config),
+                (MemoryConfig::Simple, MemoryConfig::Simple)
+                    | (MemoryConfig::Hybrid(_), MemoryConfig::Hybrid(_))
+            )
+        }) {
+            *existing = memory_config;
+            return;
+        }
+
+        self.memory.push(memory_config);
+    }
+
+    pub fn get_memory(&self, memory_name: &str) -> Option<&MemoryConfig> {
+        self.memory.iter().find(|memory| match memory {
+            MemoryConfig::Simple => memory_name.eq_ignore_ascii_case("simple"),
+            MemoryConfig::Hybrid(_) => memory_name.eq_ignore_ascii_case("hybrid"),
+        })
+    }
+
     pub fn get_agent(&self, agent_name: &str) -> BabataResult<&AgentConfig> {
         self.agents
             .iter()
@@ -223,9 +251,10 @@ mod tests {
                 name: "main".to_string(),
                 provider: "openai".to_string(),
                 model: "gpt-4.1".to_string(),
+                memory_embedding: "simple".to_string(),
             }],
             channels: Vec::new(),
-            memory: MemoryConfig::default(),
+            memory: Vec::new(),
         };
 
         let json = serde_json::to_string(&config).expect("serialize config to json");
@@ -244,9 +273,10 @@ mod tests {
                 name: "main".to_string(),
                 provider: "openai".to_string(),
                 model: "test-model".to_string(),
+                memory_embedding: "simple".to_string(),
             }],
             channels: Vec::new(),
-            memory: MemoryConfig::default(),
+            memory: Vec::new(),
         };
 
         config.validate().expect("provider URL no longer validated");
