@@ -22,19 +22,18 @@ impl ShellTool {
                 "Execute a shell command and return the output. Uses bash on Linux/macOS and PowerShell on Windows."
                     .to_string(),
             parameters: json!({
-
-            "type": "object",
-            "properties": {
-                "command": {
-                    "type": "string",
-                    "description": "The shell command to execute (bash syntax on Linux/macOS, PowerShell syntax on Windows)"
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "The shell command to execute (bash syntax on Linux/macOS, PowerShell syntax on Windows)"
+                    },
+                    "timeout_ms": {
+                        "type": "integer",
+                        "description": format!("Optional timeout in milliseconds (default: {default_timeout_ms})")
+                    }
                 },
-                "timeout_ms": {
-                    "type": "integer",
-                    "description": format!("Optional timeout in milliseconds (default: {default_timeout_ms})")
-                }
-            },
-            "required": ["command"]
+                "required": ["command"]
             }),
         };
         Self {
