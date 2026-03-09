@@ -309,12 +309,12 @@ fn prompt_main_agent_setup(config: &Config) -> BabataResult<Option<AgentConfig>>
             BabataError::config(format!("Provider '{}' not found in config", provider_name))
         })?;
     let model = prompt_model_setup(provider_config)?;
-    let memory_embedding = prompt_memory_embedding_setup(config)?;
+    let memory = prompt_agent_memory_setup(config)?;
     Ok(Some(AgentConfig {
         name: "main".to_string(),
         provider: provider_name.to_string(),
         model,
-        memory_embedding,
+        memory,
     }))
 }
 
@@ -350,7 +350,7 @@ fn prompt_model_setup(provider_config: &ProviderConfig) -> BabataResult<String> 
     Ok(model.name.to_string())
 }
 
-fn prompt_memory_embedding_setup(config: &Config) -> BabataResult<String> {
+fn prompt_agent_memory_setup(config: &Config) -> BabataResult<String> {
     let memory_names: Vec<&str> = config
         .memory
         .iter()

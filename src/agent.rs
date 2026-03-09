@@ -32,7 +32,7 @@ impl AgentLoop {
         let channels = build_channels(&config)?;
         let memory_name = config
             .get_agent("main")
-            .map(|c| c.memory_embedding.as_str())
+            .map(|c| c.memory.as_str())
             .unwrap_or("simple");
         let memory = build_memory(&config, memory_name)?;
         let tools = build_tools();
