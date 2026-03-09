@@ -7,7 +7,7 @@ use crate::{
     BabataResult,
     error::BabataError,
     message::{Content, Message, ToolCall},
-    provider::{GenerationReqest, GenerationResponse, InteractionRequest, InteractionResponse},
+    provider::{GenerationRequest, GenerationResponse, InteractionRequest, InteractionResponse},
     tool::ToolSpec,
 };
 
@@ -159,7 +159,7 @@ impl AnthropicCompatibleProvider {
 
     pub async fn generate<'a>(
         &self,
-        request: GenerationReqest<'a>,
+        request: GenerationRequest<'a>,
     ) -> BabataResult<GenerationResponse> {
         let system_prompt = request.system_prompt.trim();
         let system = if system_prompt.is_empty() {
@@ -369,7 +369,7 @@ mod tests {
             }],
         }];
 
-        let request = crate::provider::GenerationReqest {
+        let request = crate::provider::GenerationRequest {
             system_prompt: "",
             model: "claude-opus-4-6",
             prompts: &messages,
@@ -426,7 +426,7 @@ mod tests {
             }],
         }];
 
-        let request = crate::provider::GenerationReqest {
+        let request = crate::provider::GenerationRequest {
             model: "claude-opus-4-6",
             system_prompt: "",
             prompts: &messages,
@@ -469,7 +469,7 @@ mod tests {
         });
 
         // Second request: get final response with tool results
-        let request = crate::provider::GenerationReqest {
+        let request = crate::provider::GenerationRequest {
             model: "claude-opus-4-6",
             system_prompt: "",
             prompts: &messages,

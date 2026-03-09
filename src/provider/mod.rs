@@ -36,12 +36,14 @@ pub trait Provider: Debug + Send + Sync {
     where
         Self: Sized;
 
-    async fn generate<'a>(&self, request: GenerationReqest<'a>)
-    -> BabataResult<GenerationResponse>;
+    async fn generate<'a>(
+        &self,
+        request: GenerationRequest<'a>,
+    ) -> BabataResult<GenerationResponse>;
     async fn interact(&self, request: InteractionRequest) -> BabataResult<InteractionResponse>;
 }
 
-pub struct GenerationReqest<'a> {
+pub struct GenerationRequest<'a> {
     pub system_prompt: &'a str,
     pub model: &'a str,
     pub prompts: &'a [Message],

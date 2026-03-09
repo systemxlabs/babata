@@ -7,7 +7,7 @@ use crate::{
     BabataResult,
     error::BabataError,
     message::Message,
-    provider::{GenerationReqest, Provider},
+    provider::{GenerationRequest, Provider},
     skill::Skill,
     system_prompt::{SystemPromptFile, build_system_prompt},
     tool::{Tool, ToolSpec},
@@ -118,7 +118,7 @@ impl AgentTask {
         (|| async {
             let response = self
                 .provider
-                .generate(GenerationReqest {
+                .generate(GenerationRequest {
                     system_prompt,
                     model: &self.model,
                     prompts,
@@ -160,7 +160,7 @@ mod tests {
         error::BabataError,
         message::{Content, Message},
         provider::{
-            GenerationReqest, GenerationResponse, InteractionRequest, InteractionResponse, Model,
+            GenerationRequest, GenerationResponse, InteractionRequest, InteractionResponse, Model,
             Provider,
         },
     };
@@ -204,7 +204,7 @@ mod tests {
 
         async fn generate<'a>(
             &self,
-            _request: GenerationReqest<'a>,
+            _request: GenerationRequest<'a>,
         ) -> crate::BabataResult<GenerationResponse> {
             let attempt = self.calls.fetch_add(1, Ordering::SeqCst);
 

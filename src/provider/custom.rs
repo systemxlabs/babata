@@ -2,7 +2,7 @@ use crate::{
     BabataResult,
     config::{CompatibleApi, CustomProviderConfig},
     provider::{
-        AnthropicCompatibleProvider, GenerationReqest, GenerationResponse, InteractionRequest,
+        AnthropicCompatibleProvider, GenerationRequest, GenerationResponse, InteractionRequest,
         InteractionResponse, Model, OpenAICompatibleProvider, Provider,
     },
 };
@@ -48,7 +48,7 @@ impl Provider for CustomProvider {
 
     async fn generate<'a>(
         &self,
-        request: GenerationReqest<'a>,
+        request: GenerationRequest<'a>,
     ) -> BabataResult<GenerationResponse> {
         match &self.inner {
             CustomProviderInner::OpenAI(provider) => provider.generate(request).await,

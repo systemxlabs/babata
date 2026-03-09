@@ -7,7 +7,7 @@ use crate::{
     BabataResult,
     error::BabataError,
     message::{Content, MediaType, Message, ToolCall},
-    provider::{GenerationReqest, GenerationResponse, InteractionRequest, InteractionResponse},
+    provider::{GenerationRequest, GenerationResponse, InteractionRequest, InteractionResponse},
     tool::ToolSpec,
 };
 
@@ -38,7 +38,7 @@ impl OpenAICompatibleProvider {
         tools
             .iter()
             .map(|t| ChatCompletionTool::Function {
-                function: FunctionDefination {
+                function: FunctionDefinition {
                     name: t.name.clone(),
                     description: t.description.clone(),
                     parameters: Some(t.parameters.clone()),
@@ -159,7 +159,7 @@ impl OpenAICompatibleProvider {
 
     pub async fn generate<'a>(
         &self,
-        request: GenerationReqest<'a>,
+        request: GenerationRequest<'a>,
     ) -> BabataResult<GenerationResponse> {
         let request_body = ChatCompletionRequest {
             model: request.model.to_string(),
@@ -339,11 +339,11 @@ pub struct ChatCompletionContentPartFile {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum ChatCompletionTool {
-    Function { function: FunctionDefination },
+    Function { function: FunctionDefinition },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct FunctionDefination {
+pub struct FunctionDefinition {
     pub name: String,
     pub description: String,
     pub parameters: Option<Value>,

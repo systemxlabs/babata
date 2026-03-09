@@ -18,7 +18,7 @@ pub struct AgentConfig {
     pub provider: String,
     pub model: String,
     #[serde(default = "default_memory")]
-    pub memory_embedding: String,
+    pub memory: String,
 }
 
 fn default_memory() -> String {
@@ -251,7 +251,7 @@ mod tests {
                 name: "main".to_string(),
                 provider: "openai".to_string(),
                 model: "gpt-4.1".to_string(),
-                memory_embedding: "simple".to_string(),
+                memory: "simple".to_string(),
             }],
             channels: Vec::new(),
             memory: Vec::new(),
@@ -273,7 +273,7 @@ mod tests {
                 name: "main".to_string(),
                 provider: "openai".to_string(),
                 model: "test-model".to_string(),
-                memory_embedding: "simple".to_string(),
+                memory: "simple".to_string(),
             }],
             channels: Vec::new(),
             memory: Vec::new(),

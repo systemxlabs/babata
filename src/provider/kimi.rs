@@ -1,7 +1,7 @@
 use crate::{
     BabataResult,
     provider::{
-        GenerationReqest, GenerationResponse, InteractionRequest, InteractionResponse, Model,
+        GenerationRequest, GenerationResponse, InteractionRequest, InteractionResponse, Model,
         Provider,
     },
 };
@@ -39,7 +39,7 @@ impl Provider for KimiProvider {
 
     async fn generate<'a>(
         &self,
-        request: GenerationReqest<'a>,
+        request: GenerationRequest<'a>,
     ) -> BabataResult<GenerationResponse> {
         self.inner.generate(request).await
     }
