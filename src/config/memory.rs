@@ -10,8 +10,22 @@ pub enum MemoryConfig {
     Hybrid(HybridMemoryConfig),
 }
 
+impl MemoryConfig {
+    pub fn memory_name(&self) -> &str {
+        match self {
+            MemoryConfig::Simple => "simple",
+            MemoryConfig::Hybrid(config) => &config.name,
+        }
+    }
+
+    pub fn matches_name(&self, name: &str) -> bool {
+        self.memory_name().eq_ignore_ascii_case(name)
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct HybridMemoryConfig {
+    pub name: String,
     pub embedding: EmbeddingConfig,
 }
 

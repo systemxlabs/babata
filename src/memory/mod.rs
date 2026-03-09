@@ -16,14 +16,28 @@ pub trait Memory: Debug + Sync + Send {
     async fn build_context(&self, prompts: &[Message]) -> BabataResult<Vec<Message>>;
 }
 
-pub fn build_memory(config: &Config) -> BabataResult<Box<dyn Memory>> {
-    match config.memory {
+pub fn build_memory(config: &Config, memory_name: &str) -> BabataResult<Box<dyn Memory>> {
+    let memory_config = config
+        .get_memory(memory_name)
+        .unwrap_or(&MemoryConfig::Simple);
+    match memory_config {
         MemoryConfig::Simple => {
             let memory = SimpleMemory::new()?;
             Ok(Box::new(memory))
         }
-        MemoryConfig::Hybrid { .. } => {
-            todo!()
+        MemoryConfig::Hybrid(hybrid_config) => {
+            #[cfg(feature = "mem-hybrid")]
+            {
+                let memory = hybrid::build_memory(hybrid_config)?;
+                Ok(Box::new(memory))
+            }
+            #[cfg(not(feature = "mem-hybrid"))]
+            {
+                let _ = hybrid_config;
+                Err(crate::error::BabataError::config(
+                    "Hybrid memory requires the 'mem-hybrid' feature",
+                ))
+            }
         }
     }
 }

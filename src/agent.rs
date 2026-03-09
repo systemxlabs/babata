@@ -30,7 +30,11 @@ impl AgentLoop {
     pub fn new(config: Config) -> BabataResult<Self> {
         let providers = build_providers(&config)?;
         let channels = build_channels(&config)?;
-        let memory = build_memory(&config)?;
+        let memory_name = config
+            .get_agent("main")
+            .map(|c| c.memory_embedding.as_str())
+            .unwrap_or("simple");
+        let memory = build_memory(&config, memory_name)?;
         let tools = build_tools();
         let system_prompt_files = load_system_prompt_files()?;
         let skills = load_skills()?;

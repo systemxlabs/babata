@@ -3,13 +3,14 @@ mod search;
 mod store;
 
 pub use embedding::{Embedder, LocalEmbedder, ProviderEmbedder};
-pub use search::{HybridSearch, MatchType, SearchResult};
+pub use search::{HybridSearch, SearchResult};
 pub use store::MemoryStore;
 
 use crate::{
     BabataResult,
-    config::{Config, EmbeddingConfig, MemoryConfig},
+    config::EmbeddingConfig,
     error::BabataError,
+    memory::Memory,
     message::{Content, Message},
 };
 use std::sync::Arc;
@@ -124,7 +125,7 @@ impl HybridMemory {
 
         searcher.search(
             query,
-            &query_embedding,
+            query_embedding,
             self.config.top_k_candidates,
             self.config.final_results,
         )
@@ -174,17 +175,15 @@ fn extract_text_from_message(message: &Message) -> String {
     }
 }
 
-pub fn build_memory(config: &Config) -> BabataResult<HybridMemory> {
-    let embedder = create_embedder(config)?;
+pub fn build_memory(
+    hybrid_config: &crate::config::HybridMemoryConfig,
+) -> BabataResult<HybridMemory> {
+    let embedder = create_embedder(&hybrid_config.embedding)?;
     HybridMemory::new(embedder)
 }
 
-fn create_embedder(config: &Config) -> BabataResult<Arc<dyn Embedder>> {
-    let MemoryConfig::Hybrid(hybrid_config) = &config.memory else {
-        return Err(BabataError::config("memory is not hybrid".to_string()));
-    };
-
-    match &hybrid_config.embedding {
+fn create_embedder(embedding: &EmbeddingConfig) -> BabataResult<Arc<dyn Embedder>> {
+    match embedding {
         EmbeddingConfig::Local(local_config) => {
             let embedder = LocalEmbedder::new(&local_config.model)?;
             Ok(Arc::new(embedder))
@@ -198,7 +197,41 @@ fn create_embedder(config: &Config) -> BabataResult<Arc<dyn Embedder>> {
     }
 }
 
-fn _extract_query_from_messages(messages: &[Message]) -> String {
+impl std::fmt::Debug for HybridMemory {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("HybridMemory")
+            .field("config", &self.config)
+            .finish()
+    }
+}
+
+#[async_trait::async_trait]
+impl Memory for HybridMemory {
+    async fn insert_messages(&self, messages: Vec<Message>) -> BabataResult<()> {
+        for message in &messages {
+            self.index_message(message).await?;
+        }
+        Ok(())
+    }
+
+    async fn build_context(&self, prompts: &[Message]) -> BabataResult<Vec<Message>> {
+        let query = extract_query_from_messages(prompts);
+        if query.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let context = self.get_context_for_prompt(&query).await?;
+        if context.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        Ok(vec![Message::UserPrompt {
+            content: vec![Content::Text { text: context }],
+        }])
+    }
+}
+
+fn extract_query_from_messages(messages: &[Message]) -> String {
     for message in messages.iter().rev() {
         if let Message::UserPrompt { content } = message {
             let text: String = content
