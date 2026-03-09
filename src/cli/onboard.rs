@@ -55,16 +55,16 @@ fn run_onboard() -> BabataResult<()> {
         config.upsert_provider(provider_config);
     }
 
+    if let Some(memory_config) = prompt_memory_setup()? {
+        config.upsert_memory(memory_config);
+    }
+
     if let Some(agent_config) = prompt_main_agent_setup(&config)? {
         config.upsert_agent(agent_config);
     }
 
     if let Some(channel_config) = prompt_channel_setup()? {
         config.upsert_channel(channel_config);
-    }
-
-    if let Some(memory_config) = prompt_memory_setup()? {
-        config.upsert_memory(memory_config);
     }
 
     config.validate()?;
