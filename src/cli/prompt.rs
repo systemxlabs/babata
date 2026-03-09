@@ -59,6 +59,7 @@ fn run_prompt(args: &Args) -> BabataResult<()> {
 
     let task = AgentTask::new(
         vec![user_message],
+        Vec::new(),
         provider,
         agent_config.model.clone(),
         build_tools(),

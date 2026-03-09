@@ -51,9 +51,10 @@ impl OpenAICompatibleProvider {
     fn format_messages(
         &self,
         system_prompt: &str,
-        messages: &[Message],
+        context: &[Message],
+        prompts: &[Message],
     ) -> BabataResult<Vec<ChatCompletionMessageParam>> {
-        let mut request_messages = Vec::with_capacity(messages.len() + 1);
+        let mut request_messages = Vec::with_capacity(context.len() + prompts.len() + 1);
 
         let system_prompt = system_prompt.trim();
         if !system_prompt.is_empty() {
@@ -62,7 +63,7 @@ impl OpenAICompatibleProvider {
             });
         }
 
-        for message in messages {
+        for message in context.iter().chain(prompts.iter()) {
             match message {
                 Message::UserPrompt { content } => {
                     let parts = content
@@ -162,7 +163,11 @@ impl OpenAICompatibleProvider {
     ) -> BabataResult<GenerationResponse> {
         let request_body = ChatCompletionRequest {
             model: request.model.to_string(),
-            messages: self.format_messages(request.system_prompt, request.messages)?,
+            messages: self.format_messages(
+                request.system_prompt,
+                request.context,
+                request.prompts,
+            )?,
             tools: (!request.tools.is_empty()).then(|| self.format_tools(request.tools)),
         };
 
@@ -441,7 +446,7 @@ mod tests {
         }];
 
         let payload = provider
-            .format_messages("", &messages)
+            .format_messages("", &[], &messages)
             .expect("format messages");
         let payload = serde_json::to_value(payload).expect("serialize formatted messages");
 
@@ -455,5 +460,31 @@ mod tests {
             payload[0]["content"][0]["input_audio"]["format"],
             json!("mp3")
         );
+    }
+
+    #[test]
+    fn format_messages_places_context_before_prompts() {
+        let provider = OpenAICompatibleProvider::new("test-key", "https://example.com/v1");
+        let context = vec![Message::AssistantResponse {
+            content: vec![Content::Text {
+                text: "previous context".to_string(),
+            }],
+            reasoning_content: None,
+        }];
+        let prompts = vec![Message::UserPrompt {
+            content: vec![Content::Text {
+                text: "latest prompt".to_string(),
+            }],
+        }];
+
+        let payload = provider
+            .format_messages("", &context, &prompts)
+            .expect("format messages");
+        let payload = serde_json::to_value(payload).expect("serialize formatted messages");
+
+        assert_eq!(payload[0]["role"], json!("assistant"));
+        assert_eq!(payload[0]["content"][0]["text"], json!("previous context"));
+        assert_eq!(payload[1]["role"], json!("user"));
+        assert_eq!(payload[1]["content"][0]["text"], json!("latest prompt"));
     }
 }

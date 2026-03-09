@@ -14,7 +14,8 @@ use crate::{
 };
 
 pub struct AgentTask {
-    pub messages: Vec<Message>,
+    pub prompts: Vec<Message>,
+    pub context: Vec<Message>,
     pub provider: Arc<dyn Provider>,
     pub model: String,
     pub tools: HashMap<String, Arc<dyn Tool>>,
@@ -29,7 +30,8 @@ const PROVIDER_RETRY_MAX_DELAY_SECS: u64 = 2;
 
 impl AgentTask {
     pub fn new(
-        messages: Vec<Message>,
+        prompts: Vec<Message>,
+        context: Vec<Message>,
         provider: Arc<dyn Provider>,
         model: String,
         tools: HashMap<String, Arc<dyn Tool>>,
@@ -37,7 +39,8 @@ impl AgentTask {
         skills: Vec<Skill>,
     ) -> Self {
         AgentTask {
-            messages,
+            prompts,
+            context,
             provider,
             model,
             tools,
@@ -52,17 +55,17 @@ impl AgentTask {
             return Err(BabataError::internal("max_steps must be greater than 0"));
         }
 
-        let mut messages = self.messages.clone();
+        let mut prompts = self.prompts.clone();
         let tool_specs = self.collect_tool_specs();
 
         let system_prompt = build_system_prompt(&self.system_prompt_files, &self.skills)?;
 
         for _ in 0..self.max_steps {
             let message = self
-                .generate_with_retry(&system_prompt, &messages, &tool_specs)
+                .generate_with_retry(&system_prompt, &prompts, &self.context, &tool_specs)
                 .await?;
             info!("Provider returned message: {:?}", message);
-            messages.push(message.clone());
+            prompts.push(message.clone());
 
             match message {
                 Message::AssistantResponse { .. } => return Ok(message),
@@ -83,7 +86,7 @@ impl AgentTask {
                             Ok(result) => result,
                             Err(e) => format!("Tool execution failed with message: {e}"),
                         };
-                        messages.push(Message::ToolResult { call, result });
+                        prompts.push(Message::ToolResult { call, result });
                     }
                 }
                 Message::UserPrompt { .. } | Message::ToolResult { .. } => {
@@ -103,7 +106,8 @@ impl AgentTask {
     async fn generate_with_retry(
         &self,
         system_prompt: &str,
-        messages: &[Message],
+        prompts: &[Message],
+        context: &[Message],
         tool_specs: &[ToolSpec],
     ) -> BabataResult<Message> {
         let backoff = ExponentialBuilder::default()
@@ -117,7 +121,8 @@ impl AgentTask {
                 .generate(GenerationReqest {
                     system_prompt,
                     model: &self.model,
-                    messages,
+                    prompts,
+                    context,
                     tools: tool_specs,
                 })
                 .await?;
@@ -238,6 +243,7 @@ mod tests {
                     text: "hello".to_string(),
                 }],
             }],
+            Vec::new(),
             provider,
             "test-model".to_string(),
             HashMap::new(),

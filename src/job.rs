@@ -138,6 +138,7 @@ async fn run_job(tools: HashMap<String, Arc<dyn Tool>>) -> BabataResult<()> {
 
     let task = AgentTask::new(
         vec![user_message.clone()],
+        Vec::new(),
         provider,
         agent_config.model.clone(),
         tools.clone(),

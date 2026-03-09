@@ -44,7 +44,8 @@ pub trait Provider: Debug + Send + Sync {
 pub struct GenerationReqest<'a> {
     pub system_prompt: &'a str,
     pub model: &'a str,
-    pub messages: &'a [Message],
+    pub prompts: &'a [Message],
+    pub context: &'a [Message],
     pub tools: &'a [ToolSpec],
 }
 

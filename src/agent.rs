@@ -60,11 +60,10 @@ impl AgentLoop {
             info!("Channel messages: {:?}", prompt_messages);
 
             let context = self.memory.build_context(&prompt_messages).await?;
-            let mut prompt_with_ctx = prompt_messages.clone();
-            prompt_with_ctx.extend(context);
 
             let task = AgentTask::new(
-                prompt_with_ctx,
+                prompt_messages.clone(),
+                context,
                 Arc::clone(&provider),
                 agent_config.model.clone(),
                 self.tools.clone(),

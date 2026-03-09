@@ -70,10 +70,15 @@ impl AnthropicCompatibleProvider {
         }
     }
 
-    fn format_messages(&self, messages: &[Message]) -> BabataResult<Vec<AnthropicMessage>> {
-        let mut request_messages: Vec<AnthropicMessage> = Vec::with_capacity(messages.len());
+    fn format_messages(
+        &self,
+        context: &[Message],
+        prompts: &[Message],
+    ) -> BabataResult<Vec<AnthropicMessage>> {
+        let mut request_messages: Vec<AnthropicMessage> =
+            Vec::with_capacity(context.len() + prompts.len());
 
-        for message in messages {
+        for message in context.iter().chain(prompts.iter()) {
             let (role, blocks) = match message {
                 Message::UserPrompt { content } => {
                     let mut blocks = Vec::new();
@@ -167,7 +172,7 @@ impl AnthropicCompatibleProvider {
             model: request.model.to_string(),
             max_tokens: DEFAULT_MAX_TOKENS,
             system,
-            messages: self.format_messages(request.messages)?,
+            messages: self.format_messages(request.context, request.prompts)?,
             tools: (!request.tools.is_empty()).then(|| self.format_tools(request.tools)),
         };
 
@@ -367,7 +372,8 @@ mod tests {
         let request = crate::provider::GenerationReqest {
             system_prompt: "",
             model: "claude-opus-4-6",
-            messages: &messages,
+            prompts: &messages,
+            context: &[],
             tools: &[],
         };
 
@@ -423,7 +429,8 @@ mod tests {
         let request = crate::provider::GenerationReqest {
             model: "claude-opus-4-6",
             system_prompt: "",
-            messages: &messages,
+            prompts: &messages,
+            context: &[],
             tools: &tools,
         };
 
@@ -465,7 +472,8 @@ mod tests {
         let request = crate::provider::GenerationReqest {
             model: "claude-opus-4-6",
             system_prompt: "",
-            messages: &messages,
+            prompts: &messages,
+            context: &[],
             tools: &tools,
         };
 
