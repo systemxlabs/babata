@@ -47,7 +47,7 @@ impl AgentLoop {
     }
 
     pub async fn run(&self) -> BabataResult<()> {
-        let agent_config = self.require_agent("main")?;
+        let agent_config = self.config.get_agent("main")?;
         let provider = self.require_provider_for_agent(agent_config)?;
 
         loop {
@@ -119,15 +119,6 @@ impl AgentLoop {
         }
 
         pending_messages
-    }
-
-    pub(crate) fn require_agent(&self, agent_name: &str) -> BabataResult<&AgentConfig> {
-        self.config.get_agent(agent_name).ok_or_else(|| {
-            BabataError::config(format!(
-                "Agent '{}' not found in config; run onboarding first",
-                agent_name
-            ))
-        })
     }
 
     pub(crate) fn require_provider_for_agent(

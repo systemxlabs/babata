@@ -24,23 +24,8 @@ pub fn run(args: &Args) {
 fn run_prompt(args: &Args) -> BabataResult<()> {
     let config = Config::load()?;
 
-    let agent_config = config.get_agent(&args.agent).ok_or_else(|| {
-        BabataError::config(format!(
-            "Agent '{}' not found in config; run \"babata onboard\" first",
-            args.agent
-        ))
-    })?;
-
-    let Some(provider_config) = config
-        .providers
-        .iter()
-        .find(|provider| provider.matches_name(&agent_config.provider))
-    else {
-        return Err(BabataError::config(format!(
-            "Provider '{}' not found in config",
-            agent_config.provider
-        )));
-    };
+    let agent_config = config.get_agent(&args.agent)?;
+    let provider_config = config.get_provider(&agent_config.provider)?;
 
     let provider = create_provider(provider_config)?;
 

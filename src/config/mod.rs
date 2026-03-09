@@ -190,14 +190,22 @@ impl Config {
         self.agents.push(agent_config);
     }
 
-    pub fn get_agent(&self, agent_name: &str) -> Option<&AgentConfig> {
-        self.agents.iter().find(|agent| agent.name == agent_name)
+    pub fn get_agent(&self, agent_name: &str) -> BabataResult<&AgentConfig> {
+        self.agents
+            .iter()
+            .find(|agent| agent.name == agent_name)
+            .ok_or_else(|| {
+                BabataError::config(format!("Agent '{}' not found in config", agent_name))
+            })
     }
 
-    pub fn get_provider(&self, provider_name: &str) -> Option<&ProviderConfig> {
+    pub fn get_provider(&self, provider_name: &str) -> BabataResult<&ProviderConfig> {
         self.providers
             .iter()
             .find(|provider| provider.matches_name(provider_name))
+            .ok_or_else(|| {
+                BabataError::config(format!("Provider '{}' not found in config", provider_name))
+            })
     }
 }
 

@@ -121,12 +121,8 @@ async fn run_job(tools: HashMap<String, Arc<dyn Tool>>) -> BabataResult<()> {
     }
 
     let config = Config::load()?;
-    let agent_config = config
-        .get_agent("main")
-        .ok_or_else(|| BabataError::internal("Missing 'main' agent config"))?;
-    let provider_config = config
-        .get_provider(&agent_config.provider)
-        .ok_or_else(|| BabataError::internal("Missing provider config"))?;
+    let agent_config = config.get_agent("main")?;
+    let provider_config = config.get_provider(&agent_config.provider)?;
 
     let provider = create_provider(provider_config)?;
 
