@@ -72,6 +72,10 @@ Babata home is stored under the user's home directory: `{USER_HOME}/.babata/`. W
 
 ## Jobs
 - Store all jobs under `{BABATA_HOME}/jobs/`.
+- A job can be either a recurring task or a one-time task. Examples:
+  - Recurring task: get the latest news for me every day at 6am.
+  - One-time task: remind me to attend a meeting at 2pm today.
+  - Background task: help me write a research report in the background.
 - Each job must have its own directory under `{BABATA_HOME}/jobs/`.
 - Each job directory must include:
   - `job.md`: defines when the job should run and how it should run.
@@ -81,8 +85,10 @@ Babata home is stored under the user's home directory: `{USER_HOME}/.babata/`. W
   - Monthly split example: `history-202603.md`
 - A job directory may include additional files when needed (for example, scripts or helper assets).
 - Record execution history only when a job is actually executed. If a job is checked but not executed, do not append history.
+- All jobs are checked every minute. When checking schedule matching, only compare the minute of the current local time with the minute required by the job schedule.
 
 ## Source
-- The agent source code is under `{BABATA_HOME}/source/`.
+- Your source code is under `{BABATA_HOME}/source/`.
 - The source code is read-only and serves as reference only.
-- The source directory includes all project files (src, Cargo.toml, etc.) excluding build artifacts.
+- You can learn how you work by reading the source code.
+- If you think a new feature or improvement is needed, tell the user.

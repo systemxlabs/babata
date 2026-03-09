@@ -24,14 +24,19 @@ use crate::{
 
 const JOB_PROMPT: &str = r#"
 The job definitions are already loaded below from `{BABATA_HOME}/jobs/<job_name>/job.md`.
-For each loaded job, determine whether it should run at the current time.
-When checking schedule matching, only compare the minute of the current local time with the minute required by the job schedule.
-Example: if the current local time is `2026-03-06T17:15:22.838327+08:00`, a job with cron `0 * * * *` should not run, a job with cron `*/5 * * * *` should run.
-If a job should run, execute it according to the loaded job definition and record the execution result in history files.
-If a job has invalid configuration, missing files, or any other issue, skip that job and continue with others, DO NOT TRY to fix job.
-You MUST NOT create, modify, or delete any `job.md` file.
-YOU MUST NOT create folder under `{BABATA_HOME}/jobs/`.
-You are ONLY allowed to create/write/edit/delete job history files.
+
+Workflow:
+- For each loaded job, determine whether it should run at the current time.
+  When checking schedule matching, only compare the minute of the current local time with the minute required by the job schedule.
+  Example: if the current local time is `2026-03-06T17:15:22.838327+08:00`, a job with cron `0 * * * *` should not run, a job with cron `*/5 * * * *` should run.
+- If a job should run, execute it according to the loaded job definition and record the execution result in history files.
+- If a job has invalid configuration, missing files, or any other issue, skip that job and continue with others, DO NOT TRY to fix job.
+- If a job will never run again in the future, delete the entire job directory.
+
+Constraints:
+- If a job will run again in the future, you MUST NOT modify or delete the `job.md` file.
+- You MUST NOT create folder under `{BABATA_HOME}/jobs/`.
+- You are allowed to create/write/edit/delete job history files.
 "#;
 const JOB_CHECK_INTERVAL: Duration = Duration::from_secs(30);
 const JOB_MANAGER_CHECK_INTERVAL: Duration = Duration::from_secs(10 * 60);
@@ -256,7 +261,7 @@ fn load_jobs_from_dir(dir: &Path) -> BabataResult<Vec<Job>> {
 mod tests {
     use std::{fs, path::PathBuf};
 
-    use super::load_jobs_from_dir;
+    use super::{build_job_prompt, load_jobs_from_dir};
 
     fn temp_jobs_dir() -> PathBuf {
         let dir = std::env::temp_dir().join(format!("babata-job-test-{}", uuid::Uuid::new_v4()));
@@ -291,5 +296,22 @@ mod tests {
         assert_eq!(jobs[0].job_dir, job_dir);
         assert_eq!(jobs[0].job_definition_path, job_path);
         assert_eq!(jobs[0].job_definition, "# job");
+    }
+
+    #[test]
+    fn job_prompt_includes_delete_job_dir_instruction() {
+        let dir = temp_jobs_dir();
+        let job_dir = dir.join("job-a");
+        fs::create_dir_all(&job_dir).unwrap();
+        let job_path = job_dir.join("job.md");
+        fs::write(&job_path, "# job").unwrap();
+
+        let jobs = load_jobs_from_dir(&dir).unwrap();
+        let prompt = build_job_prompt(&jobs);
+
+        fs::remove_dir_all(&dir).unwrap();
+        assert!(prompt.contains(
+            "If a job will never run again in the future, delete the entire job directory."
+        ));
     }
 }
