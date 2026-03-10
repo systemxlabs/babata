@@ -91,11 +91,11 @@ impl AgentLoop {
             };
             info!("Task run result message: {:?}", response);
 
-            if let Err(err) = self.memory.insert_messages(prompt_messages).await {
-                error!("Failed to insert prompt messages: {}", err);
+            if let Err(err) = self.memory.append_messages(prompt_messages).await {
+                error!("Failed to append prompt messages: {}", err);
             }
-            if let Err(err) = self.memory.insert_messages(vec![response.clone()]).await {
-                error!("Failed to insert response message: {}", err);
+            if let Err(err) = self.memory.append_messages(vec![response.clone()]).await {
+                error!("Failed to append response message: {}", err);
             }
 
             self.send_to_channels(&response).await?;

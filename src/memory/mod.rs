@@ -12,7 +12,7 @@ use std::fmt::Debug;
 
 #[async_trait::async_trait]
 pub trait Memory: Debug + Sync + Send {
-    async fn insert_messages(&self, messages: Vec<Message>) -> BabataResult<()>;
+    async fn append_messages(&self, messages: Vec<Message>) -> BabataResult<()>;
     async fn build_context(&self, prompts: &[Message]) -> BabataResult<Vec<Message>>;
 }
 

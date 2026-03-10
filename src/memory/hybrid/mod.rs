@@ -207,7 +207,7 @@ impl std::fmt::Debug for HybridMemory {
 
 #[async_trait::async_trait]
 impl Memory for HybridMemory {
-    async fn insert_messages(&self, messages: Vec<Message>) -> BabataResult<()> {
+    async fn append_messages(&self, messages: Vec<Message>) -> BabataResult<()> {
         for message in &messages {
             self.index_message(message).await?;
         }
