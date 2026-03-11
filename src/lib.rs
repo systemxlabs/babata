@@ -13,5 +13,7 @@ pub mod system_prompt;
 pub mod task;
 pub mod tool;
 pub mod utils;
+pub mod taskv2;
+pub mod agentv2;
 
 pub type BabataResult<T> = std::result::Result<T, crate::error::BabataError>;
