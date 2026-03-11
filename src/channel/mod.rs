@@ -17,8 +17,6 @@ pub trait Channel: Debug + Send + Sync {
     where
         Self: Sized;
 
-    // Send messages to the channel
-    async fn send(&self, messages: &[Message]) -> BabataResult<()>;
     // Receive messages, blocking until messages are available
     async fn receive(&self) -> BabataResult<Vec<Message>>;
     // Try to receive messages, returning None if no messages are available

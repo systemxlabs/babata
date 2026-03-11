@@ -96,14 +96,7 @@ async fn broadcast_service_started(channels: &[std::sync::Arc<dyn crate::channel
     }
 
     let message = service_started_message();
-    for channel in channels {
-        if let Err(err) = channel.send(std::slice::from_ref(&message)).await {
-            warn!(
-                "Server started but failed to send startup message to channel: {}",
-                err
-            );
-        }
-    }
+    unimplemented!()
 }
 
 fn service_started_message() -> Message {

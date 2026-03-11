@@ -2,14 +2,11 @@ use std::collections::HashSet;
 
 use log::warn;
 use reqwest::{Client, StatusCode};
-use telegram_markdown_v2::{UnsupportedTagsStrategy, convert_with_strategy};
 use teloxide::{
     Bot,
-    payloads::{GetUpdatesSetters, SendMessageSetters},
+    payloads::GetUpdatesSetters,
     prelude::{Request, Requester},
-    types::{
-        ChatId, ChatKind, Document, Message as TelegramMessage, ParseMode, Update, UpdateKind,
-    },
+    types::{ChatKind, Document, Message as TelegramMessage, Update, UpdateKind},
 };
 use tokio::sync::Mutex;
 
@@ -106,45 +103,6 @@ impl TelegramChannel {
 
         if updated {
             config.save()?;
-        }
-
-        Ok(())
-    }
-
-    async fn send_text(&self, chat_id: i64, text: &str) -> BabataResult<()> {
-        let markdown_text = match convert_with_strategy(text, UnsupportedTagsStrategy::Escape) {
-            Ok(markdown) => markdown,
-            Err(err) => {
-                warn!(
-                    "Failed to convert message into Telegram MarkdownV2, sending raw text to markdown path: {}",
-                    err
-                );
-                text.to_string()
-            }
-        };
-
-        let markdown_result = self
-            .bot
-            .send_message(ChatId(chat_id), markdown_text)
-            .parse_mode(ParseMode::MarkdownV2)
-            .send()
-            .await;
-
-        if let Err(err) = markdown_result {
-            warn!(
-                "Failed to send Telegram message with MarkdownV2, falling back to plain text: {}",
-                err
-            );
-            self.bot
-                .send_message(ChatId(chat_id), text.to_string())
-                .send()
-                .await
-                .map_err(|fallback_err| {
-                    BabataError::internal(format!(
-                        "Failed to call Telegram sendMessage (markdown and plain text both failed): markdown error: {}; plain text error: {}",
-                        err, fallback_err
-                    ))
-                })?;
         }
 
         Ok(())
@@ -293,17 +251,6 @@ impl super::Channel for TelegramChannel {
         "Telegram"
     }
 
-    async fn send(&self, messages: &[Message]) -> BabataResult<()> {
-        let outgoing = extract_outgoing_texts(messages);
-        for text in outgoing {
-            for chat_id in &self.allowed_user_ids {
-                self.send_text(*chat_id, &text).await?;
-            }
-        }
-
-        Ok(())
-    }
-
     async fn receive(&self) -> BabataResult<Vec<Message>> {
         loop {
             // Blocking long-poll until Telegram returns new updates.
@@ -448,31 +395,6 @@ fn extract_audio_document(document: &Document) -> (Option<String>, Option<String
     }
 
     (Some(document.file.id.clone()), media_type)
-}
-
-fn extract_outgoing_texts(messages: &[Message]) -> Vec<String> {
-    let mut outgoing = Vec::new();
-
-    for message in messages {
-        if let Message::AssistantResponse { content, .. } = message {
-            let text = content
-                .iter()
-                .filter_map(|part| match part {
-                    Content::Text { text } => Some(text.as_str()),
-                    Content::ImageUrl { .. }
-                    | Content::ImageData { .. }
-                    | Content::AudioData { .. } => None,
-                })
-                .collect::<Vec<_>>()
-                .join("\n");
-
-            if !text.trim().is_empty() {
-                outgoing.push(text);
-            }
-        }
-    }
-
-    outgoing
 }
 
 #[cfg(test)]
@@ -831,33 +753,5 @@ mod tests {
             private_messages[0].audio_media_type,
             Some("audio/ogg".to_string())
         );
-    }
-
-    #[test]
-    fn extract_outgoing_texts_keeps_only_assistant_text() {
-        let messages = vec![
-            Message::UserPrompt {
-                content: vec![Content::Text {
-                    text: "question".to_string(),
-                }],
-            },
-            Message::AssistantResponse {
-                content: vec![
-                    Content::Text {
-                        text: "line1".to_string(),
-                    },
-                    Content::Text {
-                        text: "line2".to_string(),
-                    },
-                    Content::ImageUrl {
-                        url: "https://example.com/image.png".to_string(),
-                    },
-                ],
-                reasoning_content: None,
-            },
-        ];
-
-        let outgoing = extract_outgoing_texts(&messages);
-        assert_eq!(outgoing, vec!["line1\nline2".to_string()]);
     }
 }
