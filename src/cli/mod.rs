@@ -5,5 +5,6 @@ pub mod onboard;
 pub mod prompt;
 pub mod provider;
 pub mod server;
+pub mod task;
 
 pub use args::*;

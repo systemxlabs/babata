@@ -1,173 +1,99 @@
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::sync::Arc;
 
-use log::{error, info};
+use log::{error, warn};
 
 use crate::{
     BabataResult,
     channel::{Channel, build_channels},
-    config::{AgentConfig, Config},
-    error::BabataError,
-    memory::{Memory, build_memory},
+    config::Config,
     message::{Content, Message},
-    provider::{Provider, build_providers},
-    skill::{Skill, load_skills},
-    system_prompt::{SystemPromptFile, load_system_prompt_files},
-    task::AgentTask,
-    tool::{Tool, build_tools},
+    runtime::TaskRuntime,
 };
 
-pub struct AgentLoop {
-    pub config: Config,
-    pub providers: HashMap<String, Arc<dyn Provider>>,
+#[derive(Debug)]
+pub struct ServerApp {
+    pub runtime: Arc<TaskRuntime>,
     pub channels: Vec<Arc<dyn Channel>>,
-    pub memory: Box<dyn Memory>,
-    pub tools: HashMap<String, Arc<dyn Tool>>,
-    pub system_prompt_files: Vec<SystemPromptFile>,
-    pub skills: Vec<Skill>,
+    pub agent_name: String,
 }
 
-impl AgentLoop {
+impl ServerApp {
     pub fn new(config: Config) -> BabataResult<Self> {
-        let providers = build_providers(&config)?;
         let channels = build_channels(&config)?;
-        let memory_name = config
-            .get_agent("main")
-            .map(|c| c.memory.as_str())
-            .unwrap_or("simple");
-        let memory = build_memory(&config, memory_name)?;
-        let tools = build_tools();
-        let system_prompt_files = load_system_prompt_files()?;
-        let skills = load_skills()?;
-
+        let runtime = Arc::new(TaskRuntime::new(config)?);
         Ok(Self {
-            config,
-            providers,
+            runtime,
             channels,
-            memory,
-            tools,
-            system_prompt_files,
-            skills,
+            agent_name: "main".to_string(),
         })
     }
 
     pub async fn run(&self) -> BabataResult<()> {
-        let agent_config = self.config.get_agent("main")?;
-        let provider = self.require_provider_for_agent(agent_config)?;
+        self.runtime.resume_running_tasks().await?;
 
-        loop {
-            let prompt_messages = self.collect_messages_from_channels().await;
+        for channel in &self.channels {
+            let channel = Arc::clone(channel);
+            let runtime = Arc::clone(&self.runtime);
+            let agent_name = self.agent_name.clone();
 
-            if prompt_messages.is_empty() {
-                tokio::time::sleep(Duration::from_millis(200)).await;
-                continue;
-            }
-            info!("Channel messages: {:?}", prompt_messages);
+            tokio::spawn(async move {
+                loop {
+                    match channel.receive().await {
+                        Ok(messages) => {
+                            for message in messages {
+                                let runtime = Arc::clone(&runtime);
+                                let channel = Arc::clone(&channel);
+                                let agent_name = agent_name.clone();
 
-            let context = self.memory.build_context(&prompt_messages).await?;
-
-            let task = AgentTask::new(
-                prompt_messages.clone(),
-                context,
-                Arc::clone(&provider),
-                agent_config.model.clone(),
-                self.tools.clone(),
-                self.system_prompt_files.clone(),
-                self.skills.clone(),
-            );
-            let response = match task.run().await {
-                Ok(response) => response,
-                Err(err) => {
-                    error!("Agent task failed: {}", err);
-
-                    let error_message = agent_task_failed_message(&err);
-                    if let Err(send_err) = self.send_to_channels(&error_message).await {
-                        error!(
-                            "Failed to send agent task error message to channel(s): {}",
-                            send_err
-                        );
+                                tokio::spawn(async move {
+                                    if let Err(err) = process_channel_message(
+                                        runtime,
+                                        channel,
+                                        &agent_name,
+                                        message,
+                                    )
+                                    .await
+                                    {
+                                        error!("Channel task processing failed: {}", err);
+                                    }
+                                });
+                            }
+                        }
+                        Err(err) => {
+                            warn!("Channel receive failed: {}. Retrying.", err);
+                            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                        }
                     }
-                    continue;
                 }
-            };
-            info!("Task run result message: {:?}", response);
-
-            if let Err(err) = self.memory.append_messages(prompt_messages).await {
-                error!("Failed to append prompt messages: {}", err);
-            }
-            if let Err(err) = self.memory.append_messages(vec![response.clone()]).await {
-                error!("Failed to append response message: {}", err);
-            }
-
-            self.send_to_channels(&response).await?;
-        }
-    }
-
-    async fn collect_messages_from_channels(&self) -> Vec<Message> {
-        let mut pending_messages = Vec::new();
-
-        for channel in &self.channels {
-            let maybe_messages = match channel.try_receive().await {
-                Ok(messages) => messages,
-                Err(err) => {
-                    error!(
-                        "Failed to receive messages from channel {:?}: {}. Skipping this channel in current cycle.",
-                        channel, err
-                    );
-                    continue;
-                }
-            };
-
-            if let Some(messages) = maybe_messages {
-                pending_messages.extend(messages);
-            }
+            });
         }
 
-        pending_messages
-    }
-
-    pub(crate) fn require_provider_for_agent(
-        &self,
-        agent_config: &AgentConfig,
-    ) -> BabataResult<Arc<dyn Provider>> {
-        self.find_provider(&agent_config.provider).ok_or_else(|| {
-            BabataError::config(format!(
-                "Provider '{}' for agent '{}' not found",
-                agent_config.provider, agent_config.name
-            ))
-        })
-    }
-
-    pub(crate) fn find_provider(&self, provider_name: &str) -> Option<Arc<dyn Provider>> {
-        self.providers.iter().find_map(|(name, provider)| {
-            name.eq_ignore_ascii_case(provider_name)
-                .then(|| Arc::clone(provider))
-        })
-    }
-
-    async fn send_to_channels(&self, message: &Message) -> BabataResult<()> {
-        let mut send_failures = Vec::new();
-        for channel in &self.channels {
-            if let Err(err) = channel.send(std::slice::from_ref(message)).await {
-                send_failures.push(err.to_string());
-            }
-        }
-
-        if send_failures.is_empty() {
-            return Ok(());
-        }
-
-        Err(BabataError::internal(format!(
-            "Failed to send message to {} channel(s): {}",
-            send_failures.len(),
-            send_failures.join("; ")
-        )))
+        std::future::pending::<()>().await;
+        #[allow(unreachable_code)]
+        Ok(())
     }
 }
 
-fn agent_task_failed_message(err: &BabataError) -> Message {
+async fn process_channel_message(
+    runtime: Arc<TaskRuntime>,
+    channel: Arc<dyn Channel>,
+    agent_name: &str,
+    message: Message,
+) -> BabataResult<()> {
+    let task_id = runtime.submit_prompt_task(agent_name, message).await?;
+    match runtime.wait_for_task(&task_id).await {
+        Ok(response) => channel.send(std::slice::from_ref(&response)).await,
+        Err(err) => {
+            let response = task_failed_message(&err);
+            channel.send(std::slice::from_ref(&response)).await
+        }
+    }
+}
+
+pub fn task_failed_message(err: &crate::error::BabataError) -> Message {
     Message::AssistantResponse {
         content: vec![Content::Text {
-            text: format!("Agent task failed: {}", err),
+            text: format!("Task failed: {}", err),
         }],
         reasoning_content: None,
     }

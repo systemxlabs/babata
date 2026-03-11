@@ -17,6 +17,11 @@ pub struct Args {
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
+    #[command(about = "Task management and observability commands")]
+    Task {
+        #[command(subcommand)]
+        action: TaskAction,
+    },
     #[command(about = "Server management commands (serve/start/stop/restart)")]
     Server {
         #[command(subcommand)]
@@ -120,4 +125,37 @@ pub enum AgentAction {
     },
     #[command(about = "List all agent configs (one JSON per line)")]
     List,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum TaskAction {
+    #[command(about = "List tasks; optionally filter by status")]
+    List {
+        #[arg(
+            long,
+            value_name = "STATUS",
+            help = "Optional status filter: running, done, canceled, paused"
+        )]
+        status: Option<String>,
+    },
+    #[command(about = "Show task metadata, task.md, progress.md, and artifacts")]
+    Show {
+        #[arg(value_name = "TASK_ID")]
+        task_id: String,
+    },
+    #[command(about = "Pause a task")]
+    Pause {
+        #[arg(value_name = "TASK_ID")]
+        task_id: String,
+    },
+    #[command(about = "Cancel a task")]
+    Cancel {
+        #[arg(value_name = "TASK_ID")]
+        task_id: String,
+    },
+    #[command(about = "Resume a paused or canceled task in the current process")]
+    Resume {
+        #[arg(value_name = "TASK_ID")]
+        task_id: String,
+    },
 }

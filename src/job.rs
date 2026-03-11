@@ -1,24 +1,18 @@
 use std::{
-    collections::HashMap,
     path::{Path, PathBuf},
     sync::Arc,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use chrono::Local;
 use log::{error, info};
-use tokio::{sync::Mutex, task::JoinHandle};
 
 use crate::{
     BabataResult,
-    config::Config,
     error::BabataError,
     message::{Content, Message},
-    provider::create_provider,
-    skill::load_skills,
-    system_prompt::load_system_prompt_files,
-    task::AgentTask,
-    tool::{Tool, build_tools},
+    runtime::TaskRuntime,
+    task::NewTask,
     utils::babata_dir,
 };
 
@@ -38,78 +32,47 @@ Constraints:
 - You MUST NOT create folder under `{BABATA_HOME}/jobs/`.
 - You are allowed to create/write/edit/delete job history files.
 "#;
-const JOB_CHECK_INTERVAL: Duration = Duration::from_secs(30);
-const JOB_MANAGER_CHECK_INTERVAL: Duration = Duration::from_secs(10 * 60);
 
+const JOB_CHECK_INTERVAL: Duration = Duration::from_secs(30);
+
+#[derive(Debug)]
 pub struct JobManager {
-    tools: HashMap<String, Arc<dyn Tool>>,
-    job_loop: Arc<Mutex<Option<JoinHandle<()>>>>,
+    runtime: Arc<TaskRuntime>,
+    agent_name: String,
 }
 
 impl JobManager {
-    pub fn new() -> Self {
+    pub fn new(runtime: Arc<TaskRuntime>, agent_name: impl Into<String>) -> Self {
         Self {
-            tools: build_tools(),
-            job_loop: Arc::new(Mutex::new(None)),
+            runtime,
+            agent_name: agent_name.into(),
         }
     }
 
     pub fn start(&self) {
-        let job_loop = self.job_loop.clone();
-        let tools = self.tools.clone();
-        tokio::spawn(async move {
-            loop {
-                {
-                    let mut guard = job_loop.lock().await;
-                    let need_spawn = match guard.as_ref() {
-                        Some(handle) => handle.is_finished(),
-                        None => true,
-                    };
+        let runtime = Arc::clone(&self.runtime);
+        let agent_name = self.agent_name.clone();
 
-                    if need_spawn {
-                        info!("Spawning new job loop");
-                        let new_handle = start_job_loop(tools.clone()).await;
-                        *guard = Some(new_handle);
+        tokio::spawn(async move {
+            info!("Start running job checker loop");
+            let mut last_run_minute = Local::now().timestamp() / 60;
+
+            loop {
+                let current_minute = Local::now().timestamp() / 60;
+                if current_minute != last_run_minute {
+                    last_run_minute = current_minute;
+                    if let Err(err) = run_job(runtime.clone(), &agent_name).await {
+                        error!("Job run failed: {}", err);
                     }
                 }
 
-                tokio::time::sleep(JOB_MANAGER_CHECK_INTERVAL).await;
+                tokio::time::sleep(JOB_CHECK_INTERVAL).await;
             }
         });
     }
 }
 
-impl Default for JobManager {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-async fn start_job_loop(tools: HashMap<String, Arc<dyn Tool>>) -> JoinHandle<()> {
-    tokio::spawn(async move {
-        info!("Start running job checker loop");
-
-        let mut last_run_minute = Local::now().timestamp() / 60;
-
-        loop {
-            let current_minute = Local::now().timestamp() / 60;
-            if current_minute == last_run_minute {
-                tokio::time::sleep(JOB_CHECK_INTERVAL).await;
-                continue;
-            }
-            last_run_minute = current_minute;
-
-            let tools = tools.clone();
-            tokio::spawn(async move {
-                if let Err(err) = run_job(tools).await {
-                    error!("Job run failed: {}", err);
-                };
-            });
-        }
-    })
-}
-
-async fn run_job(tools: HashMap<String, Arc<dyn Tool>>) -> BabataResult<()> {
+async fn run_job(runtime: Arc<TaskRuntime>, agent_name: &str) -> BabataResult<()> {
     info!("Starting to run job");
     let jobs = load_jobs()?;
     if jobs.is_empty() {
@@ -120,34 +83,26 @@ async fn run_job(tools: HashMap<String, Arc<dyn Tool>>) -> BabataResult<()> {
         return Ok(());
     }
 
-    let config = Config::load()?;
-    let agent_config = config.get_agent("main")?;
-    let provider_config = config.get_provider(&agent_config.provider)?;
-
-    let provider = create_provider(provider_config)?;
-
+    let config = crate::config::Config::load()?;
+    let agent_config = config.get_agent(agent_name)?;
     let user_message = Message::UserPrompt {
         content: vec![Content::Text {
             text: build_job_prompt(&jobs),
         }],
     };
 
-    let task = AgentTask::new(
-        vec![user_message.clone()],
-        Vec::new(),
-        provider,
-        agent_config.model.clone(),
-        tools.clone(),
-        load_system_prompt_files()?,
-        load_skills()?,
-    );
-
-    let now = Instant::now();
-    task.run().await?;
-    info!(
-        "Job run completed in {} seconds",
-        now.elapsed().as_secs_f32()
-    );
+    runtime
+        .submit_task(NewTask {
+            agent_name: agent_config.name.clone(),
+            provider_name: agent_config.provider.clone(),
+            model: agent_config.model.clone(),
+            task_markdown: build_job_task_markdown(&jobs),
+            initial_progress: build_job_progress_markdown(),
+            initial_history: vec![user_message],
+            parent_task_id: None,
+            root_task_id: None,
+        })
+        .await?;
 
     Ok(())
 }
@@ -158,6 +113,43 @@ struct Job {
     job_dir: PathBuf,
     job_definition: String,
     job_definition_path: PathBuf,
+}
+
+fn build_job_task_markdown(jobs: &[Job]) -> String {
+    format!(
+        r#"# Task
+
+## Goal
+Evaluate the loaded jobs and execute the ones that should run now.
+
+## Input
+{}
+
+## Completion Criteria
+- Check every loaded job against the current minute.
+- Execute only the jobs that should run now.
+- Record outputs in job history files when work is done.
+- Keep `progress.md` current so the scheduler can recover after restart.
+"#,
+        build_job_prompt(jobs)
+    )
+}
+
+fn build_job_progress_markdown() -> String {
+    r#"# Progress
+
+## Current Goal
+- Inspect the loaded jobs and decide which ones should run now.
+
+## Completed
+- Scheduler task created.
+
+## Outstanding
+- Evaluate schedules.
+- Execute eligible jobs.
+- Record job history changes.
+"#
+    .to_string()
 }
 
 fn build_job_prompt(jobs: &[Job]) -> String {

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use log::info;
 
 use crate::{
@@ -5,11 +7,7 @@ use crate::{
     config::Config,
     error::BabataError,
     message::{Content, Message},
-    provider::create_provider,
-    skill::load_skills,
-    system_prompt::load_system_prompt_files,
-    task::AgentTask,
-    tool::build_tools,
+    runtime::TaskRuntime,
 };
 
 use super::Args;
@@ -23,12 +21,6 @@ pub fn run(args: &Args) {
 
 fn run_prompt(args: &Args) -> BabataResult<()> {
     let config = Config::load()?;
-
-    let agent_config = config.get_agent(&args.agent)?;
-    let provider_config = config.get_provider(&agent_config.provider)?;
-
-    let provider = create_provider(provider_config)?;
-
     let prompt = args
         .prompt
         .as_ref()
@@ -37,33 +29,27 @@ fn run_prompt(args: &Args) -> BabataResult<()> {
         .ok_or_else(|| BabataError::config("Prompt is required"))?
         .to_string();
 
-    let user_message = Message::UserPrompt {
-        content: vec![Content::Text { text: prompt }],
-    };
-    info!("User message before task.run: {:?}", user_message);
-
-    let task = AgentTask::new(
-        vec![user_message],
-        Vec::new(),
-        provider,
-        agent_config.model.clone(),
-        build_tools(),
-        load_system_prompt_files()?,
-        load_skills()?,
-    );
-
-    let runtime = tokio::runtime::Builder::new_current_thread()
+    let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .map_err(|err| {
             BabataError::internal(format!("Failed to initialize async runtime: {err}"))
         })?;
 
-    let message = runtime.block_on(task.run())?;
-    info!("Task run result message: {:?}", message);
-    print_final_message(&message)?;
+    runtime.block_on(async {
+        let runtime = Arc::new(TaskRuntime::new(config)?);
+        runtime.resume_running_tasks().await?;
 
-    Ok(())
+        let user_message = Message::UserPrompt {
+            content: vec![Content::Text { text: prompt }],
+        };
+        let task_id = runtime
+            .submit_prompt_task(&args.agent, user_message)
+            .await?;
+        let message = runtime.wait_for_task(&task_id).await?;
+        info!("Task '{}' finished with message: {:?}", task_id, message);
+        print_final_message(&message)
+    })
 }
 
 fn print_final_message(message: &Message) -> BabataResult<()> {
@@ -84,7 +70,7 @@ fn print_final_message(message: &Message) -> BabataResult<()> {
             Ok(())
         }
         _ => Err(BabataError::internal(
-            "AgentTask returned non-final message type",
+            "TaskRuntime returned non-final message type",
         )),
     }
 }

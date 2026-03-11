@@ -8,6 +8,7 @@ fn main() {
 
     let args = babata::cli::Args::parse();
     match &args.command {
+        Some(babata::cli::Command::Task { action }) => babata::cli::task::run(&args, action),
         Some(babata::cli::Command::Server { action }) => match action {
             babata::cli::ServerAction::Serve => babata::cli::server::serve(&args),
             babata::cli::ServerAction::Start => babata::cli::server::start(&args),

@@ -10,7 +10,7 @@ use log::{info, warn};
 use crate::job::JobManager;
 use crate::message::{Content, Message};
 use crate::utils::babata_dir;
-use crate::{BabataResult, agent::AgentLoop, config::Config, error::BabataError};
+use crate::{BabataResult, agent::ServerApp, config::Config, error::BabataError};
 
 use super::Args;
 
@@ -89,10 +89,10 @@ fn run_serve(_args: &Args) -> BabataResult<()> {
     info!("Server run babata dir: {}", babata_dir()?.display());
 
     let config = Config::load()?;
-    let agent_loop = AgentLoop::new(config.clone())?;
-    let job_manager = JobManager::new();
+    let server_app = ServerApp::new(config)?;
+    let job_manager = JobManager::new(server_app.runtime.clone(), server_app.agent_name.clone());
 
-    let runtime = tokio::runtime::Builder::new_current_thread()
+    let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .map_err(|err| {
@@ -101,8 +101,8 @@ fn run_serve(_args: &Args) -> BabataResult<()> {
 
     runtime.block_on(async move {
         job_manager.start();
-        broadcast_service_started(&agent_loop.channels).await;
-        agent_loop.run().await
+        broadcast_service_started(&server_app.channels).await;
+        server_app.run().await
     })?;
     Ok(())
 }
