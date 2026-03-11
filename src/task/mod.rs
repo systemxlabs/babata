@@ -11,9 +11,9 @@ use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TaskRequest {
-    prompt: Vec<Content>,
-    parent_task_id: Option<Uuid>,
-    agent: Option<String>,
+    pub prompt: Vec<Content>,
+    pub parent_task_id: Option<Uuid>,
+    pub agent: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

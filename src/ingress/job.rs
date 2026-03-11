@@ -8,7 +8,13 @@ use chrono::Local;
 use log::{error, info};
 use tokio::{sync::Mutex, task::JoinHandle};
 
-use crate::{BabataResult, error::BabataError, utils::babata_dir};
+use crate::{
+    BabataResult,
+    error::BabataError,
+    message::Content,
+    task::{TaskManager, TaskRequest},
+    utils::babata_dir,
+};
 
 const JOB_PROMPT: &str = r#"
 The job definitions are already loaded below from `{BABATA_HOME}/jobs/<job_name>/job.md`.
@@ -30,18 +36,21 @@ const JOB_CHECK_INTERVAL: Duration = Duration::from_secs(30);
 const JOB_MANAGER_CHECK_INTERVAL: Duration = Duration::from_secs(10 * 60);
 
 pub struct JobManager {
+    task_manager: Arc<TaskManager>,
     job_loop: Arc<Mutex<Option<JoinHandle<()>>>>,
 }
 
 impl JobManager {
-    pub fn new() -> Self {
+    pub fn new(task_manager: Arc<TaskManager>) -> Self {
         Self {
+            task_manager,
             job_loop: Arc::new(Mutex::new(None)),
         }
     }
 
     pub fn start(&self) {
         let job_loop = self.job_loop.clone();
+        let task_manager = self.task_manager.clone();
         tokio::spawn(async move {
             loop {
                 {
@@ -53,7 +62,8 @@ impl JobManager {
 
                     if need_spawn {
                         info!("Spawning new job loop");
-                        let new_handle = start_job_loop().await;
+                        let task_manager = task_manager.clone();
+                        let new_handle = start_job_loop(task_manager).await;
                         *guard = Some(new_handle);
                     }
                 }
@@ -64,13 +74,7 @@ impl JobManager {
     }
 }
 
-impl Default for JobManager {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-async fn start_job_loop() -> JoinHandle<()> {
+async fn start_job_loop(task_manager: Arc<TaskManager>) -> JoinHandle<()> {
     tokio::spawn(async move {
         info!("Start running job checker loop");
 
@@ -84,8 +88,9 @@ async fn start_job_loop() -> JoinHandle<()> {
             }
             last_run_minute = current_minute;
 
+            let task_manager = task_manager.clone();
             tokio::spawn(async move {
-                if let Err(err) = run_job().await {
+                if let Err(err) = run_job(task_manager).await {
                     error!("Job run failed: {}", err);
                 };
             });
@@ -93,7 +98,7 @@ async fn start_job_loop() -> JoinHandle<()> {
     })
 }
 
-async fn run_job() -> BabataResult<()> {
+async fn run_job(task_manager: Arc<TaskManager>) -> BabataResult<()> {
     info!("Starting to run job");
     let jobs = load_jobs()?;
     if jobs.is_empty() {
@@ -104,7 +109,17 @@ async fn run_job() -> BabataResult<()> {
         return Ok(());
     }
 
-    unimplemented!()
+    let request = TaskRequest {
+        prompt: vec![Content::Text {
+            text: build_job_prompt(&jobs),
+        }],
+        parent_task_id: None,
+        agent: None,
+    };
+
+    let task_id = task_manager.create_task(request)?;
+    info!("Running job task id {task_id}");
+    Ok(())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
