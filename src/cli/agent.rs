@@ -36,12 +36,12 @@ fn run_add(agent_config_json: &str) -> BabataResult<()> {
     })?;
 
     let mut config = Config::load()?;
-    let agent_name = agent_config.name.clone();
+    let agent_name = agent_config.name();
     config.upsert_agent(agent_config);
     config.validate()?;
     config.save()?;
 
-    println!("Added/updated agent '{}' in config", agent_name);
+    println!("Added/updated agent '{agent_name}' in config");
     Ok(())
 }
 
@@ -51,14 +51,14 @@ fn run_delete(name: &str) -> BabataResult<()> {
     let index = config
         .agents
         .iter()
-        .position(|agent| agent.name == name)
+        .position(|agent| agent.name() == name)
         .ok_or_else(|| BabataError::config(format!("Agent '{}' not found in config", name)))?;
 
     let deleted = config.agents.remove(index);
     config.validate()?;
     config.save()?;
 
-    println!("Deleted agent '{}'", deleted.name);
+    println!("Deleted agent '{}'", deleted.name());
     Ok(())
 }
 
@@ -69,7 +69,8 @@ fn run_list() -> BabataResult<()> {
         let payload = serde_json::to_string(agent_config).map_err(|err| {
             BabataError::internal(format!(
                 "Failed to serialize agent '{}' config to JSON: {}",
-                agent_config.name, err
+                agent_config.name(),
+                err
             ))
         })?;
         println!("{payload}");

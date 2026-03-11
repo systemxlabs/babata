@@ -8,8 +8,8 @@ use crate::{
     },
     channel::{Channel, TelegramChannel},
     config::{
-        AgentConfig, AnthropicProviderConfig, ChannelConfig, CompatibleApi, Config,
-        CustomProviderConfig, DeepSeekProviderConfig, EmbeddingConfig, HybridMemoryConfig,
+        AgentConfig, AnthropicProviderConfig, BabataAgentConfig, ChannelConfig, CompatibleApi,
+        Config, CustomProviderConfig, DeepSeekProviderConfig, EmbeddingConfig, HybridMemoryConfig,
         KimiProviderConfig, LocalEmbeddingConfig, MemoryConfig, MoonshotProviderConfig,
         OpenAIProviderConfig, ProviderConfig, RemoteEmbeddingConfig, TelegramChannelConfig,
     },
@@ -59,8 +59,8 @@ fn run_onboard() -> BabataResult<()> {
         config.upsert_memory(memory_config);
     }
 
-    if let Some(agent_config) = prompt_main_agent_setup(&config)? {
-        config.upsert_agent(agent_config);
+    if let Some(babata_agent_config) = prompt_babata_agent_setup(&config)? {
+        config.upsert_agent(AgentConfig::Babata(babata_agent_config));
     }
 
     if let Some(channel_config) = prompt_channel_setup()? {
@@ -268,7 +268,7 @@ fn prompt_custom_compatible_api() -> BabataResult<CompatibleApi> {
     ))
 }
 
-fn prompt_main_agent_setup(config: &Config) -> BabataResult<Option<AgentConfig>> {
+fn prompt_babata_agent_setup(config: &Config) -> BabataResult<Option<BabataAgentConfig>> {
     let selection = prompt_line("Configure main agent? (Press Enter to skip, or Y to continue)")?;
     match selection.trim() {
         "" | "N" | "n" | "no" => return Ok(None),
@@ -310,8 +310,7 @@ fn prompt_main_agent_setup(config: &Config) -> BabataResult<Option<AgentConfig>>
         })?;
     let model = prompt_model_setup(provider_config)?;
     let memory = prompt_agent_memory_setup(config)?;
-    Ok(Some(AgentConfig {
-        name: "main".to_string(),
+    Ok(Some(BabataAgentConfig {
         provider: provider_name.to_string(),
         model,
         memory,

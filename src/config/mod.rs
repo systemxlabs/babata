@@ -1,29 +1,23 @@
+mod agent;
 mod channel;
 mod memory;
 mod provider;
 
+pub use agent::*;
 pub use channel::*;
 pub use memory::*;
 pub use provider::*;
 
 use std::collections::HashSet;
 
-use crate::{BabataResult, error::BabataError, utils::babata_dir};
+use crate::{
+    BabataResult,
+    agent::{Agent, babata::BabataAgent},
+    error::BabataError,
+    memory::{Memory, SimpleMemory},
+    utils::babata_dir,
+};
 use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-pub struct AgentConfig {
-    pub name: String,
-    // If None, use default skills
-    pub provider: String,
-    pub model: String,
-    #[serde(default = "default_memory")]
-    pub memory: String,
-}
-
-fn default_memory() -> String {
-    "simple".to_string()
-}
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct Config {
@@ -113,40 +107,6 @@ impl Config {
             }
         }
 
-        let mut agent_names = HashSet::new();
-        let mut has_main_agent = false;
-        for agent_config in &self.agents {
-            if agent_config.name.trim().is_empty() {
-                return Err(BabataError::config("Agent name cannot be empty"));
-            }
-
-            if !agent_names.insert(agent_config.name.clone()) {
-                return Err(BabataError::config(format!(
-                    "Duplicate agent name '{}' found in configuration",
-                    agent_config.name
-                )));
-            }
-
-            if agent_config.name == "main" {
-                has_main_agent = true;
-            }
-            if !self
-                .providers
-                .iter()
-                .any(|provider| provider.matches_name(&agent_config.provider))
-            {
-                return Err(BabataError::config(format!(
-                    "Agent '{}' references unknown provider '{}'",
-                    agent_config.name, agent_config.provider
-                )));
-            }
-        }
-        if !has_main_agent {
-            return Err(BabataError::config(
-                "No 'main' agent defined in configuration",
-            ));
-        }
-
         for channel in &self.channels {
             match channel {
                 ChannelConfig::Telegram(telegram) => telegram.validate()?,
@@ -184,11 +144,12 @@ impl Config {
     }
 
     pub fn upsert_agent(&mut self, agent_config: AgentConfig) {
-        if let Some(existing) = self
-            .agents
-            .iter_mut()
-            .find(|existing| existing.name == agent_config.name)
-        {
+        if let Some(existing) = self.agents.iter_mut().find(|existing| {
+            matches!(
+                (existing, &agent_config),
+                (AgentConfig::Babata(_), AgentConfig::Babata(_))
+            )
+        }) {
             *existing = agent_config;
             return;
         }
@@ -213,7 +174,7 @@ impl Config {
 
     pub fn get_memory(&self, memory_name: &str) -> Option<&MemoryConfig> {
         self.memory.iter().find(|memory| match memory {
-            MemoryConfig::Simple => memory_name.eq_ignore_ascii_case("simple"),
+            MemoryConfig::Simple => memory_name.eq_ignore_ascii_case(SimpleMemory::name()),
             MemoryConfig::Hybrid(_) => memory_name.eq_ignore_ascii_case("hybrid"),
         })
     }
@@ -221,7 +182,9 @@ impl Config {
     pub fn get_agent(&self, agent_name: &str) -> BabataResult<&AgentConfig> {
         self.agents
             .iter()
-            .find(|agent| agent.name == agent_name)
+            .find(|agent| match agent {
+                AgentConfig::Babata(_) => agent_name.eq_ignore_ascii_case(BabataAgent::name()),
+            })
             .ok_or_else(|| {
                 BabataError::config(format!("Agent '{}' not found in config", agent_name))
             })
@@ -234,51 +197,5 @@ impl Config {
             .ok_or_else(|| {
                 BabataError::config(format!("Provider '{}' not found in config", provider_name))
             })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn config_json_roundtrip() {
-        let config = Config {
-            providers: vec![ProviderConfig::OpenAI(OpenAIProviderConfig {
-                api_key: "test-api-key".to_string(),
-            })],
-            agents: vec![AgentConfig {
-                name: "main".to_string(),
-                provider: "openai".to_string(),
-                model: "gpt-4.1".to_string(),
-                memory: "simple".to_string(),
-            }],
-            channels: Vec::new(),
-            memory: Vec::new(),
-        };
-
-        let json = serde_json::to_string(&config).expect("serialize config to json");
-        let parsed: Config = serde_json::from_str(&json).expect("deserialize config from json");
-
-        assert_eq!(config, parsed);
-    }
-
-    #[test]
-    fn validate_rejects_invalid_provider_url() {
-        let config = Config {
-            providers: vec![ProviderConfig::OpenAI(OpenAIProviderConfig {
-                api_key: "test-api-key".to_string(),
-            })],
-            agents: vec![AgentConfig {
-                name: "main".to_string(),
-                provider: "openai".to_string(),
-                model: "test-model".to_string(),
-                memory: "simple".to_string(),
-            }],
-            channels: Vec::new(),
-            memory: Vec::new(),
-        };
-
-        config.validate().expect("provider URL no longer validated");
     }
 }

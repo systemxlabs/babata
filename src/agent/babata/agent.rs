@@ -5,14 +5,14 @@ use log::{info, warn};
 
 use crate::{
     BabataResult,
-    agent::babata::{GenerationRequest, Provider, create_provider},
     agent::{
         Agent,
         babata::{
-            Skill, SystemPromptFile, build_system_prompt, load_skills, load_system_prompt_files,
+            GenerationRequest, Provider, Skill, SystemPromptFile, build_system_prompt,
+            create_provider, load_skills, load_system_prompt_files,
         },
     },
-    config::Config,
+    config::{AgentConfig, Config},
     error::BabataError,
     memory::{Memory, build_memory},
     message::{Content, Message},
@@ -37,15 +37,17 @@ pub struct BabataAgent {
 
 impl BabataAgent {
     pub fn new(config: Config) -> BabataResult<Self> {
-        let agent_config = config.get_agent("main")?;
-        let provider_config = config.get_provider(&agent_config.provider)?;
+        let agent_config = config.get_agent(BabataAgent::name())?;
+        let AgentConfig::Babata(babata_config) = agent_config else {
+            return Err(BabataError::config(format!(
+                "Agent config for 'babata' must be of type 'BabataAgentConfig'"
+            )));
+        };
+
+        let provider_config = config.get_provider(&babata_config.provider)?;
         let provider = create_provider(provider_config)?;
-        let model = agent_config.model.clone();
-        let memory_name = config
-            .get_agent("main")
-            .map(|c| c.memory.as_str())
-            .unwrap_or("simple");
-        let memory = build_memory(&config, memory_name)?;
+        let model = babata_config.model.clone();
+        let memory = build_memory(&config, &babata_config.memory)?;
         let tools = build_tools();
         let system_prompt_files = load_system_prompt_files()?;
         let skills = load_skills()?;

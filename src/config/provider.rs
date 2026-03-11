@@ -91,6 +91,7 @@ impl ProviderConfig {
     }
 
     pub fn provider_name(&self) -> &'static str {
+        // TODO
         match self {
             ProviderConfig::OpenAI(_) => "openai",
             ProviderConfig::Kimi(_) => "kimi",

@@ -173,6 +173,10 @@ impl SimpleMemory {
 
 #[async_trait::async_trait]
 impl Memory for SimpleMemory {
+    fn name() -> &'static str {
+        "simple"
+    }
+
     async fn append_messages(&self, messages: Vec<Message>) -> BabataResult<()> {
         self.insert_messages_inner(&messages)
     }
