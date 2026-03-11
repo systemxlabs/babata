@@ -1,6 +1,10 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{BabataResult, error::BabataError};
+use crate::{
+    BabataResult,
+    channel::{Channel, TelegramChannel},
+    error::BabataError,
+};
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "name", rename_all = "snake_case")]
@@ -69,14 +73,14 @@ impl TelegramChannelConfig {
 }
 
 impl ChannelConfig {
-    pub fn channel_name(&self) -> &'static str {
+    pub fn name(&self) -> &'static str {
         match self {
-            ChannelConfig::Telegram(_) => "telegram",
+            ChannelConfig::Telegram(_) => TelegramChannel::name(),
         }
     }
 
     pub fn matches_name(&self, name: &str) -> bool {
-        self.channel_name().eq_ignore_ascii_case(name)
+        self.name().eq_ignore_ascii_case(name)
     }
 }
 

@@ -82,7 +82,7 @@ pub fn build_providers(config: &Config) -> BabataResult<HashMap<String, Arc<dyn 
         HashMap::with_capacity(config.providers.len());
 
     for provider_config in &config.providers {
-        let provider_name = provider_config.provider_name();
+        let provider_name = provider_config.name();
         let provider = create_provider(provider_config)?;
         providers.insert(provider_name.to_string(), provider);
     }

@@ -286,7 +286,7 @@ fn prompt_babata_agent_setup(config: &Config) -> BabataResult<Option<BabataAgent
     let mut provider_names: Vec<String> = config
         .providers
         .iter()
-        .map(|provider| provider.provider_name().to_string())
+        .map(|provider| provider.name().to_string())
         .collect();
     provider_names.sort();
     for (idx, name) in provider_names.iter().enumerate() {

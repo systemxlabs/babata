@@ -98,11 +98,11 @@ impl Config {
         let mut provider_names = HashSet::new();
         for provider in &self.providers {
             provider.validate()?;
-            let normalized_name = provider.provider_name().to_string();
+            let normalized_name = provider.name().to_string();
             if !provider_names.insert(normalized_name) {
                 return Err(BabataError::config(format!(
                     "Duplicate provider type '{}' found in configuration",
-                    provider.provider_name()
+                    provider.name()
                 )));
             }
         }
@@ -120,7 +120,7 @@ impl Config {
         if let Some(existing) = self
             .providers
             .iter_mut()
-            .find(|existing| existing.matches_name(provider_config.provider_name()))
+            .find(|existing| existing.matches_name(provider_config.name()))
         {
             *existing = provider_config;
             return;
