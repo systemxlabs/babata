@@ -1,6 +1,6 @@
 use crate::{
     BabataResult,
-    provider::{
+    agent::babata::{
         GenerationRequest, GenerationResponse, InteractionRequest, InteractionResponse, Model,
         Provider,
     },
@@ -9,32 +9,39 @@ use crate::{
 use super::OpenAICompatibleProvider;
 
 #[derive(Debug)]
-pub struct KimiProvider {
+pub struct DeepSeekProvider {
     inner: OpenAICompatibleProvider,
 }
 
-const KIMI_SUPPORTED_MODELS: &[Model] = &[Model {
-    provider: "kimi",
-    name: "kimi-k2.5",
-    context_length: 128_000,
-}];
+const DEEPSEEK_SUPPORTED_MODELS: &[Model] = &[
+    Model {
+        provider: "deepseek",
+        name: "deepseek-chat",
+        context_length: 64_000,
+    },
+    Model {
+        provider: "deepseek",
+        name: "deepseek-reasoner",
+        context_length: 64_000,
+    },
+];
 
-impl KimiProvider {
+impl DeepSeekProvider {
     pub fn new(api_key: &str) -> Self {
-        let inner = OpenAICompatibleProvider::new(api_key, "https://api.kimi.com/coding/v1")
-            .with_user_agent(Some("KimiCLI/1.6".to_string()));
+        let inner = OpenAICompatibleProvider::new(api_key, "https://api.deepseek.com/v1")
+            .with_user_agent(None);
         Self { inner }
     }
 }
 
 #[async_trait::async_trait]
-impl Provider for KimiProvider {
+impl Provider for DeepSeekProvider {
     fn name() -> &'static str {
-        "kimi"
+        "deepseek"
     }
 
     fn supported_models() -> &'static [Model] {
-        KIMI_SUPPORTED_MODELS
+        DEEPSEEK_SUPPORTED_MODELS
     }
 
     async fn generate<'a>(

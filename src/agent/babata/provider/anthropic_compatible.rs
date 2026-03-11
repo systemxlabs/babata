@@ -5,9 +5,11 @@ use serde_json::Value;
 
 use crate::{
     BabataResult,
+    agent::babata::{
+        GenerationRequest, GenerationResponse, InteractionRequest, InteractionResponse,
+    },
     error::BabataError,
     message::{Content, Message, ToolCall},
-    provider::{GenerationRequest, GenerationResponse, InteractionRequest, InteractionResponse},
     tool::ToolSpec,
 };
 
@@ -369,7 +371,7 @@ mod tests {
             }],
         }];
 
-        let request = crate::provider::GenerationRequest {
+        let request = crate::agent::babata::GenerationRequest {
             system_prompt: "",
             model: "claude-opus-4-6",
             prompts: &messages,
@@ -426,7 +428,7 @@ mod tests {
             }],
         }];
 
-        let request = crate::provider::GenerationRequest {
+        let request = crate::agent::babata::provider::GenerationRequest {
             model: "claude-opus-4-6",
             system_prompt: "",
             prompts: &messages,
@@ -469,7 +471,7 @@ mod tests {
         });
 
         // Second request: get final response with tool results
-        let request = crate::provider::GenerationRequest {
+        let request = crate::agent::babata::GenerationRequest {
             model: "claude-opus-4-6",
             system_prompt: "",
             prompts: &messages,

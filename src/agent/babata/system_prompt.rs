@@ -4,8 +4,8 @@ use chrono::Local;
 
 use crate::{
     BabataResult,
+    agent::babata::Skill,
     error::BabataError,
-    skill::Skill,
     utils::{babata_dir, resolve_home_dir},
 };
 

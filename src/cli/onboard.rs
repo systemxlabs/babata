@@ -2,6 +2,10 @@ use std::path::Path;
 
 use crate::{
     BabataResult,
+    agent::babata::{
+        AnthropicProvider, CustomProvider, DeepSeekProvider, KimiProvider, Model, MoonshotProvider,
+        OpenAIProvider, Provider,
+    },
     channel::{Channel, TelegramChannel},
     config::{
         AgentConfig, AnthropicProviderConfig, ChannelConfig, CompatibleApi, Config,
@@ -10,10 +14,6 @@ use crate::{
         OpenAIProviderConfig, ProviderConfig, RemoteEmbeddingConfig, TelegramChannelConfig,
     },
     error::BabataError,
-    provider::{
-        AnthropicProvider, CustomProvider, DeepSeekProvider, KimiProvider, Model, MoonshotProvider,
-        OpenAIProvider, Provider,
-    },
 };
 
 use super::Args;

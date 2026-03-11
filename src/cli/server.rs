@@ -7,10 +7,9 @@ use std::{
 
 use log::{info, warn};
 
-use crate::job::JobManager;
 use crate::message::{Content, Message};
 use crate::utils::babata_dir;
-use crate::{BabataResult, agent::AgentLoop, config::Config, error::BabataError};
+use crate::{BabataResult, config::Config, error::BabataError};
 
 use super::Args;
 
@@ -88,23 +87,7 @@ pub fn install_windows_service() -> BabataResult<()> {
 fn run_serve(_args: &Args) -> BabataResult<()> {
     info!("Server run babata dir: {}", babata_dir()?.display());
 
-    let config = Config::load()?;
-    let agent_loop = AgentLoop::new(config.clone())?;
-    let job_manager = JobManager::new();
-
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .map_err(|err| {
-            BabataError::internal(format!("Failed to initialize async runtime: {err}"))
-        })?;
-
-    runtime.block_on(async move {
-        job_manager.start();
-        broadcast_service_started(&agent_loop.channels).await;
-        agent_loop.run().await
-    })?;
-    Ok(())
+    unimplemented!()
 }
 
 async fn broadcast_service_started(channels: &[std::sync::Arc<dyn crate::channel::Channel>]) {

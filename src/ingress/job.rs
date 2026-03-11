@@ -1,26 +1,14 @@
 use std::{
-    collections::HashMap,
     path::{Path, PathBuf},
     sync::Arc,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use chrono::Local;
 use log::{error, info};
 use tokio::{sync::Mutex, task::JoinHandle};
 
-use crate::{
-    BabataResult,
-    config::Config,
-    error::BabataError,
-    message::{Content, Message},
-    provider::create_provider,
-    skill::load_skills,
-    system_prompt::load_system_prompt_files,
-    task::AgentTask,
-    tool::{Tool, build_tools},
-    utils::babata_dir,
-};
+use crate::{BabataResult, error::BabataError, utils::babata_dir};
 
 const JOB_PROMPT: &str = r#"
 The job definitions are already loaded below from `{BABATA_HOME}/jobs/<job_name>/job.md`.
@@ -42,21 +30,18 @@ const JOB_CHECK_INTERVAL: Duration = Duration::from_secs(30);
 const JOB_MANAGER_CHECK_INTERVAL: Duration = Duration::from_secs(10 * 60);
 
 pub struct JobManager {
-    tools: HashMap<String, Arc<dyn Tool>>,
     job_loop: Arc<Mutex<Option<JoinHandle<()>>>>,
 }
 
 impl JobManager {
     pub fn new() -> Self {
         Self {
-            tools: build_tools(),
             job_loop: Arc::new(Mutex::new(None)),
         }
     }
 
     pub fn start(&self) {
         let job_loop = self.job_loop.clone();
-        let tools = self.tools.clone();
         tokio::spawn(async move {
             loop {
                 {
@@ -68,7 +53,7 @@ impl JobManager {
 
                     if need_spawn {
                         info!("Spawning new job loop");
-                        let new_handle = start_job_loop(tools.clone()).await;
+                        let new_handle = start_job_loop().await;
                         *guard = Some(new_handle);
                     }
                 }
@@ -85,7 +70,7 @@ impl Default for JobManager {
     }
 }
 
-async fn start_job_loop(tools: HashMap<String, Arc<dyn Tool>>) -> JoinHandle<()> {
+async fn start_job_loop() -> JoinHandle<()> {
     tokio::spawn(async move {
         info!("Start running job checker loop");
 
@@ -99,9 +84,8 @@ async fn start_job_loop(tools: HashMap<String, Arc<dyn Tool>>) -> JoinHandle<()>
             }
             last_run_minute = current_minute;
 
-            let tools = tools.clone();
             tokio::spawn(async move {
-                if let Err(err) = run_job(tools).await {
+                if let Err(err) = run_job().await {
                     error!("Job run failed: {}", err);
                 };
             });
@@ -109,7 +93,7 @@ async fn start_job_loop(tools: HashMap<String, Arc<dyn Tool>>) -> JoinHandle<()>
     })
 }
 
-async fn run_job(tools: HashMap<String, Arc<dyn Tool>>) -> BabataResult<()> {
+async fn run_job() -> BabataResult<()> {
     info!("Starting to run job");
     let jobs = load_jobs()?;
     if jobs.is_empty() {
@@ -120,36 +104,7 @@ async fn run_job(tools: HashMap<String, Arc<dyn Tool>>) -> BabataResult<()> {
         return Ok(());
     }
 
-    let config = Config::load()?;
-    let agent_config = config.get_agent("main")?;
-    let provider_config = config.get_provider(&agent_config.provider)?;
-
-    let provider = create_provider(provider_config)?;
-
-    let user_message = Message::UserPrompt {
-        content: vec![Content::Text {
-            text: build_job_prompt(&jobs),
-        }],
-    };
-
-    let task = AgentTask::new(
-        vec![user_message.clone()],
-        Vec::new(),
-        provider,
-        agent_config.model.clone(),
-        tools.clone(),
-        load_system_prompt_files()?,
-        load_skills()?,
-    );
-
-    let now = Instant::now();
-    task.run().await?;
-    info!(
-        "Job run completed in {} seconds",
-        now.elapsed().as_secs_f32()
-    );
-
-    Ok(())
+    unimplemented!()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

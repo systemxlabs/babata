@@ -1,15 +1,7 @@
-use log::info;
-
 use crate::{
     BabataResult,
-    config::Config,
     error::BabataError,
     message::{Content, Message},
-    provider::create_provider,
-    skill::load_skills,
-    system_prompt::load_system_prompt_files,
-    task::AgentTask,
-    tool::build_tools,
 };
 
 use super::Args;
@@ -22,48 +14,7 @@ pub fn run(args: &Args) {
 }
 
 fn run_prompt(args: &Args) -> BabataResult<()> {
-    let config = Config::load()?;
-
-    let agent_config = config.get_agent(&args.agent)?;
-    let provider_config = config.get_provider(&agent_config.provider)?;
-
-    let provider = create_provider(provider_config)?;
-
-    let prompt = args
-        .prompt
-        .as_ref()
-        .map(|value| value.trim())
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| BabataError::config("Prompt is required"))?
-        .to_string();
-
-    let user_message = Message::UserPrompt {
-        content: vec![Content::Text { text: prompt }],
-    };
-    info!("User message before task.run: {:?}", user_message);
-
-    let task = AgentTask::new(
-        vec![user_message],
-        Vec::new(),
-        provider,
-        agent_config.model.clone(),
-        build_tools(),
-        load_system_prompt_files()?,
-        load_skills()?,
-    );
-
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .map_err(|err| {
-            BabataError::internal(format!("Failed to initialize async runtime: {err}"))
-        })?;
-
-    let message = runtime.block_on(task.run())?;
-    info!("Task run result message: {:?}", message);
-    print_final_message(&message)?;
-
-    Ok(())
+    unimplemented!()
 }
 
 fn print_final_message(message: &Message) -> BabataResult<()> {
