@@ -15,8 +15,6 @@ use crate::{
     },
     error::BabataError,
 };
-
-use super::Args;
 use rust_embed::RustEmbed;
 
 /// Embed the entire project source code into the binary
@@ -39,7 +37,7 @@ const EMBEDDED_MACOS_SERVICE_TEMPLATE: &str =
 const EMBEDDED_LINUX_SERVICE_TEMPLATE: &str =
     include_str!("../../services/babata.server.service.template");
 
-pub fn run(_args: &Args) {
+pub fn run() {
     if let Err(err) = run_onboard() {
         eprintln!("{err}");
         std::process::exit(1);

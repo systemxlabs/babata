@@ -1,13 +1,12 @@
 use clap::{Parser, Subcommand};
 
 #[derive(Parser, Debug)]
-#[command(version, about = "Babata agent CLI", long_about = None)]
-pub struct Args {
-    #[command(subcommand)]
-    pub command: Option<Command>,
-}
-
-#[derive(Subcommand, Debug)]
+#[command(
+    version,
+    about = "Babata agent CLI",
+    long_about = None,
+    arg_required_else_help = true
+)]
 pub enum Command {
     #[command(about = "Server management commands (serve/start/stop/restart)")]
     Server {

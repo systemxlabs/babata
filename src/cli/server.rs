@@ -20,8 +20,6 @@ use crate::{
     utils::babata_dir,
 };
 
-use super::Args;
-
 const MACOS_LAUNCHD_LABEL: &str = "babata.server";
 const LINUX_SYSTEMD_SERVICE: &str = "babata.server.service";
 const WINDOWS_SERVICE_NAME: &str = "babata.server";
@@ -29,35 +27,35 @@ const WINDOWS_SERVICE_DISPLAY_NAME: &str = "Babata Server";
 const WINDOWS_SERVICE_DESCRIPTION: &str =
     "Babata background server managed by Windows Service Control Manager.";
 
-pub fn serve(args: &Args) {
-    if let Err(err) = run_serve(args) {
+pub fn serve() {
+    if let Err(err) = run_serve() {
         eprintln!("{err}");
         std::process::exit(1);
     }
 }
 
-pub fn start(_args: &Args) {
+pub fn start() {
     if let Err(err) = run_start() {
         eprintln!("{err}");
         std::process::exit(1);
     }
 }
 
-pub fn stop(_args: &Args) {
+pub fn stop() {
     if let Err(err) = run_stop() {
         eprintln!("{err}");
         std::process::exit(1);
     }
 }
 
-pub fn restart(_args: &Args) {
+pub fn restart() {
     if let Err(err) = run_restart() {
         eprintln!("{err}");
         std::process::exit(1);
     }
 }
 
-pub fn windows_service_host(_args: &Args, home_dir: &str) {
+pub fn windows_service_host(home_dir: &str) {
     if let Err(err) = run_windows_service_host(home_dir) {
         eprintln!("{err}");
         std::process::exit(1);
@@ -93,7 +91,7 @@ pub fn install_windows_service() -> BabataResult<()> {
     Ok(())
 }
 
-fn run_serve(_args: &Args) -> BabataResult<()> {
+fn run_serve() -> BabataResult<()> {
     info!("Server run babata dir: {}", babata_dir()?.display());
 
     let config = Config::load()?;

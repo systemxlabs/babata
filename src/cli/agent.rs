@@ -4,23 +4,21 @@ use crate::{
     error::BabataError,
 };
 
-use super::Args;
-
-pub fn add(_args: &Args, agent_config_json: &str) {
+pub fn add(agent_config_json: &str) {
     if let Err(err) = run_add(agent_config_json) {
         eprintln!("{err}");
         std::process::exit(1);
     }
 }
 
-pub fn delete(_args: &Args, name: &str) {
+pub fn delete(name: &str) {
     if let Err(err) = run_delete(name) {
         eprintln!("{err}");
         std::process::exit(1);
     }
 }
 
-pub fn list(_args: &Args) {
+pub fn list() {
     if let Err(err) = run_list() {
         eprintln!("{err}");
         std::process::exit(1);
