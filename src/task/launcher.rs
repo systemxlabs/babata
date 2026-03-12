@@ -8,7 +8,7 @@ use crate::{
     channel::Channel,
     config::Config,
     error::BabataError,
-    task::{TaskRequest, manager::RunningTask},
+    task::{RunningTask, TaskRequest},
 };
 
 #[derive(Debug)]

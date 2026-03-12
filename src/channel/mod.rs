@@ -52,37 +52,34 @@ pub fn build_channels(config: &Config) -> BabataResult<HashMap<String, Arc<dyn C
 pub fn start_channel_loops(
     channels: HashMap<String, Arc<dyn Channel>>,
     task_manager: Arc<TaskManager>,
-) -> Vec<tokio::task::JoinHandle<()>> {
-    channels
-        .into_iter()
-        .map(|(channel_name, channel)| {
-            let task_manager = task_manager.clone();
-            tokio::spawn(async move {
-                info!("Starting channel loop '{}'", channel_name);
-                loop {
-                    match channel.try_receive().await {
-                        Ok(content) => {
-                            if !content.is_empty()
-                                && let Err(err) = task_manager.create_task(TaskRequest {
-                                    prompt: content,
-                                    parent_task_id: None,
-                                    agent: None,
-                                })
-                            {
-                                error!(
-                                    "Failed to create task from channel '{}': {}",
-                                    channel_name, err
-                                );
-                            }
-                        }
-                        Err(err) => {
-                            warn!("Channel '{}' receive failed: {}", channel_name, err);
+) {
+    for (channel_name, channel) in channels {
+        let task_manager = task_manager.clone();
+        tokio::spawn(async move {
+            info!("Starting channel loop '{}'", channel_name);
+            loop {
+                match channel.try_receive().await {
+                    Ok(content) => {
+                        if !content.is_empty()
+                            && let Err(err) = task_manager.create_task(TaskRequest {
+                                prompt: content,
+                                parent_task_id: None,
+                                agent: None,
+                            })
+                        {
+                            error!(
+                                "Failed to create task from channel '{}': {}",
+                                channel_name, err
+                            );
                         }
                     }
-
-                    tokio::time::sleep(Duration::from_secs(CHANNEL_RETRY_DELAY_SECS)).await;
+                    Err(err) => {
+                        warn!("Channel '{}' receive failed: {}", channel_name, err);
+                    }
                 }
-            })
-        })
-        .collect()
+
+                tokio::time::sleep(Duration::from_secs(CHANNEL_RETRY_DELAY_SECS)).await;
+            }
+        });
+    }
 }

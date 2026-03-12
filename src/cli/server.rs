@@ -1,5 +1,4 @@
 use std::{
-    future::pending,
     path::Path,
     process::Command,
     sync::Arc,
@@ -9,7 +8,7 @@ use std::{
 
 use log::{error, info, warn};
 
-use crate::{BabataResult, config::Config, error::BabataError};
+use crate::{BabataResult, config::Config, error::BabataError, http::HttpApp};
 use crate::{
     channel::{build_channels, start_channel_loops},
     message::Content,
@@ -98,7 +97,9 @@ fn run_serve() -> BabataResult<()> {
     let channels = build_channels(&config)?;
     let task_launcher = TaskLauncher::new(&config, channels.clone())?;
     let task_manager = Arc::new(TaskManager::new(task_launcher)?);
+
     let job_manager = JobManager::new(task_manager.clone());
+    let http_app = HttpApp::new(task_manager.clone());
 
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -106,13 +107,13 @@ fn run_serve() -> BabataResult<()> {
         .map_err(|err| BabataError::internal(format!("Failed to build Tokio runtime: {err}")))?;
 
     runtime.block_on(async move {
-        let _ = start_channel_loops(channels, task_manager.clone());
+        start_channel_loops(channels, task_manager.clone());
         job_manager.start();
 
         broadcast_service_started(&task_manager).await;
 
-        pending::<()>().await;
-    });
+        http_app.serve().await
+    })?;
 
     Ok(())
 }

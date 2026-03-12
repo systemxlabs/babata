@@ -1,0 +1,47 @@
+use axum::{
+    extract::{Path, State},
+    response::{IntoResponse, Response},
+};
+use uuid::Uuid;
+
+use super::{ApiError, HttpApp};
+
+pub(super) async fn pause(State(state): State<HttpApp>, Path(task_id): Path<String>) -> Response {
+    control_task(state, &task_id, TaskAction::Pause).into_response()
+}
+
+pub(super) async fn resume(State(state): State<HttpApp>, Path(task_id): Path<String>) -> Response {
+    control_task(state, &task_id, TaskAction::Resume).into_response()
+}
+
+pub(super) async fn cancel(State(state): State<HttpApp>, Path(task_id): Path<String>) -> Response {
+    control_task(state, &task_id, TaskAction::Cancel).into_response()
+}
+
+fn control_task(state: HttpApp, task_id: &str, action: TaskAction) -> Result<(), ApiError> {
+    let task_id = match Uuid::parse_str(task_id) {
+        Ok(task_id) => task_id,
+        Err(err) => {
+            return Err(ApiError::bad_request(format!(
+                "Invalid task id '{}': {}",
+                task_id, err
+            )));
+        }
+    };
+
+    match action {
+        TaskAction::Pause => state.task_manager.pause_task(task_id),
+        TaskAction::Resume => state.task_manager.resume_task(task_id),
+        TaskAction::Cancel => state.task_manager.cancel_task(task_id),
+    }
+    .map_err(ApiError::from_babata_error)?;
+
+    Ok(())
+}
+
+#[derive(Debug, Clone, Copy)]
+enum TaskAction {
+    Pause,
+    Resume,
+    Cancel,
+}

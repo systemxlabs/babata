@@ -4,10 +4,12 @@ use std::{
 };
 
 use chrono::Utc;
+use tokio::task::JoinHandle;
 use uuid::Uuid;
 
 use crate::{
     BabataResult,
+    error::BabataError,
     task::{TaskRecord, TaskRequest, TaskStatus, TaskStore, launcher::TaskLauncher},
 };
 
@@ -53,10 +55,71 @@ impl TaskManager {
 
         Ok(task_id)
     }
+
+    pub fn pause_task(&self, task_id: Uuid) -> BabataResult<()> {
+        let task = self.store.get_task(task_id)?;
+        if task.status != TaskStatus::Running {
+            return Err(BabataError::config(format!(
+                "Task '{}' cannot be paused from status '{}'",
+                task_id, task.status
+            )));
+        }
+
+        if let Some(running_task) = self.running_tasks.lock().unwrap().remove(&task_id) {
+            running_task.handle.abort();
+        }
+
+        self.store.update_task_status(task_id, TaskStatus::Paused)?;
+        Ok(())
+    }
+
+    pub fn resume_task(&self, task_id: Uuid) -> BabataResult<()> {
+        let task = self.store.get_task(task_id)?;
+        if task.status != TaskStatus::Paused {
+            return Err(BabataError::config(format!(
+                "Task '{}' cannot be resumed from status '{}'",
+                task_id, task.status
+            )));
+        }
+
+        // TODO
+        let request = TaskRequest {
+            prompt: vec![],
+            parent_task_id: task.parent_task_id,
+            agent: None,
+        };
+        let running_task = self.launcher.launch(task_id, &request)?;
+        {
+            let mut guard = self.running_tasks.lock().unwrap();
+            guard.insert(task_id, running_task);
+        }
+
+        self.store
+            .update_task_status(task_id, TaskStatus::Running)?;
+        Ok(())
+    }
+
+    pub fn cancel_task(&self, task_id: Uuid) -> BabataResult<()> {
+        let task = self.store.get_task(task_id)?;
+        if matches!(task.status, TaskStatus::Done | TaskStatus::Canceled) {
+            return Err(BabataError::config(format!(
+                "Task '{}' cannot be canceled from status '{}'",
+                task_id, task.status
+            )));
+        }
+
+        if let Some(running_task) = self.running_tasks.lock().unwrap().remove(&task_id) {
+            running_task.handle.abort();
+        }
+
+        self.store
+            .update_task_status(task_id, TaskStatus::Canceled)?;
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
 pub struct RunningTask {
     pub task_id: Uuid,
-    pub handle: tokio::task::JoinHandle<()>,
+    pub handle: JoinHandle<()>,
 }

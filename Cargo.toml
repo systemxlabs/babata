@@ -12,6 +12,7 @@ mem-hybrid = ["dep:fastembed", "dep:libsimple", "dep:sqlite-vec"]
 
 [dependencies]
 async-trait = "0.1"
+axum = { version = "0.8", features = ["json"] }
 backon = "1.6"
 base64 = "0.22"
 bytemuck = "1.25"

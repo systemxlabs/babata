@@ -14,7 +14,7 @@ pub struct TaskRecord {
     pub created_at: i64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TaskStore {
     db_path: PathBuf,
 }
