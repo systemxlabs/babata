@@ -46,6 +46,10 @@ fn main() {
                 agent,
                 parent_task_id,
             } => babata::cli::task::create(&prompt, agent.as_deref(), parent_task_id.as_deref()),
+            babata::cli::TaskAction::List { status, limit } => {
+                babata::cli::task::list(status.as_deref(), limit)
+            }
+            babata::cli::TaskAction::Get { task_id } => babata::cli::task::get(&task_id),
         },
         babata::cli::Command::Onboard => babata::cli::onboard::run(),
     }

@@ -148,4 +148,16 @@ pub enum TaskAction {
         )]
         parent_task_id: Option<String>,
     },
+    #[command(about = "List tasks")]
+    List {
+        #[arg(long, value_name = "STATUS", help = "Optional task status filter")]
+        status: Option<String>,
+        #[arg(long, value_name = "LIMIT", help = "Optional max number of tasks")]
+        limit: Option<usize>,
+    },
+    #[command(about = "Get a task by id")]
+    Get {
+        #[arg(value_name = "TASK_ID", help = "Task UUID")]
+        task_id: String,
+    },
 }
