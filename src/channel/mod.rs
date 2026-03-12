@@ -7,7 +7,8 @@ use std::{fmt::Debug, sync::Arc};
 use crate::{
     BabataResult,
     config::{ChannelConfig, Config},
-    message::Message,
+    message::{Content, Message},
+    task::TaskManager,
 };
 
 #[async_trait::async_trait]
@@ -17,10 +18,10 @@ pub trait Channel: Debug + Send + Sync {
     where
         Self: Sized;
 
-    // Receive messages, blocking until messages are available
-    async fn receive(&self) -> BabataResult<Vec<Message>>;
     // Try to receive messages, returning None if no messages are available
-    async fn try_receive(&self) -> BabataResult<Option<Vec<Message>>>;
+    async fn start(&self, task_manager: Arc<TaskManager>) -> BabataResult<()>;
+
+    async fn feedback(&self, content: Vec<Content>) -> BabataResult<Vec<Content>>;
 }
 
 pub fn build_channels(config: &Config) -> BabataResult<Vec<Arc<dyn Channel>>> {

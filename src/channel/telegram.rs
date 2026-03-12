@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, sync::Arc};
 
 use log::warn;
 use reqwest::{Client, StatusCode};
@@ -12,9 +12,10 @@ use tokio::sync::Mutex;
 
 use crate::{
     BabataResult,
-    config::{ChannelConfig, Config},
+    config::{ChannelConfig, Config, TelegramChannelConfig},
     error::BabataError,
     message::{Content, MediaType, Message},
+    task::TaskManager,
 };
 
 #[derive(Debug)]
@@ -251,20 +252,12 @@ impl super::Channel for TelegramChannel {
         "Telegram"
     }
 
-    async fn receive(&self) -> BabataResult<Vec<Message>> {
-        loop {
-            // Blocking long-poll until Telegram returns new updates.
-            let incoming = self.fetch_updates(self.polling_timeout_secs).await?;
-            if let Some(messages) = self.incoming_to_messages(incoming).await {
-                return Ok(messages);
-            }
-        }
+    async fn start(&self, task_manager: Arc<TaskManager>) -> BabataResult<()> {
+        unimplemented!()
     }
 
-    async fn try_receive(&self) -> BabataResult<Option<Vec<Message>>> {
-        // Non-blocking poll (timeout=0), return immediately if there is no new DM message.
-        let incoming = self.fetch_updates(0).await?;
-        Ok(self.incoming_to_messages(incoming).await)
+    async fn feedback(&self, content: Vec<Content>) -> BabataResult<Vec<Content>> {
+        unimplemented!()
     }
 }
 

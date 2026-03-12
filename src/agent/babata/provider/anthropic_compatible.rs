@@ -5,12 +5,12 @@ use serde_json::Value;
 
 use crate::{
     BabataResult,
+    agent::babata::ToolSpec,
     agent::babata::{
         GenerationRequest, GenerationResponse, InteractionRequest, InteractionResponse,
     },
     error::BabataError,
     message::{Content, Message, ToolCall},
-    tool::ToolSpec,
 };
 
 const ANTHROPIC_API_VERSION: &str = "2023-06-01";
@@ -350,8 +350,8 @@ struct AnthropicResponse {
 mod tests {
     use super::*;
     use crate::{
+        agent::babata::ToolSpec,
         message::{Content, Message},
-        tool::ToolSpec,
     };
     use serde_json::json;
 

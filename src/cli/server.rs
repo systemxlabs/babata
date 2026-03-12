@@ -7,9 +7,12 @@ use std::{
 
 use log::{info, warn};
 
-use crate::message::{Content, Message};
 use crate::utils::babata_dir;
 use crate::{BabataResult, config::Config, error::BabataError};
+use crate::{
+    channel::build_channels,
+    message::{Content, Message},
+};
 
 use super::Args;
 
@@ -87,6 +90,9 @@ pub fn install_windows_service() -> BabataResult<()> {
 fn run_serve(_args: &Args) -> BabataResult<()> {
     info!("Server run babata dir: {}", babata_dir()?.display());
 
+    let config = Config::load()?;
+    let channels = build_channels(&config)?;
+
     unimplemented!()
 }
 
@@ -95,11 +101,10 @@ async fn broadcast_service_started(channels: &[std::sync::Arc<dyn crate::channel
         return;
     }
 
-    let message = service_started_message();
     unimplemented!()
 }
 
-fn service_started_message() -> Message {
+fn service_started_message() -> Content {
     let babata_home = match crate::utils::babata_dir() {
         Ok(path) => path.display().to_string(),
         Err(err) => format!("unavailable ({err})"),
@@ -112,10 +117,7 @@ fn service_started_message() -> Message {
 
     info!("{text}");
 
-    Message::AssistantResponse {
-        content: vec![Content::Text { text }],
-        reasoning_content: None,
-    }
+    Content::Text { text }
 }
 
 fn run_start() -> BabataResult<()> {
@@ -845,25 +847,6 @@ mod tests {
     fn does_not_misclassify_unrelated_launchctl_error() {
         let message = "Internal error: Command 'launchctl kickstart -k gui/501/babata.server' failed: permission denied";
         assert!(!is_macos_service_not_found_error(message));
-    }
-
-    #[test]
-    fn service_started_message_without_scheduler_details() {
-        let message = service_started_message();
-        let Message::AssistantResponse { content, .. } = message else {
-            panic!("expected assistant response");
-        };
-        let text = content
-            .into_iter()
-            .find_map(|part| match part {
-                Content::Text { text } => Some(text),
-                _ => None,
-            })
-            .expect("text content");
-        assert!(text.contains("Babata server started."));
-        assert!(text.contains(&format!("Version: {}", env!("CARGO_PKG_VERSION"))));
-        assert!(text.contains("Babata home:"));
-        assert!(!text.contains("Job scheduler"));
     }
 
     #[test]

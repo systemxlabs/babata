@@ -5,6 +5,7 @@ use log::{info, warn};
 
 use crate::{
     BabataResult,
+    agent::babata::{Tool, ToolSpec, build_tools},
     agent::{
         Agent,
         babata::{
@@ -16,7 +17,6 @@ use crate::{
     error::BabataError,
     memory::{Memory, build_memory},
     message::{Content, Message},
-    tool::{Tool, ToolSpec, build_tools},
 };
 
 const PROVIDER_RETRY_MAX_TIMES: usize = 3;

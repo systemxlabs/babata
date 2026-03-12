@@ -3,8 +3,8 @@ use serde_json::{Value, json};
 
 use crate::{
     BabataResult,
+    agent::babata::tool::{Tool, ToolSpec},
     error::BabataError,
-    tool::{Tool, ToolSpec},
 };
 
 #[derive(Debug, Clone)]

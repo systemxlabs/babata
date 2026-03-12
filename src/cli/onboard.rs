@@ -269,7 +269,7 @@ fn prompt_custom_compatible_api() -> BabataResult<CompatibleApi> {
 }
 
 fn prompt_babata_agent_setup(config: &Config) -> BabataResult<Option<BabataAgentConfig>> {
-    let selection = prompt_line("Configure main agent? (Press Enter to skip, or Y to continue)")?;
+    let selection = prompt_line("Configure babata agent? (Press Enter to skip, or Y to continue)")?;
     match selection.trim() {
         "" | "N" | "n" | "no" => return Ok(None),
         "Y" | "y" | "yes" => {}

@@ -2,8 +2,8 @@ use serde_json::{Value, json};
 
 use crate::{
     BabataResult,
+    agent::babata::{Tool, ToolSpec},
     error::BabataError,
-    tool::{Tool, ToolSpec},
 };
 use log::info;
 
