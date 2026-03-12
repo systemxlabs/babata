@@ -40,9 +40,9 @@ impl BabataAgent {
         let agent_config = config.get_agent(BabataAgent::name())?;
         #[allow(irrefutable_let_patterns)]
         let AgentConfig::Babata(babata_config) = agent_config else {
-            return Err(BabataError::config(format!(
-                "Agent config for 'babata' must be of type 'BabataAgentConfig'"
-            )));
+            return Err(BabataError::config(
+                "Agent config for 'babata' must be of type 'BabataAgentConfig'",
+            ));
         };
 
         let provider_config = config.get_provider(&babata_config.provider)?;
