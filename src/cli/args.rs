@@ -5,8 +5,8 @@ use clap::{Parser, Subcommand};
 pub struct Args {
     #[arg(
         long,
-        default_value = "main",
-        help = "Agent name to use (default: main)"
+        default_value = "babata",
+        help = "Agent name to use (default: babata)"
     )]
     pub agent: String,
     #[arg(help = "Prompt text sent to the agent")]
@@ -90,7 +90,7 @@ pub enum ChannelAction {
     Add {
         #[arg(
             value_name = "CHANNEL_CONFIG_JSON",
-            help = "Channel config JSON, e.g. {\"name\":\"telegram\",\"bot_token\":\"123:abc\",\"allowed_user_ids\":[123456789]}"
+            help = "Channel config JSON, e.g. {\"name\":\"telegram\",\"bot_token\":\"123:abc\",\"user_id\":123456789}"
         )]
         channel_config_json: String,
     },

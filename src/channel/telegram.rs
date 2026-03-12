@@ -1,4 +1,4 @@
-use std::{collections::HashSet, sync::Arc};
+use std::sync::Arc;
 
 use log::warn;
 use reqwest::{Client, StatusCode};
@@ -26,34 +26,27 @@ pub struct TelegramChannel {
     polling_timeout_secs: u64,
     // Telegram update cursor to avoid reprocessing already consumed updates.
     last_update_id: Mutex<Option<i64>>,
-    // Allowed DM user ids; messages from others are ignored.
-    allowed_user_ids: HashSet<i64>,
+    // Allowed DM user id; messages from others are ignored.
+    user_id: i64,
 }
 
 impl TelegramChannel {
-    pub fn new(bot_token: &str) -> Self {
+    pub fn new(config: TelegramChannelConfig) -> Self {
+        let TelegramChannelConfig {
+            bot_token,
+            polling_timeout_secs,
+            last_update_id,
+            user_id,
+        } = config;
+
         Self {
             bot: Bot::new(bot_token),
             http_client: Client::new(),
-            polling_timeout_secs: 30,
-            last_update_id: Mutex::new(None),
-            allowed_user_ids: HashSet::new(),
+            polling_timeout_secs: polling_timeout_secs
+                .unwrap_or(TelegramChannelConfig::DEFAULT_POLLING_TIMEOUT_SECS),
+            last_update_id: Mutex::new(last_update_id),
+            user_id,
         }
-    }
-
-    pub fn with_polling_timeout_secs(mut self, polling_timeout_secs: u64) -> Self {
-        self.polling_timeout_secs = polling_timeout_secs;
-        self
-    }
-
-    pub fn with_last_update_id(mut self, last_update_id: Option<i64>) -> Self {
-        self.last_update_id = Mutex::new(last_update_id);
-        self
-    }
-
-    pub fn with_allowed_user_ids(mut self, allowed_user_ids: Vec<i64>) -> Self {
-        self.allowed_user_ids = allowed_user_ids.into_iter().collect();
-        self
     }
 
     async fn fetch_updates(&self, timeout_secs: u64) -> BabataResult<Vec<IncomingPrivateMessage>> {
@@ -72,7 +65,7 @@ impl TelegramChannel {
         })?;
 
         // Keep only DM messages and return the max update_id for cursor advancing.
-        let (max_update_id, messages) = extract_private_messages(updates, &self.allowed_user_ids);
+        let (max_update_id, messages) = extract_private_messages(updates, self.user_id);
 
         if let Some(max_update_id) = max_update_id {
             self.update_last_update_id(max_update_id).await?;
@@ -119,7 +112,7 @@ impl TelegramChannel {
 
         let mut messages = Vec::new();
         for message in incoming {
-            if !self.allowed_user_ids.contains(&message.chat_id) {
+            if message.chat_id != self.user_id {
                 continue;
             }
 
@@ -273,7 +266,7 @@ struct IncomingPrivateMessage {
 
 fn extract_private_messages(
     updates: Vec<Update>,
-    allowed_user_ids: &HashSet<i64>,
+    user_id: i64,
 ) -> (Option<i64>, Vec<IncomingPrivateMessage>) {
     let mut max_update_id = None;
     let mut messages = Vec::new();
@@ -293,7 +286,7 @@ fn extract_private_messages(
         }
 
         let chat_id = message.chat.id.0;
-        if !allowed_user_ids.contains(&chat_id) {
+        if chat_id != user_id {
             continue;
         }
 
@@ -445,8 +438,7 @@ mod tests {
             .expect("parse group update"),
         ];
 
-        let allowed_user_ids = HashSet::from([1001]);
-        let (max_id, private_messages) = extract_private_messages(updates, &allowed_user_ids);
+        let (max_id, private_messages) = extract_private_messages(updates, 1001);
         assert_eq!(max_id, Some(2));
         assert_eq!(private_messages.len(), 1);
         assert_eq!(private_messages[0].chat_id, 1001);
@@ -508,8 +500,7 @@ mod tests {
             .expect("parse disallowed update"),
         ];
 
-        let allowed_user_ids = HashSet::from([1001]);
-        let (max_id, private_messages) = extract_private_messages(updates, &allowed_user_ids);
+        let (max_id, private_messages) = extract_private_messages(updates, 1001);
 
         assert_eq!(max_id, Some(2));
         assert_eq!(private_messages.len(), 1);
@@ -563,8 +554,7 @@ mod tests {
             .expect("parse photo update"),
         ];
 
-        let allowed_user_ids = HashSet::from([1001]);
-        let (max_id, private_messages) = extract_private_messages(updates, &allowed_user_ids);
+        let (max_id, private_messages) = extract_private_messages(updates, 1001);
 
         assert_eq!(max_id, Some(3));
         assert_eq!(private_messages.len(), 1);
@@ -616,8 +606,7 @@ mod tests {
             .expect("parse image document update"),
         ];
 
-        let allowed_user_ids = HashSet::from([1001]);
-        let (max_id, private_messages) = extract_private_messages(updates, &allowed_user_ids);
+        let (max_id, private_messages) = extract_private_messages(updates, 1001);
 
         assert_eq!(max_id, Some(4));
         assert_eq!(private_messages.len(), 1);
@@ -677,8 +666,7 @@ mod tests {
 
         let updates = vec![update];
 
-        let allowed_user_ids = HashSet::from([1001]);
-        let (max_id, private_messages) = extract_private_messages(updates, &allowed_user_ids);
+        let (max_id, private_messages) = extract_private_messages(updates, 1001);
 
         assert_eq!(max_id, Some(5));
         assert_eq!(private_messages.len(), 1);
@@ -730,8 +718,7 @@ mod tests {
             .expect("parse audio document update"),
         ];
 
-        let allowed_user_ids = HashSet::from([1001]);
-        let (max_id, private_messages) = extract_private_messages(updates, &allowed_user_ids);
+        let (max_id, private_messages) = extract_private_messages(updates, 1001);
 
         assert_eq!(max_id, Some(6));
         assert_eq!(private_messages.len(), 1);

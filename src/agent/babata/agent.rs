@@ -25,7 +25,6 @@ const PROVIDER_RETRY_MAX_DELAY_SECS: u64 = 2;
 
 #[derive(Debug)]
 pub struct BabataAgent {
-    pub config: Config,
     pub provider: Arc<dyn Provider>,
     pub model: String,
     pub memory: Box<dyn Memory>,
@@ -36,7 +35,7 @@ pub struct BabataAgent {
 }
 
 impl BabataAgent {
-    pub fn new(config: Config) -> BabataResult<Self> {
+    pub fn new(config: &Config) -> BabataResult<Self> {
         let agent_config = config.get_agent(BabataAgent::name())?;
         let AgentConfig::Babata(babata_config) = agent_config else {
             return Err(BabataError::config(format!(
@@ -47,13 +46,12 @@ impl BabataAgent {
         let provider_config = config.get_provider(&babata_config.provider)?;
         let provider = create_provider(provider_config)?;
         let model = babata_config.model.clone();
-        let memory = build_memory(&config, &babata_config.memory)?;
+        let memory = build_memory(config, &babata_config.memory)?;
         let tools = build_tools();
         let system_prompt_files = load_system_prompt_files()?;
         let skills = load_skills()?;
 
         Ok(Self {
-            config,
             provider,
             model,
             memory,

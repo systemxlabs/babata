@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 use crate::{
     BabataResult,
+    config::Config,
     task::{TaskRecord, TaskRequest, TaskStatus, TaskStore, launcher::TaskLauncher},
 };
 
@@ -19,10 +20,10 @@ pub struct TaskManager {
 }
 
 impl TaskManager {
-    pub fn new() -> BabataResult<Self> {
+    pub fn new(config: &Config) -> BabataResult<Self> {
         Ok(Self {
             store: TaskStore::new()?,
-            launcher: TaskLauncher::new()?,
+            launcher: TaskLauncher::new(config)?,
             running_tasks: Arc::new(Mutex::new(HashMap::new())),
         })
     }
@@ -45,7 +46,7 @@ impl TaskManager {
             created_at: Utc::now().timestamp_millis(),
         })?;
 
-        let running_task = self.launcher.launch(&request)?;
+        let running_task = self.launcher.launch(task_id, &request)?;
         {
             let mut guard = self.running_tasks.lock().unwrap();
             guard.insert(task_id, running_task);
@@ -57,6 +58,6 @@ impl TaskManager {
 
 #[derive(Debug)]
 pub struct RunningTask {
-    task_id: Uuid,
-    handle: tokio::task::JoinHandle<()>,
+    pub task_id: Uuid,
+    pub handle: tokio::task::JoinHandle<()>,
 }

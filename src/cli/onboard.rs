@@ -493,37 +493,21 @@ fn prompt_telegram_channel_config() -> BabataResult<TelegramChannelConfig> {
         )
     };
 
-    let allowed_user_ids_raw =
-        prompt_line("Telegram allowed user IDs (comma separated, required, e.g. 123456789)")?;
-    let allowed_user_ids = parse_allowed_user_ids(&allowed_user_ids_raw)?;
+    let user_id_raw = prompt_line("Telegram user ID (required, e.g. 123456789)")?;
+    let user_id = parse_telegram_user_id(&user_id_raw)?;
 
     Ok(TelegramChannelConfig {
         bot_token,
         polling_timeout_secs,
         last_update_id: None,
-        allowed_user_ids,
+        user_id,
     })
 }
 
-fn parse_allowed_user_ids(raw: &str) -> BabataResult<Vec<i64>> {
-    let values = raw
-        .split(',')
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(|value| {
-            value
-                .parse::<i64>()
-                .map_err(|_| BabataError::config("Invalid Telegram allowed user id"))
-        })
-        .collect::<BabataResult<Vec<_>>>()?;
-
-    if values.is_empty() {
-        return Err(BabataError::config(
-            "Telegram allowed user IDs cannot be empty",
-        ));
-    }
-
-    Ok(values)
+fn parse_telegram_user_id(raw: &str) -> BabataResult<i64> {
+    raw.trim()
+        .parse::<i64>()
+        .map_err(|_| BabataError::config("Invalid Telegram user id"))
 }
 
 fn prompt_background_service_setup() -> BabataResult<bool> {

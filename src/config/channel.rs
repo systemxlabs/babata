@@ -19,8 +19,7 @@ pub struct TelegramChannelConfig {
     pub polling_timeout_secs: Option<u64>,
     #[serde(default)]
     pub last_update_id: Option<i64>,
-    #[serde(default)]
-    pub allowed_user_ids: Vec<i64>,
+    pub user_id: i64,
 }
 
 impl TelegramChannelConfig {
@@ -56,15 +55,9 @@ impl TelegramChannelConfig {
             ));
         }
 
-        if self.allowed_user_ids.is_empty() {
+        if self.user_id <= 0 {
             return Err(BabataError::config(
-                "Telegram channel allowed_user_ids cannot be empty",
-            ));
-        }
-
-        if self.allowed_user_ids.iter().any(|id| *id <= 0) {
-            return Err(BabataError::config(
-                "Telegram channel allowed_user_ids must contain positive user id values",
+                "Telegram channel user_id must be a positive value",
             ));
         }
 
@@ -94,7 +87,7 @@ mod tests {
             bot_token: "token".to_string(),
             polling_timeout_secs: None,
             last_update_id: None,
-            allowed_user_ids: vec![12345],
+            user_id: 12345,
         };
 
         assert_eq!(
@@ -109,19 +102,19 @@ mod tests {
             bot_token: "   ".to_string(),
             polling_timeout_secs: None,
             last_update_id: None,
-            allowed_user_ids: vec![12345],
+            user_id: 12345,
         };
 
         assert!(config.validate().is_err());
     }
 
     #[test]
-    fn telegram_config_rejects_empty_allowed_user_ids() {
+    fn telegram_config_rejects_non_positive_user_id() {
         let config = TelegramChannelConfig {
             bot_token: "token".to_string(),
             polling_timeout_secs: None,
             last_update_id: None,
-            allowed_user_ids: Vec::new(),
+            user_id: 0,
         };
 
         assert!(config.validate().is_err());
@@ -133,7 +126,7 @@ mod tests {
             bot_token: "token".to_string(),
             polling_timeout_secs: None,
             last_update_id: Some(-1),
-            allowed_user_ids: vec![12345],
+            user_id: 12345,
         };
 
         assert!(config.validate().is_err());
