@@ -5,6 +5,7 @@ use uuid::Uuid;
 use crate::{
     BabataResult,
     agent::{Agent, babata::BabataAgent, build_agents},
+    channel::Channel,
     config::Config,
     error::BabataError,
     task::{TaskRequest, manager::RunningTask},
@@ -16,8 +17,8 @@ pub struct TaskLauncher {
 }
 
 impl TaskLauncher {
-    pub fn new(config: &Config) -> BabataResult<Self> {
-        let agents = build_agents(config)?;
+    pub fn new(config: &Config, channels: HashMap<String, Arc<dyn Channel>>) -> BabataResult<Self> {
+        let agents = build_agents(config, channels)?;
         Ok(Self { agents })
     }
 

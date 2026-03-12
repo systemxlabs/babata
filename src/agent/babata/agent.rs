@@ -5,14 +5,15 @@ use log::{info, warn};
 
 use crate::{
     BabataResult,
-    agent::babata::{Tool, ToolSpec, build_tools},
     agent::{
         Agent,
         babata::{
-            GenerationRequest, Provider, Skill, SystemPromptFile, build_system_prompt,
-            create_provider, load_skills, load_system_prompt_files,
+            GenerationRequest, Provider, Skill, SystemPromptFile, Tool, ToolSpec,
+            build_system_prompt, build_tools, create_provider, load_skills,
+            load_system_prompt_files,
         },
     },
+    channel::Channel,
     config::{AgentConfig, Config},
     error::BabataError,
     memory::{Memory, build_memory},
@@ -35,7 +36,7 @@ pub struct BabataAgent {
 }
 
 impl BabataAgent {
-    pub fn new(config: &Config) -> BabataResult<Self> {
+    pub fn new(config: &Config, channels: HashMap<String, Arc<dyn Channel>>) -> BabataResult<Self> {
         let agent_config = config.get_agent(BabataAgent::name())?;
         let AgentConfig::Babata(babata_config) = agent_config else {
             return Err(BabataError::config(format!(
@@ -47,7 +48,7 @@ impl BabataAgent {
         let provider = create_provider(provider_config)?;
         let model = babata_config.model.clone();
         let memory = build_memory(config, &babata_config.memory)?;
-        let tools = build_tools();
+        let tools = build_tools(&config, channels)?;
         let system_prompt_files = load_system_prompt_files()?;
         let skills = load_skills()?;
 
