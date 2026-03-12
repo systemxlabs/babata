@@ -1,3 +1,4 @@
+use reqwest::Client;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -5,13 +6,13 @@ use crate::{
     BabataResult,
     agent::babata::{Tool, ToolSpec},
     error::BabataError,
-    task::{TaskStatus, TaskStore},
+    http::DEFAULT_HTTP_BASE_URL,
 };
 
 #[derive(Debug)]
 pub struct ControlTaskTool {
     spec: ToolSpec,
-    store: TaskStore,
+    http_client: Client,
 }
 
 impl ControlTaskTool {
@@ -37,7 +38,7 @@ impl ControlTaskTool {
                     "required": ["task_id", "action"]
                 }),
             },
-            store: TaskStore::new()?,
+            http_client: Client::new(),
         })
     }
 }
@@ -59,24 +60,29 @@ impl Tool for ControlTaskTool {
 
         let task_id = Uuid::parse_str(task_id)
             .map_err(|err| BabataError::tool(format!("Invalid task_id '{}': {}", task_id, err)))?;
-        let status = parse_action(action)?;
+        validate_action(action)?;
+        let url = format!("{DEFAULT_HTTP_BASE_URL}/tasks/{task_id}/{action}");
 
-        self.store.update_task_status(task_id, status)?;
+        let response = self.http_client.post(url).send().await.map_err(|err| {
+            BabataError::tool(format!("Failed to call control_task HTTP API: {}", err))
+        })?;
 
-        Ok(format!(
-            "Applied action '{}' to task '{}'; task status is now '{}'",
-            action,
-            task_id,
-            status.as_str()
-        ))
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(BabataError::tool(format!(
+                "control_task HTTP API returned status {}: {}",
+                status, body
+            )));
+        }
+
+        Ok(format!("Applied action '{}' to task '{}'", action, task_id))
     }
 }
 
-fn parse_action(action: &str) -> BabataResult<TaskStatus> {
+fn validate_action(action: &str) -> BabataResult<()> {
     match action {
-        "pause" => Ok(TaskStatus::Paused),
-        "resume" => Ok(TaskStatus::Running),
-        "cancel" => Ok(TaskStatus::Canceled),
+        "pause" | "resume" | "cancel" => Ok(()),
         _ => Err(BabataError::tool(format!(
             "Invalid action '{}'; expected one of: pause, resume, cancel",
             action

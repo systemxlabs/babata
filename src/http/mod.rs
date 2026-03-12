@@ -15,7 +15,8 @@ use crate::{BabataResult, error::BabataError, task::TaskManager};
 
 pub(crate) use error::ApiError;
 
-const DEFAULT_HTTP_ADDR: &str = "127.0.0.1:18800";
+pub const DEFAULT_HTTP_ADDR: &str = "127.0.0.1:18800";
+pub const DEFAULT_HTTP_BASE_URL: &str = "http://127.0.0.1:18800";
 
 #[derive(Clone)]
 pub(crate) struct HttpApp {
