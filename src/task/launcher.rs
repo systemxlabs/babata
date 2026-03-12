@@ -1,5 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
+use log::info;
 use uuid::Uuid;
 
 use crate::{
@@ -23,6 +24,7 @@ impl TaskLauncher {
     }
 
     pub fn launch(&self, task_id: Uuid, request: &TaskRequest) -> BabataResult<RunningTask> {
+        info!("Launching task {} with request: {:?}", task_id, request);
         let agent_name = match request.agent.as_deref() {
             Some(agent_name) => agent_name,
             None => BabataAgent::name(),

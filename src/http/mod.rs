@@ -50,9 +50,9 @@ fn router(task_manager: Arc<TaskManager>) -> Router {
     Router::new()
         .route("/health", get(health))
         .route("/tasks", post(create_task::handle))
-        .route("/tasks/:task_id/pause", post(control_task::pause))
-        .route("/tasks/:task_id/resume", post(control_task::resume))
-        .route("/tasks/:task_id/cancel", post(control_task::cancel))
+        .route("/tasks/{task_id}/pause", post(control_task::pause))
+        .route("/tasks/{task_id}/resume", post(control_task::resume))
+        .route("/tasks/{task_id}/cancel", post(control_task::cancel))
         .with_state(HttpApp { task_manager })
 }
 

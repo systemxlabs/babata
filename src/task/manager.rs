@@ -4,6 +4,7 @@ use std::{
 };
 
 use chrono::Utc;
+use log::info;
 use tokio::task::JoinHandle;
 use uuid::Uuid;
 
@@ -31,6 +32,7 @@ impl TaskManager {
 
     pub fn create_task(&self, request: TaskRequest) -> BabataResult<Uuid> {
         let task_id = Uuid::new_v4();
+        info!("Creating task {} with request: {:?}", task_id, request);
 
         let root_task_id = if let Some(parent_task_id) = request.parent_task_id {
             let task_record = self.store.get_task(parent_task_id)?;
@@ -57,6 +59,7 @@ impl TaskManager {
     }
 
     pub fn pause_task(&self, task_id: Uuid) -> BabataResult<()> {
+        info!("Pausing task {}", task_id);
         let task = self.store.get_task(task_id)?;
         if task.status != TaskStatus::Running {
             return Err(BabataError::config(format!(
@@ -74,6 +77,7 @@ impl TaskManager {
     }
 
     pub fn resume_task(&self, task_id: Uuid) -> BabataResult<()> {
+        info!("Resuming task {}", task_id);
         let task = self.store.get_task(task_id)?;
         if task.status != TaskStatus::Paused {
             return Err(BabataError::config(format!(
@@ -100,6 +104,7 @@ impl TaskManager {
     }
 
     pub fn cancel_task(&self, task_id: Uuid) -> BabataResult<()> {
+        info!("Cancelling task {}", task_id);
         let task = self.store.get_task(task_id)?;
         if matches!(task.status, TaskStatus::Done | TaskStatus::Canceled) {
             return Err(BabataError::config(format!(

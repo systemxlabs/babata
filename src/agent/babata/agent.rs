@@ -101,7 +101,12 @@ impl BabataAgent {
         })
         .retry(backoff)
         .when(|err| matches!(err, BabataError::Provider(_, _)))
-        .notify(|err, wait| warn!("Provider generate failed: {}. Retrying in {:?}", err, wait))
+        .notify(|err, wait| {
+            warn!(
+                "Provider generate failed: {:?}. Retrying in {:?}",
+                err, wait
+            )
+        })
         .await
     }
 }
