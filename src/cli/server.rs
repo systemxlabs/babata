@@ -1,17 +1,23 @@
 use std::{
+    future::pending,
     path::Path,
     process::Command,
+    sync::Arc,
     thread,
     time::{Duration, Instant},
 };
 
-use log::{info, warn};
+use log::{error, info, warn};
 
-use crate::utils::babata_dir;
 use crate::{BabataResult, config::Config, error::BabataError};
 use crate::{
-    channel::build_channels,
-    message::{Content, Message},
+    channel::{build_channels, start_channel_loops},
+    message::Content,
+};
+use crate::{
+    job::JobManager,
+    task::{TaskLauncher, TaskManager, TaskRequest},
+    utils::babata_dir,
 };
 
 use super::Args;
@@ -92,32 +98,50 @@ fn run_serve(_args: &Args) -> BabataResult<()> {
 
     let config = Config::load()?;
     let channels = build_channels(&config)?;
+    let task_launcher = TaskLauncher::new(&config, channels.clone())?;
+    let task_manager = Arc::new(TaskManager::new(task_launcher)?);
+    let job_manager = JobManager::new(task_manager.clone());
 
-    unimplemented!()
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .map_err(|err| BabataError::internal(format!("Failed to build Tokio runtime: {err}")))?;
+
+    runtime.block_on(async move {
+        let _ = start_channel_loops(channels, task_manager.clone());
+        job_manager.start();
+
+        broadcast_service_started(&task_manager).await;
+
+        pending::<()>().await;
+    });
+
+    Ok(())
 }
 
-async fn broadcast_service_started(channels: &[std::sync::Arc<dyn crate::channel::Channel>]) {
-    if channels.is_empty() {
-        return;
-    }
-
-    unimplemented!()
-}
-
-fn service_started_message() -> Content {
+async fn broadcast_service_started(task_manager: &Arc<TaskManager>) {
     let babata_home = match crate::utils::babata_dir() {
         Ok(path) => path.display().to_string(),
         Err(err) => format!("unavailable ({err})"),
     };
-    let text = format!(
+    let notification = format!(
         "Babata server started.\nVersion: {}\nBabata home: {}",
         env!("CARGO_PKG_VERSION"),
         babata_home
     );
 
-    info!("{text}");
+    let prompt = Content::Text {
+        text: format!("Send below notification to each channel: \n{notification}"),
+    };
 
-    Content::Text { text }
+    let task = TaskRequest {
+        prompt: vec![prompt],
+        parent_task_id: None,
+        agent: None,
+    };
+    if let Err(e) = task_manager.create_task(task) {
+        error!("Failed to create service started notification task: {}", e);
+    }
 }
 
 fn run_start() -> BabataResult<()> {
@@ -830,11 +854,9 @@ mod windows_service_host {
 
 #[cfg(test)]
 mod tests {
-    use crate::message::{Content, Message};
-
     use super::{
         WindowsServiceState, is_macos_service_not_found_error, parse_windows_service_state,
-        service_started_message, windows_service_bin_path,
+        windows_service_bin_path,
     };
 
     #[test]

@@ -38,6 +38,7 @@ pub struct BabataAgent {
 impl BabataAgent {
     pub fn new(config: &Config, channels: HashMap<String, Arc<dyn Channel>>) -> BabataResult<Self> {
         let agent_config = config.get_agent(BabataAgent::name())?;
+        #[allow(irrefutable_let_patterns)]
         let AgentConfig::Babata(babata_config) = agent_config else {
             return Err(BabataError::config(format!(
                 "Agent config for 'babata' must be of type 'BabataAgentConfig'"
@@ -48,7 +49,7 @@ impl BabataAgent {
         let provider = create_provider(provider_config)?;
         let model = babata_config.model.clone();
         let memory = build_memory(config, &babata_config.memory)?;
-        let tools = build_tools(&config, channels)?;
+        let tools = build_tools(channels)?;
         let system_prompt_files = load_system_prompt_files()?;
         let skills = load_skills()?;
 

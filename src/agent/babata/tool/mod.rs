@@ -12,8 +12,6 @@ pub use update_task_status::*;
 pub use user_feedback::*;
 pub use write_file::*;
 
-use crate::channel::build_channels;
-use crate::config::Config;
 use crate::{BabataResult, channel::Channel};
 use serde_json::Value;
 use std::{collections::HashMap, fmt::Debug, sync::Arc};
@@ -32,10 +30,9 @@ pub struct ToolSpec {
 }
 
 pub fn build_tools(
-    config: &Config,
     channels: HashMap<String, Arc<dyn Channel>>,
 ) -> BabataResult<HashMap<String, Arc<dyn Tool>>> {
-    let mut tools: Vec<Arc<dyn Tool>> = vec![
+    let tools: Vec<Arc<dyn Tool>> = vec![
         Arc::new(ShellTool::new()),
         Arc::new(ReadFileTool::new()),
         Arc::new(WriteFileTool::new()),

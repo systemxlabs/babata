@@ -280,6 +280,11 @@ fn extract_private_messages(
             continue;
         }
 
+        // Ignore replies/quoted follow-ups; only treat standalone inbound messages as new tasks.
+        if message.reply_to_message().is_some() {
+            continue;
+        }
+
         let chat_id = message.chat.id.0;
         if chat_id != user_id {
             continue;
