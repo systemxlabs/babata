@@ -28,6 +28,11 @@ pub enum Command {
         #[command(subcommand)]
         action: ProviderAction,
     },
+    #[command(about = "Task management commands")]
+    Task {
+        #[command(subcommand)]
+        action: TaskAction,
+    },
     #[command(about = "Interactive setup (provider/agent/channel/service)")]
     Onboard,
 }
@@ -111,4 +116,36 @@ pub enum AgentAction {
     },
     #[command(about = "List all agent configs (one JSON per line)")]
     List,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum TaskAction {
+    #[command(about = "Pause a task by id")]
+    Pause {
+        #[arg(value_name = "TASK_ID", help = "Task UUID")]
+        task_id: String,
+    },
+    #[command(about = "Resume a task by id")]
+    Resume {
+        #[arg(value_name = "TASK_ID", help = "Task UUID")]
+        task_id: String,
+    },
+    #[command(about = "Cancel a task by id")]
+    Cancel {
+        #[arg(value_name = "TASK_ID", help = "Task UUID")]
+        task_id: String,
+    },
+    #[command(about = "Create a task")]
+    Create {
+        #[arg(long, value_name = "PROMPT", help = "Task prompt text")]
+        prompt: String,
+        #[arg(long, value_name = "AGENT", help = "Optional agent name")]
+        agent: Option<String>,
+        #[arg(
+            long = "parent-task-id",
+            value_name = "PARENT_TASK_ID",
+            help = "Optional parent task UUID"
+        )]
+        parent_task_id: Option<String>,
+    },
 }

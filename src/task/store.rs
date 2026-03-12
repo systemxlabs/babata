@@ -167,7 +167,7 @@ impl TaskStore {
     }
 
     fn default_db_path() -> BabataResult<PathBuf> {
-        Ok(babata_dir()?.join("task").join("task.db"))
+        Ok(babata_dir()?.join("task.db"))
     }
 
     fn connect(&self) -> BabataResult<Connection> {
