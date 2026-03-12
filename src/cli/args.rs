@@ -3,14 +3,6 @@ use clap::{Parser, Subcommand};
 #[derive(Parser, Debug)]
 #[command(version, about = "Babata agent CLI", long_about = None)]
 pub struct Args {
-    #[arg(
-        long,
-        default_value = "babata",
-        help = "Agent name to use (default: babata)"
-    )]
-    pub agent: String,
-    #[arg(help = "Prompt text sent to the agent")]
-    pub prompt: Option<String>,
     #[command(subcommand)]
     pub command: Option<Command>,
 }

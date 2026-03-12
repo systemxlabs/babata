@@ -16,20 +16,11 @@ pub enum ChannelConfig {
 pub struct TelegramChannelConfig {
     pub bot_token: String,
     #[serde(default)]
-    pub polling_timeout_secs: Option<u64>,
-    #[serde(default)]
     pub last_update_id: Option<i64>,
     pub user_id: i64,
 }
 
 impl TelegramChannelConfig {
-    pub const DEFAULT_POLLING_TIMEOUT_SECS: u64 = 30;
-
-    pub fn polling_timeout_secs(&self) -> u64 {
-        self.polling_timeout_secs
-            .unwrap_or(Self::DEFAULT_POLLING_TIMEOUT_SECS)
-    }
-
     pub fn last_update_id(&self) -> Option<i64> {
         self.last_update_id
     }
@@ -38,12 +29,6 @@ impl TelegramChannelConfig {
         if self.bot_token.trim().is_empty() {
             return Err(BabataError::config(
                 "Telegram channel bot_token cannot be empty",
-            ));
-        }
-
-        if self.polling_timeout_secs() == 0 {
-            return Err(BabataError::config(
-                "Telegram channel polling_timeout_secs must be greater than 0",
             ));
         }
 
@@ -82,25 +67,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn telegram_config_defaults_work() {
-        let config = TelegramChannelConfig {
-            bot_token: "token".to_string(),
-            polling_timeout_secs: None,
-            last_update_id: None,
-            user_id: 12345,
-        };
-
-        assert_eq!(
-            config.polling_timeout_secs(),
-            TelegramChannelConfig::DEFAULT_POLLING_TIMEOUT_SECS
-        );
-    }
-
-    #[test]
     fn telegram_config_rejects_empty_bot_token() {
         let config = TelegramChannelConfig {
             bot_token: "   ".to_string(),
-            polling_timeout_secs: None,
             last_update_id: None,
             user_id: 12345,
         };
@@ -112,7 +81,6 @@ mod tests {
     fn telegram_config_rejects_non_positive_user_id() {
         let config = TelegramChannelConfig {
             bot_token: "token".to_string(),
-            polling_timeout_secs: None,
             last_update_id: None,
             user_id: 0,
         };
@@ -124,7 +92,6 @@ mod tests {
     fn telegram_config_rejects_negative_last_update_id() {
         let config = TelegramChannelConfig {
             bot_token: "token".to_string(),
-            polling_timeout_secs: None,
             last_update_id: Some(-1),
             user_id: 12345,
         };

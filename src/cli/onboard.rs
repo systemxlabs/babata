@@ -480,25 +480,11 @@ fn build_channel_config(channel_name: &str) -> BabataResult<ChannelConfig> {
 fn prompt_telegram_channel_config() -> BabataResult<TelegramChannelConfig> {
     let bot_token = prompt_line("Telegram bot token")?;
 
-    let polling_timeout_secs_raw =
-        prompt_line("Telegram polling timeout seconds (optional, press Enter to use default 30)")?;
-    let polling_timeout_secs = if polling_timeout_secs_raw.trim().is_empty() {
-        None
-    } else {
-        Some(
-            polling_timeout_secs_raw
-                .trim()
-                .parse::<u64>()
-                .map_err(|_| BabataError::config("Invalid polling timeout seconds"))?,
-        )
-    };
-
     let user_id_raw = prompt_line("Telegram user ID (required, e.g. 123456789)")?;
     let user_id = parse_telegram_user_id(&user_id_raw)?;
 
     Ok(TelegramChannelConfig {
         bot_token,
-        polling_timeout_secs,
         last_update_id: None,
         user_id,
     })

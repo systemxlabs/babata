@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use log::warn;
 use reqwest::{Client, StatusCode};
 use teloxide::{
@@ -14,16 +12,15 @@ use crate::{
     BabataResult,
     config::{ChannelConfig, Config, TelegramChannelConfig},
     error::BabataError,
-    message::{Content, MediaType, Message},
-    task::TaskManager,
+    message::{Content, MediaType},
 };
+
+const DEFAULT_POLLING_TIMEOUT_SECS: u64 = 30;
 
 #[derive(Debug)]
 pub struct TelegramChannel {
     bot: Bot,
     http_client: Client,
-    // Long-poll timeout used by blocking receive().
-    polling_timeout_secs: u64,
     // Telegram update cursor to avoid reprocessing already consumed updates.
     last_update_id: Mutex<Option<i64>>,
     // Allowed DM user id; messages from others are ignored.
@@ -34,7 +31,6 @@ impl TelegramChannel {
     pub fn new(config: TelegramChannelConfig) -> Self {
         let TelegramChannelConfig {
             bot_token,
-            polling_timeout_secs,
             last_update_id,
             user_id,
         } = config;
@@ -42,16 +38,17 @@ impl TelegramChannel {
         Self {
             bot: Bot::new(bot_token),
             http_client: Client::new(),
-            polling_timeout_secs: polling_timeout_secs
-                .unwrap_or(TelegramChannelConfig::DEFAULT_POLLING_TIMEOUT_SECS),
             last_update_id: Mutex::new(last_update_id),
             user_id,
         }
     }
 
-    async fn fetch_updates(&self, timeout_secs: u64) -> BabataResult<Vec<IncomingPrivateMessage>> {
+    async fn fetch_updates(&self) -> BabataResult<Vec<IncomingPrivateMessage>> {
         let offset = *self.last_update_id.lock().await;
-        let mut request = self.bot.get_updates().timeout(timeout_secs as u32);
+        let mut request = self
+            .bot
+            .get_updates()
+            .timeout(DEFAULT_POLLING_TIMEOUT_SECS as u32);
 
         if let Some(offset) = offset {
             // Telegram offset is i32 in teloxide API; saturate safely from stored i64.
@@ -105,18 +102,17 @@ impl TelegramChannel {
     async fn incoming_to_messages(
         &self,
         incoming: Vec<IncomingPrivateMessage>,
-    ) -> Option<Vec<Message>> {
+    ) -> Option<Vec<Content>> {
         if incoming.is_empty() {
             return None;
         }
 
-        let mut messages = Vec::new();
+        let mut content = Vec::new();
         for message in incoming {
             if message.chat_id != self.user_id {
                 continue;
             }
 
-            let mut content = Vec::new();
             if let Some(text) = message.text {
                 content.push(Content::Text { text });
             }
@@ -168,19 +164,13 @@ impl TelegramChannel {
                     }
                 }
             }
-
-            if content.is_empty() {
-                continue;
-            }
-
-            messages.push(Message::UserPrompt { content });
         }
 
-        if messages.is_empty() {
+        if content.is_empty() {
             return None;
         }
 
-        Some(messages)
+        Some(content)
     }
 
     async fn download_file_as_base64(
@@ -245,8 +235,13 @@ impl super::Channel for TelegramChannel {
         "Telegram"
     }
 
-    async fn start(&self, task_manager: Arc<TaskManager>) -> BabataResult<()> {
-        unimplemented!()
+    async fn try_receive(&self) -> BabataResult<Vec<Content>> {
+        let incoming = self.fetch_updates().await?;
+        let Some(content) = self.incoming_to_messages(incoming).await else {
+            return Ok(Vec::new());
+        };
+
+        Ok(content)
     }
 
     async fn feedback(&self, content: Vec<Content>) -> BabataResult<Vec<Content>> {

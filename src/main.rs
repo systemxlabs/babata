@@ -1,4 +1,4 @@
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 
 fn main() {
     if let Err(err) = babata::logging::init() {
@@ -43,6 +43,10 @@ fn main() {
             babata::cli::ProviderAction::List => babata::cli::provider::list(&args),
         },
         Some(babata::cli::Command::Onboard) => babata::cli::onboard::run(&args),
-        None => babata::cli::prompt::run(&args),
+        None => {
+            let mut cmd = babata::cli::Args::command();
+            cmd.print_help().expect("print CLI help");
+            println!();
+        }
     }
 }
