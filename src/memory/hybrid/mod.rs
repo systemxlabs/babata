@@ -207,7 +207,7 @@ impl std::fmt::Debug for HybridMemory {
 
 #[async_trait::async_trait]
 impl Memory for HybridMemory {
-    fn name(&self) -> &'static str {
+    fn name() -> &'static str {
         "hybrid"
     }
 
