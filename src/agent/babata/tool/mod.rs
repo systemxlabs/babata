@@ -1,14 +1,14 @@
+mod control_task;
 mod edit_file;
 mod read_file;
 mod shell;
-mod update_task_status;
 mod user_feedback;
 mod write_file;
 
+pub use control_task::*;
 pub use edit_file::*;
 pub use read_file::*;
 pub use shell::*;
-pub use update_task_status::*;
 pub use user_feedback::*;
 pub use write_file::*;
 
@@ -37,7 +37,7 @@ pub fn build_tools(
         Arc::new(ReadFileTool::new()),
         Arc::new(WriteFileTool::new()),
         Arc::new(EditFileTool::new()),
-        Arc::new(UpdateTaskStatusTool::new()?),
+        Arc::new(ControlTaskTool::new()?),
         Arc::new(UserFeedbackTool::new(channels)),
     ];
 

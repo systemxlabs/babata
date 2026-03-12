@@ -34,9 +34,7 @@ fn main() {
             babata::cli::ProviderAction::Add {
                 provider_config_json,
             } => babata::cli::provider::add(&provider_config_json),
-            babata::cli::ProviderAction::Delete { name } => {
-                babata::cli::provider::delete(&name)
-            }
+            babata::cli::ProviderAction::Delete { name } => babata::cli::provider::delete(&name),
             babata::cli::ProviderAction::List => babata::cli::provider::list(),
         },
         babata::cli::Command::Onboard => babata::cli::onboard::run(),

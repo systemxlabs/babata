@@ -9,32 +9,32 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub struct UpdateTaskStatusTool {
+pub struct ControlTaskTool {
     spec: ToolSpec,
     store: TaskStore,
 }
 
-impl UpdateTaskStatusTool {
+impl ControlTaskTool {
     pub fn new() -> BabataResult<Self> {
         Ok(Self {
             spec: ToolSpec {
-                name: "update_task_status".to_string(),
+                name: "control_task".to_string(),
                 description:
-                    "Update a task status in the task store. Valid statuses: running, done, canceled, paused."
+                    "Control a task through a high-level action. Supported actions: pause, resume, cancel."
                         .to_string(),
                 parameters: json!({
                     "type": "object",
                     "properties": {
                         "task_id": {
                             "type": "string",
-                            "description": "The UUID of the task to update"
+                            "description": "The UUID of the task to control"
                         },
-                        "status": {
+                        "action": {
                             "type": "string",
-                            "description": "New task status: running, done, canceled, or paused"
+                            "description": "The control action: pause, resume, or cancel"
                         }
                     },
-                    "required": ["task_id", "status"]
+                    "required": ["task_id", "action"]
                 }),
             },
             store: TaskStore::new()?,
@@ -43,7 +43,7 @@ impl UpdateTaskStatusTool {
 }
 
 #[async_trait::async_trait]
-impl Tool for UpdateTaskStatusTool {
+impl Tool for ControlTaskTool {
     fn spec(&self) -> &ToolSpec {
         &self.spec
     }
@@ -53,22 +53,33 @@ impl Tool for UpdateTaskStatusTool {
         let task_id = args["task_id"]
             .as_str()
             .ok_or_else(|| BabataError::tool("Missing required parameter: task_id"))?;
-        let status = args["status"]
+        let action = args["action"]
             .as_str()
-            .ok_or_else(|| BabataError::tool("Missing required parameter: status"))?;
+            .ok_or_else(|| BabataError::tool("Missing required parameter: action"))?;
 
         let task_id = Uuid::parse_str(task_id)
             .map_err(|err| BabataError::tool(format!("Invalid task_id '{}': {}", task_id, err)))?;
-        let status = status.parse::<TaskStatus>().map_err(|err| {
-            BabataError::tool(format!("Invalid task status '{}': {}", status, err))
-        })?;
+        let status = parse_action(action)?;
 
         self.store.update_task_status(task_id, status)?;
 
         Ok(format!(
-            "Updated task '{}' status to '{}'",
+            "Applied action '{}' to task '{}'; task status is now '{}'",
+            action,
             task_id,
             status.as_str()
         ))
+    }
+}
+
+fn parse_action(action: &str) -> BabataResult<TaskStatus> {
+    match action {
+        "pause" => Ok(TaskStatus::Paused),
+        "resume" => Ok(TaskStatus::Running),
+        "cancel" => Ok(TaskStatus::Canceled),
+        _ => Err(BabataError::tool(format!(
+            "Invalid action '{}'; expected one of: pause, resume, cancel",
+            action
+        ))),
     }
 }
