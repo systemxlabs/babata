@@ -1,6 +1,8 @@
 mod control_task;
 mod create_task;
 mod error;
+mod get_task;
+mod list_tasks;
 
 use std::sync::Arc;
 
@@ -49,7 +51,8 @@ impl HttpApp {
 fn router(task_manager: Arc<TaskManager>) -> Router {
     Router::new()
         .route("/health", get(health))
-        .route("/tasks", post(create_task::handle))
+        .route("/tasks", get(list_tasks::handle).post(create_task::handle))
+        .route("/tasks/{task_id}", get(get_task::handle))
         .route("/tasks/{task_id}/pause", post(control_task::pause))
         .route("/tasks/{task_id}/resume", post(control_task::resume))
         .route("/tasks/{task_id}/cancel", post(control_task::cancel))

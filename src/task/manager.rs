@@ -43,6 +43,8 @@ impl TaskManager {
 
         self.store.insert_task(TaskRecord {
             task_id,
+            prompt: request.prompt.clone(),
+            agent: request.agent.clone(),
             status: TaskStatus::Running,
             parent_task_id: request.parent_task_id,
             root_task_id,
@@ -86,11 +88,10 @@ impl TaskManager {
             )));
         }
 
-        // TODO
         let request = TaskRequest {
-            prompt: vec![],
+            prompt: task.prompt,
             parent_task_id: task.parent_task_id,
-            agent: None,
+            agent: task.agent,
         };
         let running_task = self.launcher.launch(task_id, &request)?;
         {
@@ -120,6 +121,18 @@ impl TaskManager {
         self.store
             .update_task_status(task_id, TaskStatus::Canceled)?;
         Ok(())
+    }
+
+    pub fn list_tasks(
+        &self,
+        status: Option<TaskStatus>,
+        limit: Option<usize>,
+    ) -> BabataResult<Vec<TaskRecord>> {
+        self.store.list_tasks(status, limit)
+    }
+
+    pub fn get_task(&self, task_id: Uuid) -> BabataResult<TaskRecord> {
+        self.store.get_task(task_id)
     }
 }
 
