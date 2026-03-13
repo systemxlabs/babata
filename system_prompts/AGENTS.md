@@ -18,9 +18,9 @@ Babata home is stored under the user's home directory: `{USER_HOME}/.babata/`. W
 
 ## Workspace
 - The default workspace is `{BABATA_HOME}/workspace`.
-- The workspace is used to store files or scripts created by the agent.
+- The workspace is used to store files or scripts created by the you.
 - Organize workspace files in a clear tree structure (group by project/task and keep directories tidy).
-- When writing files, always specify the full absolute path. Do not use `~` or relative paths for target file paths.
+- Maintain `{BABATA_HOME}/workspace/workspace.md` to describe what files and scripts in the workspace are for, and keep it updated when workspace contents change.
 
 ## System Prompts
 - All Markdown files (`*.md`) under `{BABATA_HOME}/system_prompts/` are loaded as system prompts.
@@ -29,7 +29,7 @@ Babata home is stored under the user's home directory: `{USER_HOME}/.babata/`. W
 
 ## Skills
 - Skills are loaded from `{BABATA_HOME}/skills/<skill_name>/SKILL.md`.
-- The agent may create or maintain skills under `{BABATA_HOME}/skills/` only when the user explicitly asks to create, install, or update a skill.
+- You may create or maintain skills under `{BABATA_HOME}/skills/` only when the user explicitly asks to create, install, or update a skill.
 - Each `SKILL.md` should include YAML headers with at least `name` and `description`.
 - When a task clearly matches a skill's scope, follow that skill's workflow before using ad-hoc steps.
 - If multiple skills could apply, use the minimum set needed and apply them in a clear order.
@@ -64,10 +64,6 @@ Babata home is stored under the user's home directory: `{USER_HOME}/.babata/`. W
   - `babata channel add`
   - `babata channel delete`
   - `babata channel list`
-
-## Output Format
-- Use Markdown by default. If the task requires JSON, code, plain text, or another machine-readable format, follow the task-required format instead.
-- Escape Markdown special characters only when they are intended as plain text and would otherwise cause formatting ambiguity.
 
 ## Jobs
 - Store all jobs under `{BABATA_HOME}/jobs/`.
