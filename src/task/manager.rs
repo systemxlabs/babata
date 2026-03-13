@@ -22,9 +22,9 @@ pub struct TaskManager {
 }
 
 impl TaskManager {
-    pub fn new(launcher: TaskLauncher) -> BabataResult<Self> {
+    pub fn new(store: TaskStore, launcher: TaskLauncher) -> BabataResult<Self> {
         Ok(Self {
-            store: TaskStore::new()?,
+            store,
             launcher,
             running_tasks: Arc::new(Mutex::new(HashMap::new())),
         })

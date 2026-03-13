@@ -121,37 +121,41 @@ impl Agent for BabataAgent {
         let tool_specs = self.collect_tool_specs();
 
         let system_prompt = build_system_prompt(&self.system_prompt_files, &self.skills)?;
-        let mut prompts = vec![Message::UserPrompt { content: prompt }];
 
-        let context = self.memory.build_context(&prompts).await?;
+        let context = self.memory.build_context(&prompt).await?;
+        let mut conversation = vec![Message::UserPrompt { content: prompt }];
 
+        let mut success = false;
         for _ in 0..self.max_steps {
             let message = self
-                .generate_with_retry(&system_prompt, &prompts, &context, &tool_specs)
+                .generate_with_retry(&system_prompt, &conversation, &context, &tool_specs)
                 .await?;
             info!("Provider returned message: {:?}", message);
-            prompts.push(message.clone());
+            conversation.push(message.clone());
 
             match message {
-                Message::AssistantResponse { .. } => return Ok(()),
+                Message::AssistantResponse { .. } => {
+                    success = true;
+                    break;
+                }
                 Message::AssistantToolCalls { calls, .. } => {
                     if calls.is_empty() {
                         return Err(BabataError::provider("Provider returned empty tool calls"));
                     }
 
                     for call in calls {
-                        let tool = self.tools.get(&call.tool_name).ok_or_else(|| {
-                            BabataError::tool(format!(
-                                "Unknown tool requested by provider: {}",
-                                call.tool_name
-                            ))
-                        })?;
-
-                        let result = match tool.execute(&call.args).await {
-                            Ok(result) => result,
-                            Err(e) => format!("Tool execution failed with message: {e}"),
-                        };
-                        prompts.push(Message::ToolResult { call, result });
+                        if let Some(tool) = self.tools.get(&call.tool_name) {
+                            let result = match tool.execute(&call.args).await {
+                                Ok(result) => result,
+                                Err(e) => format!("Tool execution failed with message: {e}"),
+                            };
+                            conversation.push(Message::ToolResult { call, result });
+                        } else {
+                            conversation.push(Message::ToolResult {
+                                call: call.clone(),
+                                result: format!("Unknown tool: {}", call.tool_name),
+                            });
+                        }
                     }
                 }
                 Message::UserPrompt { .. } | Message::ToolResult { .. } => {
@@ -162,9 +166,14 @@ impl Agent for BabataAgent {
             }
         }
 
-        Err(BabataError::provider(format!(
-            "Max steps ({}) reached before final answer",
-            self.max_steps
-        )))
+        if success {
+            self.memory.append_messages(conversation).await?;
+            Ok(())
+        } else {
+            Err(BabataError::provider(format!(
+                "Max steps ({}) reached before final answer",
+                self.max_steps
+            )))
+        }
     }
 }

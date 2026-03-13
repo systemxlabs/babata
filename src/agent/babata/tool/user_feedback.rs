@@ -21,18 +21,18 @@ impl UserFeedbackTool {
             spec: ToolSpec {
                 name: "user_feedback".to_string(),
                 description:
-                    "Ask the user a follow-up question through the configured channel and return the reply as a JSON array of content items."
+                    "Ask the user a question through the configured channel and block until the user replies. Use this only when you need user input. Do not use it for notification-only messages."
                         .to_string(),
                 parameters: json!({
                     "type": "object",
                     "properties": {
                         "message": {
                             "type": "string",
-                            "description": "The follow-up question or prompt to send to the user"
+                            "description": "The question to ask the user. This tool waits until the user replies."
                         },
                         "channel": {
                             "type": "string",
-                            "description": "The channel name"
+                            "description": "The channel name to use for asking the user"
                         }
                     },
                     "required": ["message", "channel"]
@@ -69,7 +69,7 @@ impl Tool for UserFeedbackTool {
 
         let response = channel
             .feedback(vec![Content::Text {
-                text: message.to_string(),
+                text: format!("[Ask Feedback] {message}"),
             }])
             .await?;
 

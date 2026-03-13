@@ -9,7 +9,7 @@ pub use simple::SimpleMemory;
 use crate::{
     BabataResult,
     config::{Config, MemoryConfig},
-    message::Message,
+    message::{Content, Message},
 };
 use std::fmt::Debug;
 
@@ -19,7 +19,7 @@ pub trait Memory: Debug + Sync + Send {
     where
         Self: Sized;
     async fn append_messages(&self, messages: Vec<Message>) -> BabataResult<()>;
-    async fn build_context(&self, prompts: &[Message]) -> BabataResult<Vec<Message>>;
+    async fn build_context(&self, prompt: &[Content]) -> BabataResult<Vec<Message>>;
 }
 
 pub fn build_memory(config: &Config, memory_name: &str) -> BabataResult<Box<dyn Memory>> {

@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, params};
 
+use crate::message::Content;
 use crate::utils::babata_dir;
 use crate::{BabataResult, error::BabataError, memory::Memory, message::Message};
 
@@ -181,7 +182,7 @@ impl Memory for SimpleMemory {
         self.insert_messages_inner(&messages)
     }
 
-    async fn build_context(&self, _prompts: &[Message]) -> BabataResult<Vec<Message>> {
+    async fn build_context(&self, _prompts: &[Content]) -> BabataResult<Vec<Message>> {
         self.scan_messages(Some(Self::CONTEXT_LIMIT))
     }
 }
