@@ -47,7 +47,7 @@ pub struct GenerationRequest<'a> {
     pub system_prompt: &'a str,
     pub model: &'a str,
     pub prompts: &'a [Message],
-    pub context: &'a [Message],
+    pub context: &'a str,
     pub tools: &'a [ToolSpec],
 }
 

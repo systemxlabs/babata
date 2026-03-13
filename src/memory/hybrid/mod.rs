@@ -218,20 +218,14 @@ impl Memory for HybridMemory {
         Ok(())
     }
 
-    async fn build_context(&self, prompt: &[Content]) -> BabataResult<Vec<Message>> {
+    async fn build_context(&self, prompt: &[Content]) -> BabataResult<String> {
         let query = extract_query_from_messages(prompt);
         if query.is_empty() {
-            return Ok(Vec::new());
+            return Ok(String::new());
         }
 
         let context = self.get_context_for_prompt(&query).await?;
-        if context.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        Ok(vec![Message::UserPrompt {
-            content: vec![Content::Text { text: context }],
-        }])
+        Ok(context)
     }
 }
 

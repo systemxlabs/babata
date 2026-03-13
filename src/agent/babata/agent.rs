@@ -151,7 +151,7 @@ async fn generate_with_retry(
     model: &str,
     system_prompt: &str,
     prompts: &[Message],
-    context: &[Message],
+    context: &str,
     tool_specs: &[ToolSpec],
 ) -> BabataResult<Message> {
     let backoff = ExponentialBuilder::default()
