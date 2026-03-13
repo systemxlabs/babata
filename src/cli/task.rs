@@ -68,7 +68,7 @@ fn run_control(action: &str, task_id: &str) -> BabataResult<()> {
             )));
         }
 
-        println!("Task '{}' {}", task_id, action);
+        println!("Task '{}' {} completed", task_id, action);
         Ok(())
     })
 }
