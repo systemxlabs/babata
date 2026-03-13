@@ -1,47 +1,47 @@
 use crate::{
     BabataResult,
-    provider::{
+    agent::babata::{
         GenerationRequest, GenerationResponse, InteractionRequest, InteractionResponse, Model,
         Provider,
     },
 };
 
-use super::OpenAICompatibleProvider;
+use super::AnthropicCompatibleProvider;
 
 #[derive(Debug)]
-pub struct DeepSeekProvider {
-    inner: OpenAICompatibleProvider,
+pub struct AnthropicProvider {
+    inner: AnthropicCompatibleProvider,
 }
 
-const DEEPSEEK_SUPPORTED_MODELS: &[Model] = &[
+const ANTHROPIC_SUPPORTED_MODELS: &[Model] = &[
     Model {
-        provider: "deepseek",
-        name: "deepseek-chat",
-        context_length: 64_000,
+        provider: "anthropic",
+        name: "claude-opus-4-6",
+        context_length: 200_000,
     },
     Model {
-        provider: "deepseek",
-        name: "deepseek-reasoner",
-        context_length: 64_000,
+        provider: "anthropic",
+        name: "claude-sonnet-4-6",
+        context_length: 200_000,
     },
 ];
 
-impl DeepSeekProvider {
+impl AnthropicProvider {
     pub fn new(api_key: &str) -> Self {
-        let inner = OpenAICompatibleProvider::new(api_key, "https://api.deepseek.com/v1")
-            .with_user_agent(None);
-        Self { inner }
+        Self {
+            inner: AnthropicCompatibleProvider::new(api_key, "https://api.anthropic.com"),
+        }
     }
 }
 
 #[async_trait::async_trait]
-impl Provider for DeepSeekProvider {
+impl Provider for AnthropicProvider {
     fn name() -> &'static str {
-        "deepseek"
+        "anthropic"
     }
 
     fn supported_models() -> &'static [Model] {
-        DEEPSEEK_SUPPORTED_MODELS
+        ANTHROPIC_SUPPORTED_MODELS
     }
 
     async fn generate<'a>(

@@ -4,8 +4,8 @@ use chrono::Local;
 
 use crate::{
     BabataResult,
+    agent::babata::Skill,
     error::BabataError,
-    skill::Skill,
     utils::{babata_dir, resolve_home_dir},
 };
 
@@ -64,8 +64,16 @@ pub struct SystemPromptFile {
 }
 
 pub fn load_system_prompt_files() -> BabataResult<Vec<SystemPromptFile>> {
-    let dir = babata_dir()?.join("system_prompts");
-    load_system_prompt_files_from_dir(&dir)
+    let babata_home = babata_dir()?;
+    let mut prompts = load_system_prompt_files_from_dir(&babata_home.join("system_prompts"))?;
+
+    let workspace_prompt_path = babata_home.join("workspace").join("workspace.md");
+    if workspace_prompt_path.exists() {
+        prompts.push(load_system_prompt_file(&workspace_prompt_path)?);
+        prompts.sort_by(|a, b| a.path.cmp(&b.path));
+    }
+
+    Ok(prompts)
 }
 
 fn load_system_prompt_files_from_dir(dir: &Path) -> BabataResult<Vec<SystemPromptFile>> {
@@ -107,16 +115,23 @@ fn load_system_prompt_files_from_dir(dir: &Path) -> BabataResult<Vec<SystemPromp
         if !ext.eq_ignore_ascii_case("md") {
             continue;
         }
-        let content = std::fs::read_to_string(&path).map_err(|err| {
-            BabataError::config(format!(
-                "Failed to read system prompt '{}': {}",
-                path.display(),
-                err
-            ))
-        })?;
-        prompts.push(SystemPromptFile { path, content });
+        prompts.push(load_system_prompt_file(&path)?);
     }
 
     prompts.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(prompts)
+}
+
+fn load_system_prompt_file(path: &Path) -> BabataResult<SystemPromptFile> {
+    let content = std::fs::read_to_string(path).map_err(|err| {
+        BabataError::config(format!(
+            "Failed to read system prompt '{}': {}",
+            path.display(),
+            err
+        ))
+    })?;
+    Ok(SystemPromptFile {
+        path: path.to_path_buf(),
+        content,
+    })
 }

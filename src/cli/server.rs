@@ -1,18 +1,22 @@
 use std::{
     path::Path,
     process::Command,
+    sync::Arc,
     thread,
     time::{Duration, Instant},
 };
 
-use log::{info, warn};
+use log::{error, info, warn};
 
-use crate::job::JobManager;
-use crate::message::{Content, Message};
-use crate::utils::babata_dir;
-use crate::{BabataResult, agent::AgentLoop, config::Config, error::BabataError};
-
-use super::Args;
+use crate::{BabataResult, config::Config, error::BabataError, http::HttpApp, task::TaskStore};
+use crate::{
+    channel::{build_channels, start_channel_loops},
+    message::Content,
+};
+use crate::{
+    task::{TaskLauncher, TaskManager, TaskRequest},
+    utils::babata_dir,
+};
 
 const MACOS_LAUNCHD_LABEL: &str = "babata.server";
 const LINUX_SYSTEMD_SERVICE: &str = "babata.server.service";
@@ -21,35 +25,35 @@ const WINDOWS_SERVICE_DISPLAY_NAME: &str = "Babata Server";
 const WINDOWS_SERVICE_DESCRIPTION: &str =
     "Babata background server managed by Windows Service Control Manager.";
 
-pub fn serve(args: &Args) {
-    if let Err(err) = run_serve(args) {
+pub fn serve() {
+    if let Err(err) = run_serve() {
         eprintln!("{err}");
         std::process::exit(1);
     }
 }
 
-pub fn start(_args: &Args) {
+pub fn start() {
     if let Err(err) = run_start() {
         eprintln!("{err}");
         std::process::exit(1);
     }
 }
 
-pub fn stop(_args: &Args) {
+pub fn stop() {
     if let Err(err) = run_stop() {
         eprintln!("{err}");
         std::process::exit(1);
     }
 }
 
-pub fn restart(_args: &Args) {
+pub fn restart() {
     if let Err(err) = run_restart() {
         eprintln!("{err}");
         std::process::exit(1);
     }
 }
 
-pub fn windows_service_host(_args: &Args, home_dir: &str) {
+pub fn windows_service_host(home_dir: &str) {
     if let Err(err) = run_windows_service_host(home_dir) {
         eprintln!("{err}");
         std::process::exit(1);
@@ -85,60 +89,55 @@ pub fn install_windows_service() -> BabataResult<()> {
     Ok(())
 }
 
-fn run_serve(_args: &Args) -> BabataResult<()> {
+fn run_serve() -> BabataResult<()> {
     info!("Server run babata dir: {}", babata_dir()?.display());
 
     let config = Config::load()?;
-    let agent_loop = AgentLoop::new(config.clone())?;
-    let job_manager = JobManager::new();
+    let channels = build_channels(&config)?;
+    let task_store = TaskStore::new()?;
+    let task_launcher = TaskLauncher::new(&config, channels.clone(), task_store.clone())?;
+    let task_manager = Arc::new(TaskManager::new(task_store, task_launcher)?);
 
-    let runtime = tokio::runtime::Builder::new_current_thread()
+    let http_app = HttpApp::new(task_manager.clone());
+
+    let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
-        .map_err(|err| {
-            BabataError::internal(format!("Failed to initialize async runtime: {err}"))
-        })?;
+        .map_err(|err| BabataError::internal(format!("Failed to build Tokio runtime: {err}")))?;
 
     runtime.block_on(async move {
-        job_manager.start();
-        broadcast_service_started(&agent_loop.channels).await;
-        agent_loop.run().await
+        start_channel_loops(channels, task_manager.clone());
+
+        broadcast_service_started(&task_manager).await;
+
+        http_app.serve().await
     })?;
+
     Ok(())
 }
 
-async fn broadcast_service_started(channels: &[std::sync::Arc<dyn crate::channel::Channel>]) {
-    if channels.is_empty() {
-        return;
-    }
-
-    let message = service_started_message();
-    for channel in channels {
-        if let Err(err) = channel.send(std::slice::from_ref(&message)).await {
-            warn!(
-                "Server started but failed to send startup message to channel: {}",
-                err
-            );
-        }
-    }
-}
-
-fn service_started_message() -> Message {
+async fn broadcast_service_started(task_manager: &Arc<TaskManager>) {
     let babata_home = match crate::utils::babata_dir() {
         Ok(path) => path.display().to_string(),
         Err(err) => format!("unavailable ({err})"),
     };
-    let text = format!(
+    let notification = format!(
         "Babata server started.\nVersion: {}\nBabata home: {}",
         env!("CARGO_PKG_VERSION"),
         babata_home
     );
 
-    info!("{text}");
+    let prompt = Content::Text {
+        text: format!("Send below notification to each channel: \n{notification}"),
+    };
 
-    Message::AssistantResponse {
-        content: vec![Content::Text { text }],
-        reasoning_content: None,
+    let task = TaskRequest {
+        prompt: vec![prompt],
+        parent_task_id: None,
+        agent: None,
+    };
+    if let Err(e) = task_manager.create_task(task) {
+        error!("Failed to create service started notification task: {}", e);
     }
 }
 
@@ -852,11 +851,9 @@ mod windows_service_host {
 
 #[cfg(test)]
 mod tests {
-    use crate::message::{Content, Message};
-
     use super::{
         WindowsServiceState, is_macos_service_not_found_error, parse_windows_service_state,
-        service_started_message, windows_service_bin_path,
+        windows_service_bin_path,
     };
 
     #[test]
@@ -869,25 +866,6 @@ mod tests {
     fn does_not_misclassify_unrelated_launchctl_error() {
         let message = "Internal error: Command 'launchctl kickstart -k gui/501/babata.server' failed: permission denied";
         assert!(!is_macos_service_not_found_error(message));
-    }
-
-    #[test]
-    fn service_started_message_without_scheduler_details() {
-        let message = service_started_message();
-        let Message::AssistantResponse { content, .. } = message else {
-            panic!("expected assistant response");
-        };
-        let text = content
-            .into_iter()
-            .find_map(|part| match part {
-                Content::Text { text } => Some(text),
-                _ => None,
-            })
-            .expect("text content");
-        assert!(text.contains("Babata server started."));
-        assert!(text.contains(&format!("Version: {}", env!("CARGO_PKG_VERSION"))));
-        assert!(text.contains("Babata home:"));
-        assert!(!text.contains("Job scheduler"));
     }
 
     #[test]

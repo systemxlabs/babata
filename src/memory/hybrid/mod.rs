@@ -207,6 +207,10 @@ impl std::fmt::Debug for HybridMemory {
 
 #[async_trait::async_trait]
 impl Memory for HybridMemory {
+    fn name() -> &'static str {
+        "hybrid"
+    }
+
     async fn append_messages(&self, messages: Vec<Message>) -> BabataResult<()> {
         for message in &messages {
             self.index_message(message).await?;
@@ -214,44 +218,34 @@ impl Memory for HybridMemory {
         Ok(())
     }
 
-    async fn build_context(&self, prompts: &[Message]) -> BabataResult<Vec<Message>> {
-        let query = extract_query_from_messages(prompts);
+    async fn build_context(&self, prompt: &[Content]) -> BabataResult<String> {
+        let query = extract_query_from_messages(prompt);
         if query.is_empty() {
-            return Ok(Vec::new());
+            return Ok(String::new());
         }
 
         let context = self.get_context_for_prompt(&query).await?;
-        if context.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        Ok(vec![Message::UserPrompt {
-            content: vec![Content::Text { text: context }],
-        }])
+        Ok(context)
     }
 }
 
-fn extract_query_from_messages(messages: &[Message]) -> String {
-    for message in messages.iter().rev() {
-        if let Message::UserPrompt { content } = message {
-            let text: String = content
-                .iter()
-                .filter_map(|c| match c {
-                    Content::Text { text } => Some(text.as_str()),
-                    _ => None,
-                })
-                .collect::<Vec<_>>()
-                .join(" ");
+fn extract_query_from_messages(prompt: &[Content]) -> String {
+    let text: String = prompt
+        .iter()
+        .filter_map(|c| match c {
+            Content::Text { text } => Some(text.as_str()),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
 
-            if !text.is_empty() {
-                // Limit query length to avoid excessive search time
-                const MAX_QUERY_LENGTH: usize = 200;
-                if text.len() > MAX_QUERY_LENGTH {
-                    return text.chars().take(MAX_QUERY_LENGTH).collect();
-                }
-                return text;
-            }
+    if !text.is_empty() {
+        // Limit query length to avoid excessive search time
+        const MAX_QUERY_LENGTH: usize = 200;
+        if text.len() > MAX_QUERY_LENGTH {
+            return text.chars().take(MAX_QUERY_LENGTH).collect();
         }
+        return text;
     }
 
     String::new()

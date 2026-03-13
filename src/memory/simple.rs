@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, params};
 
+use crate::message::Content;
 use crate::utils::babata_dir;
 use crate::{BabataResult, error::BabataError, memory::Memory, message::Message};
 
@@ -12,6 +13,7 @@ pub struct SimpleMemory {
 
 impl SimpleMemory {
     const CONTEXT_LIMIT: usize = 50;
+    const TOOL_RESULT_CHAR_LIMIT: usize = 1_000;
 
     pub fn new() -> BabataResult<Self> {
         let db_path = Self::default_db_path()?;
@@ -169,16 +171,110 @@ impl SimpleMemory {
 
         Ok(messages)
     }
+
+    fn render_context(messages: &[Message]) -> String {
+        if messages.is_empty() {
+            return String::new();
+        }
+
+        let mut sections = Vec::with_capacity(messages.len() + 1);
+        sections.push("## Conversation History".to_string());
+        for message in messages {
+            sections.push(Self::render_message(message));
+        }
+        sections.join("\n\n")
+    }
+
+    fn render_message(message: &Message) -> String {
+        match message {
+            Message::UserPrompt { content } => {
+                format!("[user]\n{}", Self::render_content(content))
+            }
+            Message::AssistantResponse {
+                content,
+                reasoning_content,
+            } => {
+                let mut lines = Vec::new();
+                lines.push("[assistant]".to_string());
+                if let Some(reasoning_content) = reasoning_content
+                    && !reasoning_content.trim().is_empty()
+                {
+                    lines.push(format!("Reasoning:\n{}", reasoning_content.trim()));
+                }
+                lines.push(Self::render_content(content));
+                lines.join("\n")
+            }
+            Message::AssistantToolCalls {
+                calls,
+                reasoning_content,
+            } => {
+                let mut lines = Vec::new();
+                lines.push("[assistant_tool_calls]".to_string());
+                if let Some(reasoning_content) = reasoning_content
+                    && !reasoning_content.trim().is_empty()
+                {
+                    lines.push(format!("Reasoning:\n{}", reasoning_content.trim()));
+                }
+                for call in calls {
+                    lines.push(format!("Tool: {}", call.tool_name));
+                    lines.push(format!("Args: {}", call.args));
+                }
+                lines.join("\n")
+            }
+            Message::ToolResult { call, result } => {
+                format!(
+                    "[tool_result:{}]\n{}",
+                    call.tool_name,
+                    Self::truncate_text(result, Self::TOOL_RESULT_CHAR_LIMIT)
+                )
+            }
+        }
+    }
+
+    fn render_content(content: &[Content]) -> String {
+        if content.is_empty() {
+            return "[empty]".to_string();
+        }
+
+        content
+            .iter()
+            .map(|part| match part {
+                Content::Text { text } => text.clone(),
+                Content::ImageUrl { url } => format!("[image_url] {url}"),
+                Content::ImageData { media_type, .. } => {
+                    format!("[image_data] {}", media_type.as_mime_str())
+                }
+                Content::AudioData { media_type, .. } => {
+                    format!("[audio_data] {}", media_type.as_mime_str())
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    fn truncate_text(text: &str, limit: usize) -> String {
+        if text.chars().count() <= limit {
+            return text.to_string();
+        }
+
+        let truncated: String = text.chars().take(limit).collect();
+        format!("{truncated}...")
+    }
 }
 
 #[async_trait::async_trait]
 impl Memory for SimpleMemory {
+    fn name() -> &'static str {
+        "simple"
+    }
+
     async fn append_messages(&self, messages: Vec<Message>) -> BabataResult<()> {
         self.insert_messages_inner(&messages)
     }
 
-    async fn build_context(&self, _prompts: &[Message]) -> BabataResult<Vec<Message>> {
-        self.scan_messages(Some(Self::CONTEXT_LIMIT))
+    async fn build_context(&self, _prompts: &[Content]) -> BabataResult<String> {
+        let messages = self.scan_messages(Some(Self::CONTEXT_LIMIT))?;
+        Ok(Self::render_context(&messages))
     }
 }
 
@@ -300,5 +396,40 @@ mod tests {
 
         let payload = serde_json::to_value(&message).expect("serialize message into json");
         assert_eq!(payload["type"], "user_prompt");
+    }
+
+    #[tokio::test]
+    async fn build_context_renders_messages_as_text() {
+        let db_path = std::env::temp_dir()
+            .join("babata-tests")
+            .join(format!("message-store-{}.db", Uuid::new_v4()));
+
+        let memory = SimpleMemory::open(&db_path).expect("open sqlite message store");
+        memory
+            .insert_messages_inner(&[
+                Message::UserPrompt {
+                    content: vec![Content::Text {
+                        text: "hello".to_string(),
+                    }],
+                },
+                Message::AssistantResponse {
+                    content: vec![Content::Text {
+                        text: "world".to_string(),
+                    }],
+                    reasoning_content: None,
+                },
+            ])
+            .expect("insert messages into sqlite");
+
+        let context = memory
+            .build_context(&[])
+            .await
+            .expect("build context from sqlite");
+
+        assert!(context.contains("## Conversation History"));
+        assert!(context.contains("[user]\nhello"));
+        assert!(context.contains("[assistant]\nworld"));
+
+        let _ = std::fs::remove_file(db_path);
     }
 }

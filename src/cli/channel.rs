@@ -4,23 +4,21 @@ use crate::{
     error::BabataError,
 };
 
-use super::Args;
-
-pub fn add(_args: &Args, channel_config_json: &str) {
+pub fn add(channel_config_json: &str) {
     if let Err(err) = run_add(channel_config_json) {
         eprintln!("{err}");
         std::process::exit(1);
     }
 }
 
-pub fn delete(_args: &Args, name: &str) {
+pub fn delete(name: &str) {
     if let Err(err) = run_delete(name) {
         eprintln!("{err}");
         std::process::exit(1);
     }
 }
 
-pub fn list(_args: &Args) {
+pub fn list() {
     if let Err(err) = run_list() {
         eprintln!("{err}");
         std::process::exit(1);
@@ -36,7 +34,7 @@ fn run_add(channel_config_json: &str) -> BabataResult<()> {
             ))
         })?;
 
-    let channel_name = channel_config.channel_name().to_string();
+    let channel_name = channel_config.name().to_string();
     let mut config = Config::load()?;
     config.upsert_channel(channel_config);
     config.validate()?;
@@ -59,7 +57,7 @@ fn run_delete(name: &str) -> BabataResult<()> {
     config.validate()?;
     config.save()?;
 
-    println!("Deleted channel '{}'", deleted.channel_name());
+    println!("Deleted channel '{}'", deleted.name());
     Ok(())
 }
 
@@ -70,7 +68,7 @@ fn run_list() -> BabataResult<()> {
         let payload = serde_json::to_string(channel_config).map_err(|err| {
             BabataError::internal(format!(
                 "Failed to serialize channel '{}' config to JSON: {}",
-                channel_config.channel_name(),
+                channel_config.name(),
                 err
             ))
         })?;

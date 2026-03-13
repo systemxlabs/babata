@@ -5,10 +5,12 @@ use serde_json::Value;
 
 use crate::{
     BabataResult,
+    agent::babata::ToolSpec,
+    agent::babata::{
+        GenerationRequest, GenerationResponse, InteractionRequest, InteractionResponse,
+    },
     error::BabataError,
     message::{Content, Message, ToolCall},
-    provider::{GenerationRequest, GenerationResponse, InteractionRequest, InteractionResponse},
-    tool::ToolSpec,
 };
 
 const ANTHROPIC_API_VERSION: &str = "2023-06-01";
@@ -70,15 +72,10 @@ impl AnthropicCompatibleProvider {
         }
     }
 
-    fn format_messages(
-        &self,
-        context: &[Message],
-        prompts: &[Message],
-    ) -> BabataResult<Vec<AnthropicMessage>> {
-        let mut request_messages: Vec<AnthropicMessage> =
-            Vec::with_capacity(context.len() + prompts.len());
+    fn format_messages(&self, prompts: &[Message]) -> BabataResult<Vec<AnthropicMessage>> {
+        let mut request_messages: Vec<AnthropicMessage> = Vec::with_capacity(prompts.len());
 
-        for message in context.iter().chain(prompts.iter()) {
+        for message in prompts {
             let (role, blocks) = match message {
                 Message::UserPrompt { content } => {
                     let mut blocks = Vec::new();
@@ -161,18 +158,13 @@ impl AnthropicCompatibleProvider {
         &self,
         request: GenerationRequest<'a>,
     ) -> BabataResult<GenerationResponse> {
-        let system_prompt = request.system_prompt.trim();
-        let system = if system_prompt.is_empty() {
-            None
-        } else {
-            Some(system_prompt.to_string())
-        };
+        let system = build_system_blocks(request.system_prompt, request.context);
 
         let request_body = AnthropicRequest {
             model: request.model.to_string(),
             max_tokens: DEFAULT_MAX_TOKENS,
             system,
-            messages: self.format_messages(request.context, request.prompts)?,
+            messages: self.format_messages(request.prompts)?,
             tools: (!request.tools.is_empty()).then(|| self.format_tools(request.tools)),
         };
 
@@ -279,6 +271,25 @@ impl AnthropicCompatibleProvider {
     }
 }
 
+fn build_system_blocks(system_prompt: &str, context: &str) -> Option<Vec<AnthropicSystemBlock>> {
+    let system_prompt = system_prompt.trim();
+    let context = context.trim();
+
+    let mut blocks = Vec::new();
+    if !system_prompt.is_empty() {
+        blocks.push(AnthropicSystemBlock::Text {
+            text: system_prompt.to_string(),
+        });
+    }
+    if !context.is_empty() {
+        blocks.push(AnthropicSystemBlock::Text {
+            text: format!("Context:\n{context}"),
+        });
+    }
+
+    (!blocks.is_empty()).then_some(blocks)
+}
+
 // Anthropic API types
 
 #[derive(Debug, Serialize)]
@@ -286,10 +297,16 @@ struct AnthropicRequest {
     model: String,
     max_tokens: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
-    system: Option<String>,
+    system: Option<Vec<AnthropicSystemBlock>>,
     messages: Vec<AnthropicMessage>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<AnthropicTool>>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum AnthropicSystemBlock {
+    Text { text: String },
 }
 
 #[derive(Debug, Serialize)]
@@ -348,10 +365,28 @@ struct AnthropicResponse {
 mod tests {
     use super::*;
     use crate::{
+        agent::babata::ToolSpec,
         message::{Content, Message},
-        tool::ToolSpec,
     };
     use serde_json::json;
+
+    #[test]
+    fn build_system_blocks_keeps_system_prompt_and_context_separate() {
+        let blocks = build_system_blocks("system rules", "memory context");
+        assert_eq!(
+            serde_json::to_value(blocks).expect("serialize system blocks"),
+            json!([
+                {
+                    "type": "text",
+                    "text": "system rules"
+                },
+                {
+                    "type": "text",
+                    "text": "Context:\nmemory context"
+                }
+            ])
+        );
+    }
 
     #[tokio::test]
     #[ignore]
@@ -369,11 +404,11 @@ mod tests {
             }],
         }];
 
-        let request = crate::provider::GenerationRequest {
+        let request = crate::agent::babata::GenerationRequest {
             system_prompt: "",
             model: "claude-opus-4-6",
             prompts: &messages,
-            context: &[],
+            context: "",
             tools: &[],
         };
 
@@ -426,11 +461,11 @@ mod tests {
             }],
         }];
 
-        let request = crate::provider::GenerationRequest {
+        let request = crate::agent::babata::provider::GenerationRequest {
             model: "claude-opus-4-6",
             system_prompt: "",
             prompts: &messages,
-            context: &[],
+            context: "",
             tools: &tools,
         };
 
@@ -469,11 +504,11 @@ mod tests {
         });
 
         // Second request: get final response with tool results
-        let request = crate::provider::GenerationRequest {
+        let request = crate::agent::babata::GenerationRequest {
             model: "claude-opus-4-6",
             system_prompt: "",
             prompts: &messages,
-            context: &[],
+            context: "",
             tools: &tools,
         };
 

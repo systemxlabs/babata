@@ -1,6 +1,6 @@
 use crate::{
     BabataResult,
-    provider::{
+    agent::babata::{
         GenerationRequest, GenerationResponse, InteractionRequest, InteractionResponse, Model,
         Provider,
     },
@@ -9,32 +9,33 @@ use crate::{
 use super::OpenAICompatibleProvider;
 
 #[derive(Debug)]
-pub struct MoonshotProvider {
+pub struct OpenAIProvider {
     inner: OpenAICompatibleProvider,
 }
 
-const MOONSHOT_SUPPORTED_MODELS: &[Model] = &[Model {
-    provider: "moonshot",
-    name: "kimi-k2.5",
-    context_length: 128_000,
+const OPENAI_SUPPORTED_MODELS: &[Model] = &[Model {
+    provider: "openai",
+    name: "gpt-4.1",
+    context_length: 1_000_000,
 }];
 
-impl MoonshotProvider {
+impl OpenAIProvider {
     pub fn new(api_key: &str) -> Self {
-        let inner = OpenAICompatibleProvider::new(api_key, "https://api.moonshot.cn/v1")
-            .with_user_agent(None);
-        Self { inner }
+        Self {
+            inner: OpenAICompatibleProvider::new(api_key, "https://api.openai.com/v1")
+                .with_user_agent(None),
+        }
     }
 }
 
 #[async_trait::async_trait]
-impl Provider for MoonshotProvider {
+impl Provider for OpenAIProvider {
     fn name() -> &'static str {
-        "moonshot"
+        "openai"
     }
 
     fn supported_models() -> &'static [Model] {
-        MOONSHOT_SUPPORTED_MODELS
+        OPENAI_SUPPORTED_MODELS
     }
 
     async fn generate<'a>(

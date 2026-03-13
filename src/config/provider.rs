@@ -1,6 +1,13 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{BabataResult, error::BabataError};
+use crate::{
+    BabataResult,
+    agent::babata::{
+        AnthropicProvider, CustomProvider, DeepSeekProvider, KimiProvider, MoonshotProvider,
+        OpenAIProvider, Provider,
+    },
+    error::BabataError,
+};
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "name")]
@@ -90,19 +97,19 @@ impl ProviderConfig {
         }
     }
 
-    pub fn provider_name(&self) -> &'static str {
+    pub fn name(&self) -> &'static str {
         match self {
-            ProviderConfig::OpenAI(_) => "openai",
-            ProviderConfig::Kimi(_) => "kimi",
-            ProviderConfig::Moonshot(_) => "moonshot",
-            ProviderConfig::DeepSeek(_) => "deepseek",
-            ProviderConfig::Anthropic(_) => "anthropic",
-            ProviderConfig::Custom(_) => "custom",
+            ProviderConfig::OpenAI(_) => OpenAIProvider::name(),
+            ProviderConfig::Kimi(_) => KimiProvider::name(),
+            ProviderConfig::Moonshot(_) => MoonshotProvider::name(),
+            ProviderConfig::DeepSeek(_) => DeepSeekProvider::name(),
+            ProviderConfig::Anthropic(_) => AnthropicProvider::name(),
+            ProviderConfig::Custom(_) => CustomProvider::name(),
         }
     }
 
     pub fn matches_name(&self, name: &str) -> bool {
-        self.provider_name().eq_ignore_ascii_case(name)
+        self.name().eq_ignore_ascii_case(name)
     }
 }
 

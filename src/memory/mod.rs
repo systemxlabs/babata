@@ -2,18 +2,24 @@
 mod hybrid;
 mod simple;
 
+#[cfg(feature = "mem-hybrid")]
+pub use hybrid::HybridMemory;
+pub use simple::SimpleMemory;
+
 use crate::{
     BabataResult,
     config::{Config, MemoryConfig},
-    memory::simple::SimpleMemory,
-    message::Message,
+    message::{Content, Message},
 };
 use std::fmt::Debug;
 
 #[async_trait::async_trait]
 pub trait Memory: Debug + Sync + Send {
+    fn name() -> &'static str
+    where
+        Self: Sized;
     async fn append_messages(&self, messages: Vec<Message>) -> BabataResult<()>;
-    async fn build_context(&self, prompts: &[Message]) -> BabataResult<Vec<Message>>;
+    async fn build_context(&self, prompt: &[Content]) -> BabataResult<String>;
 }
 
 pub fn build_memory(config: &Config, memory_name: &str) -> BabataResult<Box<dyn Memory>> {
