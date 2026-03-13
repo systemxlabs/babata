@@ -14,7 +14,6 @@ use crate::{
     message::Content,
 };
 use crate::{
-    job::JobManager,
     task::{TaskLauncher, TaskManager, TaskRequest},
     utils::babata_dir,
 };
@@ -99,7 +98,6 @@ fn run_serve() -> BabataResult<()> {
     let task_launcher = TaskLauncher::new(&config, channels.clone(), task_store.clone())?;
     let task_manager = Arc::new(TaskManager::new(task_store, task_launcher)?);
 
-    let job_manager = JobManager::new(task_manager.clone());
     let http_app = HttpApp::new(task_manager.clone());
 
     let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -109,7 +107,6 @@ fn run_serve() -> BabataResult<()> {
 
     runtime.block_on(async move {
         start_channel_loops(channels, task_manager.clone());
-        job_manager.start();
 
         broadcast_service_started(&task_manager).await;
 

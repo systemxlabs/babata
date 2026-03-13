@@ -11,7 +11,6 @@ Babata home is stored under the user's home directory: `{USER_HOME}/.babata/`. W
 ├─ workspace/
 ├─ system_prompts/
 ├─ skills/
-├─ jobs/
 ├─ logs/
 └─ source/
 ```
@@ -52,23 +51,6 @@ Babata home is stored under the user's home directory: `{USER_HOME}/.babata/`. W
   - `babata channel add`
   - `babata channel delete`
   - `babata channel list`
-
-## Jobs
-- Store all jobs under `{BABATA_HOME}/jobs/`.
-- A job can be either a recurring task or a one-time task. Examples:
-  - Recurring task: get the latest news for me every day at 6am.
-  - One-time task: remind me to attend a meeting at 2pm today.
-  - Background task: help me write a research report in the background.
-- Each job must have its own directory under `{BABATA_HOME}/jobs/`.
-- Each job directory must include:
-  - `job.md`: defines when the job should run and how it should run.
-  - history file(s) that record execution history.
-- Split history files by day or by month based on the job's execution frequency.
-  - Daily split example: `history-20260305.md`
-  - Monthly split example: `history-202603.md`
-- A job directory may include additional files when needed (for example, scripts or helper assets).
-- Record execution history only when a job is actually executed. If a job is checked but not executed, do not append history.
-- All jobs are checked every minute. When checking schedule matching, only compare the minute of the current local time with the minute required by the job schedule.
 
 ## Source
 - Your source code is under `{BABATA_HOME}/source/`.
