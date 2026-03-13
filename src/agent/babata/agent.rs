@@ -8,9 +8,8 @@ use crate::{
     agent::{
         Agent,
         babata::{
-            GenerationRequest, Provider, Skill, SystemPromptFile, Tool, ToolSpec,
-            build_system_prompt, build_tools, create_provider, load_skills,
-            load_system_prompt_files,
+            GenerationRequest, Provider, Tool, ToolSpec, build_system_prompt, build_tools,
+            create_provider, load_skills, load_system_prompt_files,
         },
     },
     channel::Channel,
@@ -26,13 +25,8 @@ const PROVIDER_RETRY_MAX_DELAY_SECS: u64 = 2;
 
 #[derive(Debug)]
 pub struct BabataAgent {
-    pub provider: Arc<dyn Provider>,
-    pub model: String,
     pub memory: Box<dyn Memory>,
     pub tools: HashMap<String, Arc<dyn Tool>>,
-    pub system_prompt_files: Vec<SystemPromptFile>,
-    pub skills: Vec<Skill>,
-    pub max_steps: usize,
 }
 
 impl BabataAgent {
@@ -45,23 +39,10 @@ impl BabataAgent {
             ));
         };
 
-        let provider_config = config.get_provider(&babata_config.provider)?;
-        let provider = create_provider(provider_config)?;
-        let model = babata_config.model.clone();
         let memory = build_memory(config, &babata_config.memory)?;
         let tools = build_tools(channels)?;
-        let system_prompt_files = load_system_prompt_files()?;
-        let skills = load_skills()?;
 
-        Ok(Self {
-            provider,
-            model,
-            memory,
-            tools,
-            system_prompt_files,
-            skills,
-            max_steps: 100,
-        })
+        Ok(Self { memory, tools })
     }
 
     fn collect_tool_specs(&self) -> Vec<ToolSpec> {
@@ -73,42 +54,6 @@ impl BabataAgent {
         specs.sort_by(|a, b| a.name.cmp(&b.name));
         specs
     }
-
-    async fn generate_with_retry(
-        &self,
-        system_prompt: &str,
-        prompts: &[Message],
-        context: &[Message],
-        tool_specs: &[ToolSpec],
-    ) -> BabataResult<Message> {
-        let backoff = ExponentialBuilder::default()
-            .with_min_delay(Duration::from_millis(PROVIDER_RETRY_MIN_DELAY_MS))
-            .with_max_delay(Duration::from_secs(PROVIDER_RETRY_MAX_DELAY_SECS))
-            .with_max_times(PROVIDER_RETRY_MAX_TIMES);
-
-        (|| async {
-            let response = self
-                .provider
-                .generate(GenerationRequest {
-                    system_prompt,
-                    model: &self.model,
-                    prompts,
-                    context,
-                    tools: tool_specs,
-                })
-                .await?;
-            Ok(response.message)
-        })
-        .retry(backoff)
-        .when(|err| matches!(err, BabataError::Provider(_, _)))
-        .notify(|err, wait| {
-            warn!(
-                "Provider generate failed: {:?}. Retrying in {:?}",
-                err, wait
-            )
-        })
-        .await
-    }
 }
 
 #[async_trait::async_trait]
@@ -118,18 +63,41 @@ impl Agent for BabataAgent {
     }
 
     async fn execute(&self, prompt: Vec<Content>) -> BabataResult<()> {
+        let config = Config::load()?;
+        let agent_config = config.get_agent(BabataAgent::name())?;
+        #[allow(irrefutable_let_patterns)]
+        let AgentConfig::Babata(babata_config) = agent_config else {
+            return Err(BabataError::config(
+                "Agent config for 'babata' must be of type 'BabataAgentConfig'",
+            ));
+        };
+
+        let provider_config = config.get_provider(&babata_config.provider)?;
+        let provider = create_provider(provider_config)?;
+        let model = babata_config.model.clone();
+
+        let system_prompt_files = load_system_prompt_files()?;
+        let skills = load_skills()?;
+
         let tool_specs = self.collect_tool_specs();
 
-        let system_prompt = build_system_prompt(&self.system_prompt_files, &self.skills)?;
+        let system_prompt = build_system_prompt(&system_prompt_files, &skills)?;
 
         let context = self.memory.build_context(&prompt).await?;
         let mut conversation = vec![Message::UserPrompt { content: prompt }];
 
         let mut success = false;
-        for _ in 0..self.max_steps {
-            let message = self
-                .generate_with_retry(&system_prompt, &conversation, &context, &tool_specs)
-                .await?;
+        let max_steps = 100;
+        for _ in 0..max_steps {
+            let message = generate_with_retry(
+                provider.as_ref(),
+                &model,
+                &system_prompt,
+                &conversation,
+                &context,
+                &tool_specs,
+            )
+            .await?;
             info!("Provider returned message: {:?}", message);
             conversation.push(message.clone());
 
@@ -172,8 +140,44 @@ impl Agent for BabataAgent {
         } else {
             Err(BabataError::provider(format!(
                 "Max steps ({}) reached before final answer",
-                self.max_steps
+                max_steps
             )))
         }
     }
+}
+
+async fn generate_with_retry(
+    provider: &dyn Provider,
+    model: &str,
+    system_prompt: &str,
+    prompts: &[Message],
+    context: &[Message],
+    tool_specs: &[ToolSpec],
+) -> BabataResult<Message> {
+    let backoff = ExponentialBuilder::default()
+        .with_min_delay(Duration::from_millis(PROVIDER_RETRY_MIN_DELAY_MS))
+        .with_max_delay(Duration::from_secs(PROVIDER_RETRY_MAX_DELAY_SECS))
+        .with_max_times(PROVIDER_RETRY_MAX_TIMES);
+
+    (|| async {
+        let response = provider
+            .generate(GenerationRequest {
+                system_prompt,
+                model,
+                prompts,
+                context,
+                tools: tool_specs,
+            })
+            .await?;
+        Ok(response.message)
+    })
+    .retry(backoff)
+    .when(|err| matches!(err, BabataError::Provider(_, _)))
+    .notify(|err, wait| {
+        warn!(
+            "Provider generate failed: {:?}. Retrying in {:?}",
+            err, wait
+        )
+    })
+    .await
 }
