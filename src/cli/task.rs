@@ -126,7 +126,10 @@ fn run_list(status: Option<&str>, limit: Option<usize>) -> BabataResult<()> {
         }
 
         let response = request.send().await.map_err(|err| {
-            BabataError::internal(format!("Failed to call local HTTP API for task list: {}", err))
+            BabataError::internal(format!(
+                "Failed to call local HTTP API for task list: {}",
+                err
+            ))
         })?;
 
         if !response.status().is_success() {

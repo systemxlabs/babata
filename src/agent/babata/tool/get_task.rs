@@ -57,7 +57,9 @@ impl Tool for GetTaskTool {
             .get(format!("{DEFAULT_HTTP_BASE_URL}/tasks/{task_id}"))
             .send()
             .await
-            .map_err(|err| BabataError::tool(format!("Failed to call get_task HTTP API: {}", err)))?;
+            .map_err(|err| {
+                BabataError::tool(format!("Failed to call get_task HTTP API: {}", err))
+            })?;
 
         if !response.status().is_success() {
             let status = response.status();

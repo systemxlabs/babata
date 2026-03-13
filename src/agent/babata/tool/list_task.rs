@@ -52,7 +52,9 @@ impl Tool for ListTaskTool {
         let status = args["status"].as_str();
         let limit = args["limit"].as_u64();
 
-        let mut request = self.http_client.get(format!("{DEFAULT_HTTP_BASE_URL}/tasks"));
+        let mut request = self
+            .http_client
+            .get(format!("{DEFAULT_HTTP_BASE_URL}/tasks"));
         if let Some(status) = status {
             request = request.query(&[("status", status)]);
         }

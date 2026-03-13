@@ -60,17 +60,22 @@ pub fn start_channel_loops(
             loop {
                 match channel.try_receive().await {
                     Ok(content) => {
-                        if !content.is_empty()
-                            && let Err(err) = task_manager.create_task(TaskRequest {
-                                prompt: content,
+                        if !content.is_empty() {
+                            let mut prompt = vec![Content::Text { text: "Your user send you message from telegram, the message content is below:".to_string() }];
+                            prompt.extend(content);
+
+                            let task = TaskRequest {
+                                prompt,
                                 parent_task_id: None,
                                 agent: None,
-                            })
-                        {
-                            error!(
-                                "Failed to create task from channel '{}': {}",
-                                channel_name, err
-                            );
+                            };
+
+                            if let Err(err) = task_manager.create_task(task) {
+                                error!(
+                                    "Failed to create task from channel '{}': {}",
+                                    channel_name, err
+                                );
+                            }
                         }
                     }
                     Err(err) => {
