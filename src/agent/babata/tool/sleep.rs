@@ -4,7 +4,7 @@ use serde_json::{Value, json};
 
 use crate::{
     BabataResult,
-    agent::babata::{Tool, ToolSpec},
+    agent::babata::{Tool, ToolContext, ToolSpec},
     error::BabataError,
 };
 
@@ -48,7 +48,7 @@ impl Tool for SleepTool {
         &self.spec
     }
 
-    async fn execute(&self, args: &str) -> BabataResult<String> {
+    async fn execute(&self, args: &str, _context: &ToolContext) -> BabataResult<String> {
         let args: Value = serde_json::from_str(args)?;
 
         let duration = if let Some(seconds) = args["seconds"].as_f64() {

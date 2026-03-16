@@ -8,8 +8,8 @@ use crate::{
     agent::{
         Agent,
         babata::{
-            GenerationRequest, Provider, Tool, ToolSpec, build_system_prompt, build_tools,
-            create_provider, load_skills, load_system_prompt_files,
+            GenerationRequest, Provider, Tool, ToolContext, ToolSpec, build_system_prompt,
+            build_tools, create_provider, load_skills, load_system_prompt_files,
         },
     },
     channel::Channel,
@@ -62,7 +62,7 @@ impl Agent for BabataAgent {
         "babata"
     }
 
-    async fn execute(&self, prompt: Vec<Content>) -> BabataResult<()> {
+    async fn execute(&self, prompt: Vec<Content>, tool_context: ToolContext) -> BabataResult<()> {
         let config = Config::load()?;
         let agent_config = config.get_agent(BabataAgent::name())?;
         #[allow(irrefutable_let_patterns)]
@@ -113,7 +113,7 @@ impl Agent for BabataAgent {
 
                     for call in calls {
                         if let Some(tool) = self.tools.get(&call.tool_name) {
-                            let result = match tool.execute(&call.args).await {
+                            let result = match tool.execute(&call.args, &tool_context).await {
                                 Ok(result) => result,
                                 Err(e) => format!("Tool execution failed with message: {e}"),
                             };

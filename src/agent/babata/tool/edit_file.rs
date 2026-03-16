@@ -3,7 +3,7 @@ use serde_json::{Value, json};
 
 use crate::{
     BabataResult,
-    agent::babata::tool::{Tool, ToolSpec},
+    agent::babata::tool::{Tool, ToolContext, ToolSpec},
     error::BabataError,
 };
 
@@ -59,7 +59,7 @@ impl Tool for EditFileTool {
         &self.spec
     }
 
-    async fn execute(&self, args: &str) -> BabataResult<String> {
+    async fn execute(&self, args: &str, _context: &ToolContext) -> BabataResult<String> {
         let args: Value = serde_json::from_str(args)?;
         let path = args["path"]
             .as_str()
@@ -118,6 +118,7 @@ mod tests {
     #[tokio::test]
     async fn edit_file_replaces_first_match_by_default() {
         let tool = EditFileTool::new();
+        let tool_context = ToolContext::test();
         let file = temp_file_path("babata-edit-first");
         tokio::fs::write(&file, "hello world\nhello world")
             .await
@@ -130,7 +131,7 @@ mod tests {
         })
         .to_string();
 
-        let result = tool.execute(&args).await.expect("edit file");
+        let result = tool.execute(&args, &tool_context).await.expect("edit file");
         assert!(result.contains("Replaced 1 occurrence(s)"));
 
         let content = tokio::fs::read_to_string(&file).await.expect("read file");
@@ -142,6 +143,7 @@ mod tests {
     #[tokio::test]
     async fn edit_file_replace_all_replaces_all_matches() {
         let tool = EditFileTool::new();
+        let tool_context = ToolContext::test();
         let file = temp_file_path("babata-edit-all");
         tokio::fs::write(&file, "alpha beta alpha beta")
             .await
@@ -155,7 +157,7 @@ mod tests {
         })
         .to_string();
 
-        let result = tool.execute(&args).await.expect("edit file");
+        let result = tool.execute(&args, &tool_context).await.expect("edit file");
         assert!(result.contains("Replaced 2 occurrence(s)"));
 
         let content = tokio::fs::read_to_string(&file).await.expect("read file");
@@ -167,6 +169,7 @@ mod tests {
     #[tokio::test]
     async fn edit_file_fails_when_old_string_not_found() {
         let tool = EditFileTool::new();
+        let tool_context = ToolContext::test();
         let file = temp_file_path("babata-edit-not-found");
         tokio::fs::write(&file, "content").await.expect("seed file");
 
@@ -177,7 +180,10 @@ mod tests {
         })
         .to_string();
 
-        let err = tool.execute(&args).await.expect_err("should fail");
+        let err = tool
+            .execute(&args, &tool_context)
+            .await
+            .expect_err("should fail");
         assert!(
             err.to_string()
                 .contains("old_string not found in file; no changes were made")
@@ -189,6 +195,7 @@ mod tests {
     #[tokio::test]
     async fn edit_file_fails_when_old_string_is_empty() {
         let tool = EditFileTool::new();
+        let tool_context = ToolContext::test();
         let file = temp_file_path("babata-edit-empty-old");
         tokio::fs::write(&file, "content").await.expect("seed file");
 
@@ -199,7 +206,10 @@ mod tests {
         })
         .to_string();
 
-        let err = tool.execute(&args).await.expect_err("should fail");
+        let err = tool
+            .execute(&args, &tool_context)
+            .await
+            .expect_err("should fail");
         assert!(
             err.to_string()
                 .contains("old_string cannot be empty for edit_file replacements")

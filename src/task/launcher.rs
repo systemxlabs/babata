@@ -5,7 +5,11 @@ use uuid::Uuid;
 
 use crate::{
     BabataResult,
-    agent::{Agent, babata::BabataAgent, build_agents},
+    agent::{
+        Agent,
+        babata::{BabataAgent, ToolContext},
+        build_agents,
+    },
     channel::Channel,
     config::Config,
     error::BabataError,
@@ -43,8 +47,14 @@ impl TaskLauncher {
 
         let prompt = request.prompt.clone();
         let store = self.store.clone();
+        let task_record = self.store.get_task(task_id)?;
+        let tool_context = ToolContext {
+            task_id: task_record.task_id,
+            parent_task_id: task_record.parent_task_id,
+            root_task_id: task_record.root_task_id,
+        };
         let handle = tokio::spawn(async move {
-            match agent.execute(prompt).await {
+            match agent.execute(prompt, tool_context).await {
                 Ok(_) => {
                     info!("Task {} completed successfully", task_id);
                     if let Err(e) = store.update_task_status(task_id, TaskStatus::Done) {

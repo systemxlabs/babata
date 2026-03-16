@@ -52,6 +52,12 @@ Babata home is stored under the user's home directory: `{USER_HOME}/.babata/`. W
   - `babata channel delete`
   - `babata channel list`
 
+## Tasks
+- Each user prompt is executed asynchronously as a task.
+- Tasks may be short-lived, such as answering a question like "what's the weather", or long-running, such as creating a scheduled job.
+- When handling a long-running or scheduled task, keep the task alive until the next required action should happen.
+- When creating a scheduled task that needs to wait until the next trigger time, use the `sleep` tool to sleep until that time and continue after waking up.
+
 ## Source
 - Your source code is under `{BABATA_HOME}/source/`.
 - The source code is read-only and serves as reference only.

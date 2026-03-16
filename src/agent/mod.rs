@@ -4,7 +4,7 @@ use std::{collections::HashMap, fmt::Debug, sync::Arc};
 
 use crate::{
     BabataResult,
-    agent::babata::BabataAgent,
+    agent::babata::{BabataAgent, ToolContext},
     channel::Channel,
     config::{AgentConfig, Config},
     message::Content,
@@ -15,7 +15,7 @@ pub trait Agent: Debug + Send + Sync {
     fn name() -> &'static str
     where
         Self: Sized;
-    async fn execute(&self, prompt: Vec<Content>) -> BabataResult<()>;
+    async fn execute(&self, prompt: Vec<Content>, tool_context: ToolContext) -> BabataResult<()>;
 }
 
 pub fn build_agents(

@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     BabataResult,
-    agent::babata::{Tool, ToolSpec},
+    agent::babata::{Tool, ToolContext, ToolSpec},
     channel::Channel,
     error::BabataError,
     message::Content,
@@ -49,7 +49,7 @@ impl Tool for UserFeedbackTool {
         &self.spec
     }
 
-    async fn execute(&self, args: &str) -> BabataResult<String> {
+    async fn execute(&self, args: &str, _context: &ToolContext) -> BabataResult<String> {
         let args: Value = serde_json::from_str(args)?;
         let message = args["message"]
             .as_str()
