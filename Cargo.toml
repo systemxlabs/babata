@@ -2,6 +2,7 @@
 name = "babata"
 version = "0.1.0"
 edition = "2024"
+description = "AI assistant"
 homepage = "https://github.com/systemxlabs/babata"
 license = "MIT"
 repository = "https://github.com/systemxlabs/babata"
