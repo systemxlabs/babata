@@ -18,7 +18,7 @@ use crate::{
     utils::babata_dir,
 };
 
-const DEFAULT_POLLING_TIMEOUT_SECS: u64 = 30;
+const DEFAULT_POLLING_TIMEOUT_SECS: u64 = 15;
 
 #[derive(Debug)]
 pub struct TelegramChannel {
