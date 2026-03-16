@@ -1,66 +1,59 @@
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 use log::warn;
 use reqwest::{Client, StatusCode};
-use telegram_markdown_v2::{UnsupportedTagsStrategy, convert_with_strategy};
 use teloxide::{
     Bot,
-    payloads::{GetUpdatesSetters, SendMessageSetters},
+    payloads::GetUpdatesSetters,
     prelude::{Request, Requester},
-    types::{
-        ChatId, ChatKind, Document, Message as TelegramMessage, ParseMode, Update, UpdateKind,
-    },
+    types::{ChatId, ChatKind, Document, Message as TelegramMessage, Update, UpdateKind},
 };
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, oneshot};
 
 use crate::{
     BabataResult,
-    config::{ChannelConfig, Config},
+    config::{ChannelConfig, Config, TelegramChannelConfig},
     error::BabataError,
-    message::{Content, MediaType, Message},
+    message::{Content, MediaType},
 };
+
+const DEFAULT_POLLING_TIMEOUT_SECS: u64 = 30;
 
 #[derive(Debug)]
 pub struct TelegramChannel {
     bot: Bot,
     http_client: Client,
-    // Long-poll timeout used by blocking receive().
-    polling_timeout_secs: u64,
     // Telegram update cursor to avoid reprocessing already consumed updates.
     last_update_id: Mutex<Option<i64>>,
-    // Allowed DM user ids; messages from others are ignored.
-    allowed_user_ids: HashSet<i64>,
+    // Waiters for replies to outbound feedback prompts, keyed by sent message id.
+    feedback_waiters: Mutex<HashMap<i32, oneshot::Sender<Vec<Content>>>>,
+    // Allowed DM user id; messages from others are ignored.
+    user_id: i64,
 }
 
 impl TelegramChannel {
-    pub fn new(bot_token: &str) -> Self {
+    pub fn new(config: TelegramChannelConfig) -> Self {
+        let TelegramChannelConfig {
+            bot_token,
+            last_update_id,
+            user_id,
+        } = config;
+
         Self {
             bot: Bot::new(bot_token),
             http_client: Client::new(),
-            polling_timeout_secs: 30,
-            last_update_id: Mutex::new(None),
-            allowed_user_ids: HashSet::new(),
+            last_update_id: Mutex::new(last_update_id),
+            feedback_waiters: Mutex::new(HashMap::new()),
+            user_id,
         }
     }
 
-    pub fn with_polling_timeout_secs(mut self, polling_timeout_secs: u64) -> Self {
-        self.polling_timeout_secs = polling_timeout_secs;
-        self
-    }
-
-    pub fn with_last_update_id(mut self, last_update_id: Option<i64>) -> Self {
-        self.last_update_id = Mutex::new(last_update_id);
-        self
-    }
-
-    pub fn with_allowed_user_ids(mut self, allowed_user_ids: Vec<i64>) -> Self {
-        self.allowed_user_ids = allowed_user_ids.into_iter().collect();
-        self
-    }
-
-    async fn fetch_updates(&self, timeout_secs: u64) -> BabataResult<Vec<IncomingPrivateMessage>> {
+    async fn fetch_updates(&self) -> BabataResult<Vec<IncomingPrivateMessage>> {
         let offset = *self.last_update_id.lock().await;
-        let mut request = self.bot.get_updates().timeout(timeout_secs as u32);
+        let mut request = self
+            .bot
+            .get_updates()
+            .timeout(DEFAULT_POLLING_TIMEOUT_SECS as u32);
 
         if let Some(offset) = offset {
             // Telegram offset is i32 in teloxide API; saturate safely from stored i64.
@@ -74,13 +67,43 @@ impl TelegramChannel {
         })?;
 
         // Keep only DM messages and return the max update_id for cursor advancing.
-        let (max_update_id, messages) = extract_private_messages(updates, &self.allowed_user_ids);
+        let (max_update_id, messages) = extract_private_messages(updates, self.user_id);
 
         if let Some(max_update_id) = max_update_id {
             self.update_last_update_id(max_update_id).await?;
         }
 
         Ok(messages)
+    }
+
+    async fn route_incoming(&self, incoming: Vec<IncomingPrivateMessage>) -> Vec<Content> {
+        let mut content = Vec::new();
+
+        for message in incoming {
+            if message.chat_id != self.user_id {
+                continue;
+            }
+
+            let Some(message_content) = self.incoming_message_to_content(&message).await else {
+                continue;
+            };
+
+            if let Some(reply_to_message_id) = message.reply_to_message_id {
+                let waiter = self
+                    .feedback_waiters
+                    .lock()
+                    .await
+                    .remove(&reply_to_message_id);
+                if let Some(waiter) = waiter {
+                    let _ = waiter.send(message_content);
+                }
+                continue;
+            }
+
+            content.extend(message_content);
+        }
+
+        content
     }
 
     async fn update_last_update_id(&self, last_update_id: i64) -> BabataResult<()> {
@@ -111,124 +134,67 @@ impl TelegramChannel {
         Ok(())
     }
 
-    async fn send_text(&self, chat_id: i64, text: &str) -> BabataResult<()> {
-        let markdown_text = match convert_with_strategy(text, UnsupportedTagsStrategy::Escape) {
-            Ok(markdown) => markdown,
-            Err(err) => {
-                warn!(
-                    "Failed to convert message into Telegram MarkdownV2, sending raw text to markdown path: {}",
-                    err
-                );
-                text.to_string()
-            }
-        };
-
-        let markdown_result = self
-            .bot
-            .send_message(ChatId(chat_id), markdown_text)
-            .parse_mode(ParseMode::MarkdownV2)
-            .send()
-            .await;
-
-        if let Err(err) = markdown_result {
-            warn!(
-                "Failed to send Telegram message with MarkdownV2, falling back to plain text: {}",
-                err
-            );
-            self.bot
-                .send_message(ChatId(chat_id), text.to_string())
-                .send()
-                .await
-                .map_err(|fallback_err| {
-                    BabataError::internal(format!(
-                        "Failed to call Telegram sendMessage (markdown and plain text both failed): markdown error: {}; plain text error: {}",
-                        err, fallback_err
-                    ))
-                })?;
-        }
-
-        Ok(())
-    }
-
-    async fn incoming_to_messages(
+    async fn incoming_message_to_content(
         &self,
-        incoming: Vec<IncomingPrivateMessage>,
-    ) -> Option<Vec<Message>> {
-        if incoming.is_empty() {
-            return None;
+        message: &IncomingPrivateMessage,
+    ) -> Option<Vec<Content>> {
+        let mut content = Vec::new();
+
+        if let Some(text) = &message.text {
+            content.push(Content::Text { text: text.clone() });
         }
 
-        let mut messages = Vec::new();
-        for message in incoming {
-            if !self.allowed_user_ids.contains(&message.chat_id) {
-                continue;
-            }
-
-            let mut content = Vec::new();
-            if let Some(text) = message.text {
-                content.push(Content::Text { text });
-            }
-
-            if let Some(image_file_id) = message.image_file_id {
-                let media_type = message
-                    .image_media_type
-                    .unwrap_or_else(|| "image/jpeg".to_string());
-                match self
-                    .download_file_as_base64(&image_file_id, &media_type)
-                    .await
-                {
-                    Ok(data) => match MediaType::from_mime(&media_type) {
-                        Some(media_type) => content.push(Content::ImageData { data, media_type }),
-                        None => warn!(
-                            "Unsupported Telegram image media type '{}'; skipping image content.",
-                            media_type
-                        ),
-                    },
-                    Err(err) => {
-                        warn!(
-                            "Failed to process Telegram image file '{}': {}. Continuing without image.",
-                            image_file_id, err
-                        );
-                    }
+        if let Some(image_file_id) = &message.image_file_id {
+            let media_type = message
+                .image_media_type
+                .clone()
+                .unwrap_or_else(|| "image/jpeg".to_string());
+            match self
+                .download_file_as_base64(image_file_id, &media_type)
+                .await
+            {
+                Ok(data) => match MediaType::from_mime(&media_type) {
+                    Some(media_type) => content.push(Content::ImageData { data, media_type }),
+                    None => warn!(
+                        "Unsupported Telegram image media type '{}'; skipping image content.",
+                        media_type
+                    ),
+                },
+                Err(err) => {
+                    warn!(
+                        "Failed to process Telegram image file '{}': {}. Continuing without image.",
+                        image_file_id, err
+                    );
                 }
             }
+        }
 
-            if let Some(audio_file_id) = message.audio_file_id {
-                let media_type = message
-                    .audio_media_type
-                    .unwrap_or_else(|| "audio/ogg".to_string());
-                match self
-                    .download_file_as_base64(&audio_file_id, &media_type)
-                    .await
-                {
-                    Ok(data) => match MediaType::from_mime(&media_type) {
-                        Some(media_type) => content.push(Content::AudioData { data, media_type }),
-                        None => warn!(
-                            "Unsupported Telegram audio media type '{}'; skipping audio content.",
-                            media_type
-                        ),
-                    },
-                    Err(err) => {
-                        warn!(
-                            "Failed to process Telegram audio file '{}': {}. Continuing without audio.",
-                            audio_file_id, err
-                        );
-                    }
+        if let Some(audio_file_id) = &message.audio_file_id {
+            let media_type = message
+                .audio_media_type
+                .clone()
+                .unwrap_or_else(|| "audio/ogg".to_string());
+            match self
+                .download_file_as_base64(audio_file_id, &media_type)
+                .await
+            {
+                Ok(data) => match MediaType::from_mime(&media_type) {
+                    Some(media_type) => content.push(Content::AudioData { data, media_type }),
+                    None => warn!(
+                        "Unsupported Telegram audio media type '{}'; skipping audio content.",
+                        media_type
+                    ),
+                },
+                Err(err) => {
+                    warn!(
+                        "Failed to process Telegram audio file '{}': {}. Continuing without audio.",
+                        audio_file_id, err
+                    );
                 }
             }
-
-            if content.is_empty() {
-                continue;
-            }
-
-            messages.push(Message::UserPrompt { content });
         }
 
-        if messages.is_empty() {
-            return None;
-        }
-
-        Some(messages)
+        (!content.is_empty()).then_some(content)
     }
 
     async fn download_file_as_base64(
@@ -293,37 +259,38 @@ impl super::Channel for TelegramChannel {
         "Telegram"
     }
 
-    async fn send(&self, messages: &[Message]) -> BabataResult<()> {
-        let outgoing = extract_outgoing_texts(messages);
-        for text in outgoing {
-            for chat_id in &self.allowed_user_ids {
-                self.send_text(*chat_id, &text).await?;
-            }
-        }
-
-        Ok(())
+    async fn try_receive(&self) -> BabataResult<Vec<Content>> {
+        let incoming = self.fetch_updates().await?;
+        Ok(self.route_incoming(incoming).await)
     }
 
-    async fn receive(&self) -> BabataResult<Vec<Message>> {
-        loop {
-            // Blocking long-poll until Telegram returns new updates.
-            let incoming = self.fetch_updates(self.polling_timeout_secs).await?;
-            if let Some(messages) = self.incoming_to_messages(incoming).await {
-                return Ok(messages);
-            }
-        }
-    }
+    async fn feedback(&self, content: Vec<Content>) -> BabataResult<Vec<Content>> {
+        let text = render_feedback_text(&content)?;
+        let sent_message = self
+            .bot
+            .send_message(ChatId(self.user_id), text)
+            .send()
+            .await
+            .map_err(|err| {
+                BabataError::internal(format!("Failed to send Telegram feedback message: {err}"))
+            })?;
 
-    async fn try_receive(&self) -> BabataResult<Option<Vec<Message>>> {
-        // Non-blocking poll (timeout=0), return immediately if there is no new DM message.
-        let incoming = self.fetch_updates(0).await?;
-        Ok(self.incoming_to_messages(incoming).await)
+        let (sender, receiver) = oneshot::channel();
+        self.feedback_waiters
+            .lock()
+            .await
+            .insert(sent_message.id.0, sender);
+
+        receiver.await.map_err(|_| {
+            BabataError::internal("Telegram feedback waiter was dropped before reply arrived")
+        })
     }
 }
 
 #[derive(Debug)]
 struct IncomingPrivateMessage {
     chat_id: i64,
+    reply_to_message_id: Option<i32>,
     text: Option<String>,
     image_file_id: Option<String>,
     image_media_type: Option<String>,
@@ -333,7 +300,7 @@ struct IncomingPrivateMessage {
 
 fn extract_private_messages(
     updates: Vec<Update>,
-    allowed_user_ids: &HashSet<i64>,
+    user_id: i64,
 ) -> (Option<i64>, Vec<IncomingPrivateMessage>) {
     let mut max_update_id = None;
     let mut messages = Vec::new();
@@ -353,7 +320,7 @@ fn extract_private_messages(
         }
 
         let chat_id = message.chat.id.0;
-        if !allowed_user_ids.contains(&chat_id) {
+        if chat_id != user_id {
             continue;
         }
 
@@ -373,6 +340,7 @@ fn extract_private_messages(
 
         messages.push(IncomingPrivateMessage {
             chat_id,
+            reply_to_message_id: message.reply_to_message().map(|reply| reply.id.0),
             text,
             image_file_id,
             image_media_type,
@@ -450,29 +418,29 @@ fn extract_audio_document(document: &Document) -> (Option<String>, Option<String
     (Some(document.file.id.clone()), media_type)
 }
 
-fn extract_outgoing_texts(messages: &[Message]) -> Vec<String> {
-    let mut outgoing = Vec::new();
+fn render_feedback_text(content: &[Content]) -> BabataResult<String> {
+    let text = content
+        .iter()
+        .map(|item| match item {
+            Content::Text { text } => Ok(text.trim().to_string()),
+            Content::ImageUrl { url } => Ok(url.clone()),
+            Content::ImageData { .. } | Content::AudioData { .. } => Err(BabataError::internal(
+                "Telegram feedback only supports text or image URLs for outbound prompts",
+            )),
+        })
+        .collect::<BabataResult<Vec<_>>>()?
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n\n");
 
-    for message in messages {
-        if let Message::AssistantResponse { content, .. } = message {
-            let text = content
-                .iter()
-                .filter_map(|part| match part {
-                    Content::Text { text } => Some(text.as_str()),
-                    Content::ImageUrl { .. }
-                    | Content::ImageData { .. }
-                    | Content::AudioData { .. } => None,
-                })
-                .collect::<Vec<_>>()
-                .join("\n");
-
-            if !text.trim().is_empty() {
-                outgoing.push(text);
-            }
-        }
+    if text.is_empty() {
+        return Err(BabataError::internal(
+            "Telegram feedback requires non-empty outbound content",
+        ));
     }
 
-    outgoing
+    Ok(text)
 }
 
 #[cfg(test)]
@@ -530,8 +498,7 @@ mod tests {
             .expect("parse group update"),
         ];
 
-        let allowed_user_ids = HashSet::from([1001]);
-        let (max_id, private_messages) = extract_private_messages(updates, &allowed_user_ids);
+        let (max_id, private_messages) = extract_private_messages(updates, 1001);
         assert_eq!(max_id, Some(2));
         assert_eq!(private_messages.len(), 1);
         assert_eq!(private_messages[0].chat_id, 1001);
@@ -593,8 +560,7 @@ mod tests {
             .expect("parse disallowed update"),
         ];
 
-        let allowed_user_ids = HashSet::from([1001]);
-        let (max_id, private_messages) = extract_private_messages(updates, &allowed_user_ids);
+        let (max_id, private_messages) = extract_private_messages(updates, 1001);
 
         assert_eq!(max_id, Some(2));
         assert_eq!(private_messages.len(), 1);
@@ -648,8 +614,7 @@ mod tests {
             .expect("parse photo update"),
         ];
 
-        let allowed_user_ids = HashSet::from([1001]);
-        let (max_id, private_messages) = extract_private_messages(updates, &allowed_user_ids);
+        let (max_id, private_messages) = extract_private_messages(updates, 1001);
 
         assert_eq!(max_id, Some(3));
         assert_eq!(private_messages.len(), 1);
@@ -701,8 +666,7 @@ mod tests {
             .expect("parse image document update"),
         ];
 
-        let allowed_user_ids = HashSet::from([1001]);
-        let (max_id, private_messages) = extract_private_messages(updates, &allowed_user_ids);
+        let (max_id, private_messages) = extract_private_messages(updates, 1001);
 
         assert_eq!(max_id, Some(4));
         assert_eq!(private_messages.len(), 1);
@@ -762,8 +726,7 @@ mod tests {
 
         let updates = vec![update];
 
-        let allowed_user_ids = HashSet::from([1001]);
-        let (max_id, private_messages) = extract_private_messages(updates, &allowed_user_ids);
+        let (max_id, private_messages) = extract_private_messages(updates, 1001);
 
         assert_eq!(max_id, Some(5));
         assert_eq!(private_messages.len(), 1);
@@ -815,8 +778,7 @@ mod tests {
             .expect("parse audio document update"),
         ];
 
-        let allowed_user_ids = HashSet::from([1001]);
-        let (max_id, private_messages) = extract_private_messages(updates, &allowed_user_ids);
+        let (max_id, private_messages) = extract_private_messages(updates, 1001);
 
         assert_eq!(max_id, Some(6));
         assert_eq!(private_messages.len(), 1);
@@ -831,33 +793,5 @@ mod tests {
             private_messages[0].audio_media_type,
             Some("audio/ogg".to_string())
         );
-    }
-
-    #[test]
-    fn extract_outgoing_texts_keeps_only_assistant_text() {
-        let messages = vec![
-            Message::UserPrompt {
-                content: vec![Content::Text {
-                    text: "question".to_string(),
-                }],
-            },
-            Message::AssistantResponse {
-                content: vec![
-                    Content::Text {
-                        text: "line1".to_string(),
-                    },
-                    Content::Text {
-                        text: "line2".to_string(),
-                    },
-                    Content::ImageUrl {
-                        url: "https://example.com/image.png".to_string(),
-                    },
-                ],
-                reasoning_content: None,
-            },
-        ];
-
-        let outgoing = extract_outgoing_texts(&messages);
-        assert_eq!(outgoing, vec!["line1\nline2".to_string()]);
     }
 }

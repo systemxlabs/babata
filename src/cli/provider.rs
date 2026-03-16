@@ -4,23 +4,21 @@ use crate::{
     error::BabataError,
 };
 
-use super::Args;
-
-pub fn add(_args: &Args, provider_config_json: &str) {
+pub fn add(provider_config_json: &str) {
     if let Err(err) = run_add(provider_config_json) {
         eprintln!("{err}");
         std::process::exit(1);
     }
 }
 
-pub fn delete(_args: &Args, name: &str) {
+pub fn delete(name: &str) {
     if let Err(err) = run_delete(name) {
         eprintln!("{err}");
         std::process::exit(1);
     }
 }
 
-pub fn list(_args: &Args) {
+pub fn list() {
     if let Err(err) = run_list() {
         eprintln!("{err}");
         std::process::exit(1);
@@ -39,7 +37,7 @@ fn run_add(provider_config_json: &str) -> BabataResult<()> {
 
     let mut config = Config::load()?;
 
-    let provider_name = provider_config.provider_name().to_string();
+    let provider_name = provider_config.name().to_string();
     config.upsert_provider(provider_config);
     config.save()?;
 
@@ -54,7 +52,7 @@ fn run_list() -> BabataResult<()> {
         let payload = serde_json::to_string(provider_config).map_err(|err| {
             BabataError::internal(format!(
                 "Failed to serialize provider '{}' config to JSON: {}",
-                provider_config.provider_name(),
+                provider_config.name(),
                 err
             ))
         })?;
@@ -77,6 +75,6 @@ fn run_delete(name: &str) -> BabataResult<()> {
     config.validate()?;
     config.save()?;
 
-    println!("Deleted provider '{}'", deleted.provider_name());
+    println!("Deleted provider '{}'", deleted.name());
     Ok(())
 }

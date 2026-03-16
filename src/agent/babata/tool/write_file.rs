@@ -2,8 +2,8 @@ use serde_json::{Value, json};
 
 use crate::{
     BabataResult,
+    agent::babata::{Tool, ToolContext, ToolSpec},
     error::BabataError,
-    tool::{Tool, ToolSpec},
 };
 use log::info;
 use std::path::Path;
@@ -50,7 +50,7 @@ impl Tool for WriteFileTool {
         &self.spec
     }
 
-    async fn execute(&self, args: &str) -> BabataResult<String> {
+    async fn execute(&self, args: &str, _context: &ToolContext) -> BabataResult<String> {
         let args: Value = serde_json::from_str(args)?;
         let path = args["path"]
             .as_str()
@@ -93,6 +93,7 @@ mod tests {
     #[tokio::test]
     async fn write_file_basic() {
         let tool = WriteFileTool::new();
+        let tool_context = ToolContext::test();
         let temp_dir = std::env::temp_dir();
         let test_file = temp_dir.join("babata_test_write.txt");
 
@@ -105,7 +106,7 @@ mod tests {
         });
         let args = args.to_string();
 
-        let result = tool.execute(&args).await;
+        let result = tool.execute(&args, &tool_context).await;
         assert!(result.is_ok(), "Write operation should succeed");
 
         // Verify file was created
@@ -119,6 +120,7 @@ mod tests {
     #[tokio::test]
     async fn write_file_creates_directories() {
         let tool = WriteFileTool::new();
+        let tool_context = ToolContext::test();
         let temp_dir = std::env::temp_dir();
         let test_dir = temp_dir.join("babata_test_dir");
         let test_subdir = test_dir.join("subdir");
@@ -133,7 +135,7 @@ mod tests {
         });
         let args = args.to_string();
 
-        let result = tool.execute(&args).await;
+        let result = tool.execute(&args, &tool_context).await;
         assert!(result.is_ok(), "Write operation should create directories");
 
         // Verify directories and file were created
@@ -151,12 +153,13 @@ mod tests {
     #[tokio::test]
     async fn write_file_missing_path() {
         let tool = WriteFileTool::new();
+        let tool_context = ToolContext::test();
         let args = json!({
             "content": "Some content"
         });
         let args = args.to_string();
 
-        let result = tool.execute(&args).await;
+        let result = tool.execute(&args, &tool_context).await;
         assert!(result.is_err(), "Should fail when path is missing");
         assert!(
             result
@@ -169,12 +172,13 @@ mod tests {
     #[tokio::test]
     async fn write_file_missing_content() {
         let tool = WriteFileTool::new();
+        let tool_context = ToolContext::test();
         let args = json!({
             "path": "/tmp/test.txt"
         });
         let args = args.to_string();
 
-        let result = tool.execute(&args).await;
+        let result = tool.execute(&args, &tool_context).await;
         assert!(result.is_err(), "Should fail when content is missing");
         assert!(
             result

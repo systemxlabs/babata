@@ -3,8 +3,8 @@ use serde_json::{Value, json};
 
 use crate::{
     BabataResult,
+    agent::babata::{Tool, ToolContext, ToolSpec},
     error::BabataError,
-    tool::{Tool, ToolSpec},
 };
 
 #[derive(Debug)]
@@ -49,7 +49,7 @@ impl Tool for ShellTool {
         &self.spec
     }
 
-    async fn execute(&self, args: &str) -> BabataResult<String> {
+    async fn execute(&self, args: &str, _context: &ToolContext) -> BabataResult<String> {
         info!("Executing shell command: {args}",);
 
         let args: Value = serde_json::from_str(args)?;

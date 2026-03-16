@@ -20,9 +20,9 @@ use std::{collections::HashMap, fmt::Debug, sync::Arc};
 
 use crate::{
     BabataResult,
+    agent::babata::ToolSpec,
     config::{Config, ProviderConfig},
     message::Message,
-    tool::ToolSpec,
 };
 
 #[async_trait::async_trait]
@@ -47,7 +47,7 @@ pub struct GenerationRequest<'a> {
     pub system_prompt: &'a str,
     pub model: &'a str,
     pub prompts: &'a [Message],
-    pub context: &'a [Message],
+    pub context: &'a str,
     pub tools: &'a [ToolSpec],
 }
 
@@ -82,7 +82,7 @@ pub fn build_providers(config: &Config) -> BabataResult<HashMap<String, Arc<dyn 
         HashMap::with_capacity(config.providers.len());
 
     for provider_config in &config.providers {
-        let provider_name = provider_config.provider_name();
+        let provider_name = provider_config.name();
         let provider = create_provider(provider_config)?;
         providers.insert(provider_name.to_string(), provider);
     }

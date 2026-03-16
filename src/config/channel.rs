@@ -1,6 +1,10 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{BabataResult, error::BabataError};
+use crate::{
+    BabataResult,
+    channel::{Channel, TelegramChannel},
+    error::BabataError,
+};
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "name", rename_all = "snake_case")]
@@ -12,21 +16,11 @@ pub enum ChannelConfig {
 pub struct TelegramChannelConfig {
     pub bot_token: String,
     #[serde(default)]
-    pub polling_timeout_secs: Option<u64>,
-    #[serde(default)]
     pub last_update_id: Option<i64>,
-    #[serde(default)]
-    pub allowed_user_ids: Vec<i64>,
+    pub user_id: i64,
 }
 
 impl TelegramChannelConfig {
-    pub const DEFAULT_POLLING_TIMEOUT_SECS: u64 = 30;
-
-    pub fn polling_timeout_secs(&self) -> u64 {
-        self.polling_timeout_secs
-            .unwrap_or(Self::DEFAULT_POLLING_TIMEOUT_SECS)
-    }
-
     pub fn last_update_id(&self) -> Option<i64> {
         self.last_update_id
     }
@@ -38,12 +32,6 @@ impl TelegramChannelConfig {
             ));
         }
 
-        if self.polling_timeout_secs() == 0 {
-            return Err(BabataError::config(
-                "Telegram channel polling_timeout_secs must be greater than 0",
-            ));
-        }
-
         if let Some(last_update_id) = self.last_update_id
             && last_update_id < 0
         {
@@ -52,15 +40,9 @@ impl TelegramChannelConfig {
             ));
         }
 
-        if self.allowed_user_ids.is_empty() {
+        if self.user_id <= 0 {
             return Err(BabataError::config(
-                "Telegram channel allowed_user_ids cannot be empty",
-            ));
-        }
-
-        if self.allowed_user_ids.iter().any(|id| *id <= 0) {
-            return Err(BabataError::config(
-                "Telegram channel allowed_user_ids must contain positive user id values",
+                "Telegram channel user_id must be a positive value",
             ));
         }
 
@@ -69,14 +51,14 @@ impl TelegramChannelConfig {
 }
 
 impl ChannelConfig {
-    pub fn channel_name(&self) -> &'static str {
+    pub fn name(&self) -> &'static str {
         match self {
-            ChannelConfig::Telegram(_) => "telegram",
+            ChannelConfig::Telegram(_) => TelegramChannel::name(),
         }
     }
 
     pub fn matches_name(&self, name: &str) -> bool {
-        self.channel_name().eq_ignore_ascii_case(name)
+        self.name().eq_ignore_ascii_case(name)
     }
 }
 
@@ -85,39 +67,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn telegram_config_defaults_work() {
-        let config = TelegramChannelConfig {
-            bot_token: "token".to_string(),
-            polling_timeout_secs: None,
-            last_update_id: None,
-            allowed_user_ids: vec![12345],
-        };
-
-        assert_eq!(
-            config.polling_timeout_secs(),
-            TelegramChannelConfig::DEFAULT_POLLING_TIMEOUT_SECS
-        );
-    }
-
-    #[test]
     fn telegram_config_rejects_empty_bot_token() {
         let config = TelegramChannelConfig {
             bot_token: "   ".to_string(),
-            polling_timeout_secs: None,
             last_update_id: None,
-            allowed_user_ids: vec![12345],
+            user_id: 12345,
         };
 
         assert!(config.validate().is_err());
     }
 
     #[test]
-    fn telegram_config_rejects_empty_allowed_user_ids() {
+    fn telegram_config_rejects_non_positive_user_id() {
         let config = TelegramChannelConfig {
             bot_token: "token".to_string(),
-            polling_timeout_secs: None,
             last_update_id: None,
-            allowed_user_ids: Vec::new(),
+            user_id: 0,
         };
 
         assert!(config.validate().is_err());
@@ -127,9 +92,8 @@ mod tests {
     fn telegram_config_rejects_negative_last_update_id() {
         let config = TelegramChannelConfig {
             bot_token: "token".to_string(),
-            polling_timeout_secs: None,
             last_update_id: Some(-1),
-            allowed_user_ids: vec![12345],
+            user_id: 12345,
         };
 
         assert!(config.validate().is_err());

@@ -2,8 +2,8 @@ use serde_json::{Value, json};
 
 use crate::{
     BabataResult,
+    agent::babata::{Tool, ToolContext, ToolSpec},
     error::BabataError,
-    tool::{Tool, ToolSpec},
 };
 use log::info;
 
@@ -53,7 +53,7 @@ impl Tool for ReadFileTool {
         &self.spec
     }
 
-    async fn execute(&self, args: &str) -> BabataResult<String> {
+    async fn execute(&self, args: &str, _context: &ToolContext) -> BabataResult<String> {
         let args: Value = serde_json::from_str(args)?;
         let path = args["path"]
             .as_str()

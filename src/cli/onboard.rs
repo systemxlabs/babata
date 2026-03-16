@@ -2,21 +2,19 @@ use std::path::Path;
 
 use crate::{
     BabataResult,
+    agent::babata::{
+        AnthropicProvider, CustomProvider, DeepSeekProvider, KimiProvider, Model, MoonshotProvider,
+        OpenAIProvider, Provider,
+    },
     channel::{Channel, TelegramChannel},
     config::{
-        AgentConfig, AnthropicProviderConfig, ChannelConfig, CompatibleApi, Config,
-        CustomProviderConfig, DeepSeekProviderConfig, EmbeddingConfig, HybridMemoryConfig,
+        AgentConfig, AnthropicProviderConfig, BabataAgentConfig, ChannelConfig, CompatibleApi,
+        Config, CustomProviderConfig, DeepSeekProviderConfig, EmbeddingConfig, HybridMemoryConfig,
         KimiProviderConfig, LocalEmbeddingConfig, MemoryConfig, MoonshotProviderConfig,
         OpenAIProviderConfig, ProviderConfig, RemoteEmbeddingConfig, TelegramChannelConfig,
     },
     error::BabataError,
-    provider::{
-        AnthropicProvider, CustomProvider, DeepSeekProvider, KimiProvider, Model, MoonshotProvider,
-        OpenAIProvider, Provider,
-    },
 };
-
-use super::Args;
 use rust_embed::RustEmbed;
 
 /// Embed the entire project source code into the binary
@@ -39,7 +37,7 @@ const EMBEDDED_MACOS_SERVICE_TEMPLATE: &str =
 const EMBEDDED_LINUX_SERVICE_TEMPLATE: &str =
     include_str!("../../services/babata.server.service.template");
 
-pub fn run(_args: &Args) {
+pub fn run() {
     if let Err(err) = run_onboard() {
         eprintln!("{err}");
         std::process::exit(1);
@@ -59,8 +57,8 @@ fn run_onboard() -> BabataResult<()> {
         config.upsert_memory(memory_config);
     }
 
-    if let Some(agent_config) = prompt_main_agent_setup(&config)? {
-        config.upsert_agent(agent_config);
+    if let Some(babata_agent_config) = prompt_babata_agent_setup(&config)? {
+        config.upsert_agent(AgentConfig::Babata(babata_agent_config));
     }
 
     if let Some(channel_config) = prompt_channel_setup()? {
@@ -268,8 +266,8 @@ fn prompt_custom_compatible_api() -> BabataResult<CompatibleApi> {
     ))
 }
 
-fn prompt_main_agent_setup(config: &Config) -> BabataResult<Option<AgentConfig>> {
-    let selection = prompt_line("Configure main agent? (Press Enter to skip, or Y to continue)")?;
+fn prompt_babata_agent_setup(config: &Config) -> BabataResult<Option<BabataAgentConfig>> {
+    let selection = prompt_line("Configure babata agent? (Press Enter to skip, or Y to continue)")?;
     match selection.trim() {
         "" | "N" | "n" | "no" => return Ok(None),
         "Y" | "y" | "yes" => {}
@@ -286,7 +284,7 @@ fn prompt_main_agent_setup(config: &Config) -> BabataResult<Option<AgentConfig>>
     let mut provider_names: Vec<String> = config
         .providers
         .iter()
-        .map(|provider| provider.provider_name().to_string())
+        .map(|provider| provider.name().to_string())
         .collect();
     provider_names.sort();
     for (idx, name) in provider_names.iter().enumerate() {
@@ -310,8 +308,7 @@ fn prompt_main_agent_setup(config: &Config) -> BabataResult<Option<AgentConfig>>
         })?;
     let model = prompt_model_setup(provider_config)?;
     let memory = prompt_agent_memory_setup(config)?;
-    Ok(Some(AgentConfig {
-        name: "main".to_string(),
+    Ok(Some(BabataAgentConfig {
         provider: provider_name.to_string(),
         model,
         memory,
@@ -481,50 +478,20 @@ fn build_channel_config(channel_name: &str) -> BabataResult<ChannelConfig> {
 fn prompt_telegram_channel_config() -> BabataResult<TelegramChannelConfig> {
     let bot_token = prompt_line("Telegram bot token")?;
 
-    let polling_timeout_secs_raw =
-        prompt_line("Telegram polling timeout seconds (optional, press Enter to use default 30)")?;
-    let polling_timeout_secs = if polling_timeout_secs_raw.trim().is_empty() {
-        None
-    } else {
-        Some(
-            polling_timeout_secs_raw
-                .trim()
-                .parse::<u64>()
-                .map_err(|_| BabataError::config("Invalid polling timeout seconds"))?,
-        )
-    };
-
-    let allowed_user_ids_raw =
-        prompt_line("Telegram allowed user IDs (comma separated, required, e.g. 123456789)")?;
-    let allowed_user_ids = parse_allowed_user_ids(&allowed_user_ids_raw)?;
+    let user_id_raw = prompt_line("Telegram user ID (required, e.g. 123456789)")?;
+    let user_id = parse_telegram_user_id(&user_id_raw)?;
 
     Ok(TelegramChannelConfig {
         bot_token,
-        polling_timeout_secs,
         last_update_id: None,
-        allowed_user_ids,
+        user_id,
     })
 }
 
-fn parse_allowed_user_ids(raw: &str) -> BabataResult<Vec<i64>> {
-    let values = raw
-        .split(',')
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(|value| {
-            value
-                .parse::<i64>()
-                .map_err(|_| BabataError::config("Invalid Telegram allowed user id"))
-        })
-        .collect::<BabataResult<Vec<_>>>()?;
-
-    if values.is_empty() {
-        return Err(BabataError::config(
-            "Telegram allowed user IDs cannot be empty",
-        ));
-    }
-
-    Ok(values)
+fn parse_telegram_user_id(raw: &str) -> BabataResult<i64> {
+    raw.trim()
+        .parse::<i64>()
+        .map_err(|_| BabataError::config("Invalid Telegram user id"))
 }
 
 fn prompt_background_service_setup() -> BabataResult<bool> {
