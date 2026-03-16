@@ -37,7 +37,7 @@ pub fn build_channels(config: &Config) -> BabataResult<HashMap<String, Arc<dyn C
         match channel_config {
             ChannelConfig::Telegram(telegram_config) => {
                 telegram_config.validate()?;
-                let channel = TelegramChannel::new(telegram_config.clone());
+                let channel = TelegramChannel::new(telegram_config.clone())?;
                 channels.insert(
                     channel_config.name().to_ascii_lowercase(),
                     Arc::new(channel),

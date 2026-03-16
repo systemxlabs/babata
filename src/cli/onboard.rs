@@ -481,11 +481,7 @@ fn prompt_telegram_channel_config() -> BabataResult<TelegramChannelConfig> {
     let user_id_raw = prompt_line("Telegram user ID (required, e.g. 123456789)")?;
     let user_id = parse_telegram_user_id(&user_id_raw)?;
 
-    Ok(TelegramChannelConfig {
-        bot_token,
-        last_update_id: None,
-        user_id,
-    })
+    Ok(TelegramChannelConfig { bot_token, user_id })
 }
 
 fn parse_telegram_user_id(raw: &str) -> BabataResult<i64> {

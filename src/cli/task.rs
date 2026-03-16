@@ -1,5 +1,5 @@
 use chrono::{Local, TimeZone};
-use comfy_table::{ContentArrangement, Table, presets::{ASCII_MARKDOWN}};
+use comfy_table::{ContentArrangement, Table, presets::ASCII_MARKDOWN};
 use reqwest::Client;
 use serde_json::json;
 
@@ -206,7 +206,14 @@ fn format_tasks_table(tasks: &[TaskResponse]) -> String {
     table
         .load_preset(ASCII_MARKDOWN)
         .set_content_arrangement(ContentArrangement::Disabled)
-        .set_header(["TASK ID", "STATUS", "AGENT", "PARENT", "CREATED AT", "PROMPT"]);
+        .set_header([
+            "TASK ID",
+            "STATUS",
+            "AGENT",
+            "PARENT",
+            "CREATED AT",
+            "PROMPT",
+        ]);
 
     for task in tasks {
         table.add_row([

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 
 use log::warn;
 use reqwest::{Client, StatusCode};
@@ -12,9 +12,10 @@ use tokio::sync::{Mutex, oneshot};
 
 use crate::{
     BabataResult,
-    config::{ChannelConfig, Config, TelegramChannelConfig},
+    config::TelegramChannelConfig,
     error::BabataError,
     message::{Content, MediaType},
+    utils::babata_dir,
 };
 
 const DEFAULT_POLLING_TIMEOUT_SECS: u64 = 30;
@@ -32,20 +33,17 @@ pub struct TelegramChannel {
 }
 
 impl TelegramChannel {
-    pub fn new(config: TelegramChannelConfig) -> Self {
-        let TelegramChannelConfig {
-            bot_token,
-            last_update_id,
-            user_id,
-        } = config;
+    pub fn new(config: TelegramChannelConfig) -> BabataResult<Self> {
+        let TelegramChannelConfig { bot_token, user_id } = config;
+        let last_update_id = Self::load_last_update_id()?;
 
-        Self {
+        Ok(Self {
             bot: Bot::new(bot_token),
             http_client: Client::new(),
             last_update_id: Mutex::new(last_update_id),
             feedback_waiters: Mutex::new(HashMap::new()),
             user_id,
-        }
+        })
     }
 
     async fn fetch_updates(&self) -> BabataResult<Vec<IncomingPrivateMessage>> {
@@ -119,19 +117,67 @@ impl TelegramChannel {
     }
 
     fn persist_last_update_id(&self, last_update_id: i64) -> BabataResult<()> {
-        let mut config = Config::load()?;
-        let mut updated = false;
-        if let Some(channel) = config.channels.iter_mut().next() {
-            let ChannelConfig::Telegram(telegram) = channel;
-            telegram.last_update_id = Some(last_update_id);
-            updated = true;
+        let path = Self::last_update_id_path()?;
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|err| {
+                BabataError::internal(format!(
+                    "Failed to create Telegram channel state directory '{}': {}",
+                    parent.display(),
+                    err
+                ))
+            })?;
         }
-
-        if updated {
-            config.save()?;
-        }
+        std::fs::write(&path, last_update_id.to_string()).map_err(|err| {
+            BabataError::internal(format!(
+                "Failed to persist Telegram last_update_id to '{}': {}",
+                path.display(),
+                err
+            ))
+        })?;
 
         Ok(())
+    }
+
+    fn load_last_update_id() -> BabataResult<Option<i64>> {
+        let path = Self::last_update_id_path()?;
+        if !path.exists() {
+            return Ok(None);
+        }
+
+        let content = std::fs::read_to_string(&path).map_err(|err| {
+            BabataError::internal(format!(
+                "Failed to read Telegram last_update_id from '{}': {}",
+                path.display(),
+                err
+            ))
+        })?;
+        let content = content.trim();
+        if content.is_empty() {
+            return Ok(None);
+        }
+
+        let last_update_id = content.parse::<i64>().map_err(|err| {
+            BabataError::internal(format!(
+                "Failed to parse Telegram last_update_id from '{}': {}",
+                path.display(),
+                err
+            ))
+        })?;
+        if last_update_id < 0 {
+            return Err(BabataError::internal(format!(
+                "Telegram last_update_id in '{}' must be greater than or equal to 0",
+                path.display()
+            )));
+        }
+
+        Ok(Some(last_update_id))
+    }
+
+    fn last_update_id_path() -> BabataResult<PathBuf> {
+        Ok(babata_dir()?
+            .join("channels")
+            .join("telegram")
+            .join("last_update_id"))
     }
 
     async fn incoming_message_to_content(
