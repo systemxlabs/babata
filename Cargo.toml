@@ -37,7 +37,7 @@ sqlite-vec = { version = "0.1", optional = true }
 telegram-markdown-v2 = "0.2"
 teloxide = "0.13"
 tokio = { version = "1", features = ["full"] }
-uuid = { version = "1.20", features = ["v4"] }
+uuid = { version = "1.20", features = ["v4", "serde"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-service = "0.8"

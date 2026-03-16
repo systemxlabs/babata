@@ -1,13 +1,14 @@
 use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, OptionalExtension, Row, params};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
     BabataResult, error::BabataError, message::Content, task::TaskStatus, utils::babata_dir,
 };
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TaskRecord {
     pub task_id: Uuid,
     pub prompt: Vec<Content>,

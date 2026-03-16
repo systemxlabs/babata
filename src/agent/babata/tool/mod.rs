@@ -7,6 +7,7 @@ mod read_file;
 mod shell;
 mod sleep;
 mod user_feedback;
+mod wait_task;
 mod write_file;
 
 pub use control_task::*;
@@ -18,6 +19,7 @@ pub use read_file::*;
 pub use shell::*;
 pub use sleep::*;
 pub use user_feedback::*;
+pub use wait_task::*;
 pub use write_file::*;
 
 use crate::{BabataResult, channel::Channel};
@@ -49,6 +51,7 @@ pub fn build_tools(
         Arc::new(CreateTaskTool::new()?),
         Arc::new(GetTaskTool::new()?),
         Arc::new(ListTaskTool::new()?),
+        Arc::new(WaitTaskTool::new()?),
         Arc::new(SleepTool::new()),
         Arc::new(UserFeedbackTool::new(channels)),
     ];

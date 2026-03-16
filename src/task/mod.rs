@@ -4,6 +4,7 @@ mod store;
 
 pub use launcher::*;
 pub use manager::*;
+use serde::{Deserialize, Serialize};
 pub use store::*;
 
 use crate::message::Content;
@@ -16,7 +17,7 @@ pub struct TaskRequest {
     pub agent: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum TaskStatus {
     #[default]
     Running,
