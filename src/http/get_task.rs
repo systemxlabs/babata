@@ -3,7 +3,7 @@ use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::task::TaskRecord;
@@ -25,15 +25,15 @@ pub(super) async fn handle(State(state): State<HttpApp>, Path(task_id): Path<Str
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct TaskResponse {
-    task_id: String,
-    prompt: Vec<crate::message::Content>,
-    agent: Option<String>,
-    status: String,
-    parent_task_id: Option<String>,
-    root_task_id: String,
-    created_at: i64,
+    pub(crate) task_id: String,
+    pub(crate) prompt: Vec<crate::message::Content>,
+    pub(crate) agent: Option<String>,
+    pub(crate) status: String,
+    pub(crate) parent_task_id: Option<String>,
+    pub(crate) root_task_id: String,
+    pub(crate) created_at: i64,
 }
 
 impl TaskResponse {

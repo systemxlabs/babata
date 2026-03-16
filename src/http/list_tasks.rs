@@ -35,13 +35,13 @@ pub(super) struct ListTasksQuery {
     limit: Option<usize>,
 }
 
-#[derive(Debug, Serialize)]
-struct ListTasksResponse {
-    tasks: Vec<TaskResponse>,
+#[derive(Debug, Serialize, Deserialize)]
+pub(crate) struct ListTasksResponse {
+    pub(crate) tasks: Vec<TaskResponse>,
 }
 
 impl ListTasksResponse {
-    fn from_records(records: Vec<TaskRecord>) -> Self {
+    pub(crate) fn from_records(records: Vec<TaskRecord>) -> Self {
         Self {
             tasks: records.into_iter().map(TaskResponse::from_record).collect(),
         }

@@ -16,6 +16,8 @@ use serde_json::json;
 use crate::{BabataResult, error::BabataError, task::TaskManager};
 
 pub(crate) use error::ApiError;
+pub(crate) use get_task::TaskResponse;
+pub(crate) use list_tasks::ListTasksResponse;
 
 pub const DEFAULT_HTTP_ADDR: &str = "127.0.0.1:18800";
 pub const DEFAULT_HTTP_BASE_URL: &str = "http://127.0.0.1:18800";
