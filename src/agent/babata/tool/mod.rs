@@ -24,11 +24,7 @@ pub use write_file::*;
 
 use crate::{BabataResult, channel::Channel};
 use serde_json::Value;
-use std::{
-    collections::HashMap,
-    fmt::Debug,
-    sync::Arc,
-};
+use std::{collections::HashMap, fmt::Debug, sync::Arc};
 use uuid::Uuid;
 
 #[async_trait::async_trait]

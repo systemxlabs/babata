@@ -154,7 +154,10 @@ pub enum TaskAction {
         status: Option<String>,
         #[arg(long, value_name = "LIMIT", help = "Optional max number of tasks")]
         limit: Option<usize>,
-        #[arg(long, help = "Render task list as a pretty table instead of JSON lines")]
+        #[arg(
+            long,
+            help = "Render task list as a pretty table instead of JSON lines"
+        )]
         pretty_format: bool,
     },
     #[command(about = "Get a task by id")]

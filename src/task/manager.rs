@@ -4,30 +4,47 @@ use std::{
 };
 
 use chrono::Utc;
-use log::info;
-use tokio::task::JoinHandle;
+use log::{error, info, warn};
+use tokio::{sync::mpsc, task::JoinHandle};
 use uuid::Uuid;
 
 use crate::{
     BabataResult,
     error::BabataError,
-    task::{TaskRecord, TaskRequest, TaskStatus, TaskStore, launcher::TaskLauncher},
+    task::{TaskExitEvent, TaskRecord, TaskRequest, TaskStatus, TaskStore, launcher::TaskLauncher},
 };
 
-#[derive(Debug)]
 pub struct TaskManager {
     store: TaskStore,
     launcher: TaskLauncher,
     running_tasks: Arc<Mutex<HashMap<Uuid, RunningTask>>>,
+    exit_tx: mpsc::Sender<TaskExitEvent>,
+    exit_rx: Mutex<Option<mpsc::Receiver<TaskExitEvent>>>,
 }
 
 impl TaskManager {
     pub fn new(store: TaskStore, launcher: TaskLauncher) -> BabataResult<Self> {
+        let (exit_tx, exit_rx) = mpsc::channel(1024);
         Ok(Self {
             store,
             launcher,
             running_tasks: Arc::new(Mutex::new(HashMap::new())),
+            exit_tx,
+            exit_rx: Mutex::new(Some(exit_rx)),
         })
+    }
+
+    pub fn start(self: &Arc<Self>) {
+        let Some(mut exit_rx) = self.exit_rx.lock().unwrap().take() else {
+            return;
+        };
+
+        let task_manager = Arc::clone(self);
+        tokio::spawn(async move {
+            while let Some(event) = exit_rx.recv().await {
+                task_manager.handle_task_exit(event);
+            }
+        });
     }
 
     pub fn create_task(&self, request: TaskRequest) -> BabataResult<Uuid> {
@@ -51,7 +68,9 @@ impl TaskManager {
             created_at: Utc::now().timestamp_millis(),
         })?;
 
-        let running_task = self.launcher.launch(task_id, &request)?;
+        let running_task = self
+            .launcher
+            .launch(task_id, &request, self.exit_tx.clone())?;
         {
             let mut guard = self.running_tasks.lock().unwrap();
             guard.insert(task_id, running_task);
@@ -93,7 +112,9 @@ impl TaskManager {
             parent_task_id: task.parent_task_id,
             agent: task.agent,
         };
-        let running_task = self.launcher.launch(task_id, &request)?;
+        let running_task = self
+            .launcher
+            .launch(task_id, &request, self.exit_tx.clone())?;
         {
             let mut guard = self.running_tasks.lock().unwrap();
             guard.insert(task_id, running_task);
@@ -133,6 +154,89 @@ impl TaskManager {
 
     pub fn get_task(&self, task_id: Uuid) -> BabataResult<TaskRecord> {
         self.store.get_task(task_id)
+    }
+
+    fn handle_task_exit(&self, event: TaskExitEvent) {
+        match event {
+            TaskExitEvent::Completed { task_id } => self.handle_task_completed(task_id),
+            TaskExitEvent::Failed { task_id, error } => self.handle_task_failed(task_id, error),
+        }
+    }
+
+    fn handle_task_completed(&self, task_id: Uuid) {
+        self.running_tasks.lock().unwrap().remove(&task_id);
+
+        let task = match self.store.get_task(task_id) {
+            Ok(task) => task,
+            Err(err) => {
+                error!(
+                    "Failed to load task {} after completion notification: {}",
+                    task_id, err
+                );
+                return;
+            }
+        };
+
+        if task.status != TaskStatus::Running {
+            info!(
+                "Ignoring completion notification for task {} in status {}",
+                task_id, task.status
+            );
+            return;
+        }
+
+        info!("Task {} completed successfully", task_id);
+        if let Err(err) = self.store.update_task_status(task_id, TaskStatus::Done) {
+            error!(
+                "Failed to update status to done for task {}: {}",
+                task_id, err
+            );
+        }
+    }
+
+    fn handle_task_failed(&self, task_id: Uuid, error: BabataError) {
+        self.running_tasks.lock().unwrap().remove(&task_id);
+
+        let task = match self.store.get_task(task_id) {
+            Ok(task) => task,
+            Err(store_error) => {
+                error!(
+                    "Failed to load task {} after failure notification: {}",
+                    task_id, store_error
+                );
+                return;
+            }
+        };
+
+        if task.status != TaskStatus::Running {
+            info!(
+                "Ignoring failure notification for task {} in status {}: {}",
+                task_id, task.status, error
+            );
+            return;
+        }
+
+        warn!("Task {} failed and will be relaunched: {}", task_id, error);
+        let request = TaskRequest {
+            prompt: task.prompt,
+            parent_task_id: task.parent_task_id,
+            agent: task.agent,
+        };
+
+        match self
+            .launcher
+            .launch(task_id, &request, self.exit_tx.clone())
+        {
+            Ok(running_task) => {
+                self.running_tasks
+                    .lock()
+                    .unwrap()
+                    .insert(task_id, running_task);
+            }
+            Err(err) => {
+                error!("Failed to relaunch task {} after failure: {}", task_id, err);
+            }
+        }
     }
 }
 

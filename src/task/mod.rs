@@ -7,7 +7,7 @@ pub use manager::*;
 use serde::{Deserialize, Serialize};
 pub use store::*;
 
-use crate::message::Content;
+use crate::{error::BabataError, message::Content};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -55,4 +55,10 @@ impl std::str::FromStr for TaskStatus {
             _ => Err(format!("Unknown task status '{}'", s)),
         }
     }
+}
+
+#[derive(Debug)]
+pub enum TaskExitEvent {
+    Completed { task_id: Uuid },
+    Failed { task_id: Uuid, error: BabataError },
 }

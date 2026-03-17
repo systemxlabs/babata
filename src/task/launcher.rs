@@ -1,19 +1,16 @@
 use std::{collections::HashMap, sync::Arc};
 
 use log::info;
+use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use crate::{
     BabataResult,
-    agent::{
-        Agent, AgentTask,
-        babata::BabataAgent,
-        build_agents,
-    },
+    agent::{Agent, AgentTask, babata::BabataAgent, build_agents},
     channel::Channel,
     config::Config,
     error::BabataError,
-    task::{RunningTask, TaskRequest, TaskStatus, TaskStore},
+    task::{RunningTask, TaskExitEvent, TaskRequest, TaskStore},
 };
 
 #[derive(Debug)]
@@ -32,7 +29,12 @@ impl TaskLauncher {
         Ok(Self { agents, store })
     }
 
-    pub fn launch(&self, task_id: Uuid, request: &TaskRequest) -> BabataResult<RunningTask> {
+    pub fn launch(
+        &self,
+        task_id: Uuid,
+        request: &TaskRequest,
+        exit_tx: mpsc::Sender<TaskExitEvent>,
+    ) -> BabataResult<RunningTask> {
         info!("Launching task {} with request: {:?}", task_id, request);
         let agent_name = match request.agent.as_deref() {
             Some(agent_name) => agent_name,
@@ -45,7 +47,6 @@ impl TaskLauncher {
             .ok_or_else(|| BabataError::config(format!("Agent '{}' not found", agent_name)))?
             .clone();
 
-        let store = self.store.clone();
         let task_record = self.store.get_task(task_id)?;
         let agent_task = AgentTask {
             task_id: task_record.task_id,
@@ -54,19 +55,12 @@ impl TaskLauncher {
             prompt: request.prompt.clone(),
         };
         let handle = tokio::spawn(async move {
-            match agent.execute(agent_task).await {
-                Ok(_) => {
-                    info!("Task {} completed successfully", task_id);
-                    if let Err(e) = store.update_task_status(task_id, TaskStatus::Done) {
-                        log::error!(
-                            "Failed to update status to done for task {}: {}",
-                            task_id,
-                            e
-                        );
-                    }
-                }
-                Err(err) => log::error!("Task {} failed: {}", task_id, err),
-            }
+            let result = agent.execute(agent_task).await;
+            let event = match result {
+                Ok(()) => TaskExitEvent::Completed { task_id },
+                Err(error) => TaskExitEvent::Failed { task_id, error },
+            };
+            let _ = exit_tx.send(event).await;
         });
 
         Ok(RunningTask { task_id, handle })
