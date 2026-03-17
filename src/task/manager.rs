@@ -1,10 +1,8 @@
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
+use std::{collections::HashMap, sync::Arc};
 
 use chrono::Utc;
 use log::{error, info, warn};
+use parking_lot::Mutex;
 use tokio::{sync::mpsc, task::JoinHandle};
 use uuid::Uuid;
 
@@ -35,7 +33,7 @@ impl TaskManager {
     }
 
     pub fn start(self: &Arc<Self>) {
-        let Some(mut exit_rx) = self.exit_rx.lock().unwrap().take() else {
+        let Some(mut exit_rx) = self.exit_rx.lock().take() else {
             return;
         };
 
@@ -72,7 +70,7 @@ impl TaskManager {
             .launcher
             .launch(task_id, &request, self.exit_tx.clone())?;
         {
-            let mut guard = self.running_tasks.lock().unwrap();
+            let mut guard = self.running_tasks.lock();
             guard.insert(task_id, running_task);
         }
 
@@ -89,7 +87,7 @@ impl TaskManager {
             )));
         }
 
-        if let Some(running_task) = self.running_tasks.lock().unwrap().remove(&task_id) {
+        if let Some(running_task) = self.running_tasks.lock().remove(&task_id) {
             running_task.handle.abort();
         }
 
@@ -116,7 +114,7 @@ impl TaskManager {
             .launcher
             .launch(task_id, &request, self.exit_tx.clone())?;
         {
-            let mut guard = self.running_tasks.lock().unwrap();
+            let mut guard = self.running_tasks.lock();
             guard.insert(task_id, running_task);
         }
 
@@ -135,7 +133,7 @@ impl TaskManager {
             )));
         }
 
-        if let Some(running_task) = self.running_tasks.lock().unwrap().remove(&task_id) {
+        if let Some(running_task) = self.running_tasks.lock().remove(&task_id) {
             running_task.handle.abort();
         }
 
@@ -164,7 +162,7 @@ impl TaskManager {
     }
 
     fn handle_task_completed(&self, task_id: Uuid) {
-        self.running_tasks.lock().unwrap().remove(&task_id);
+        self.running_tasks.lock().remove(&task_id);
 
         let task = match self.store.get_task(task_id) {
             Ok(task) => task,
@@ -195,7 +193,7 @@ impl TaskManager {
     }
 
     fn handle_task_failed(&self, task_id: Uuid, error: BabataError) {
-        self.running_tasks.lock().unwrap().remove(&task_id);
+        self.running_tasks.lock().remove(&task_id);
 
         let task = match self.store.get_task(task_id) {
             Ok(task) => task,
@@ -228,10 +226,7 @@ impl TaskManager {
             .launch(task_id, &request, self.exit_tx.clone())
         {
             Ok(running_task) => {
-                self.running_tasks
-                    .lock()
-                    .unwrap()
-                    .insert(task_id, running_task);
+                self.running_tasks.lock().insert(task_id, running_task);
             }
             Err(err) => {
                 error!("Failed to relaunch task {} after failure: {}", task_id, err);

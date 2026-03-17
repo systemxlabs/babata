@@ -3,8 +3,8 @@ use crate::error::BabataError;
 use crate::utils::babata_dir;
 use async_trait::async_trait;
 use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
+use parking_lot::Mutex;
 use std::{path::PathBuf, str::FromStr};
-use tokio::sync::Mutex;
 
 #[async_trait]
 pub trait Embedder: Send + Sync {
@@ -129,7 +129,6 @@ impl Embedder for LocalEmbedder {
     async fn embed(&self, texts: &[&str]) -> BabataResult<Vec<Vec<f32>>> {
         self.model
             .lock()
-            .await
             .embed(texts, None)
             .map_err(|e| BabataError::internal(format!("Failed to generate embedding: {}", e)))
     }

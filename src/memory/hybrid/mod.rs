@@ -13,8 +13,8 @@ use crate::{
     memory::Memory,
     message::{Content, Message},
 };
+use parking_lot::Mutex;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 
 #[derive(Clone)]
 pub struct HybridMemory {
@@ -84,7 +84,7 @@ impl HybridMemory {
                         .first()
                         .ok_or(BabataError::memory("No embedding returned"))?;
                     // Now acquire lock and insert
-                    let mut store = self.store.lock().await;
+                    let mut store = self.store.lock();
                     return store
                         .insert_message(&role, message_type, &content, embedding)
                         .map(|_| ());
@@ -115,7 +115,7 @@ impl HybridMemory {
             .first()
             .ok_or(BabataError::memory("No embedding returned"))?;
 
-        let store = self.store.lock().await;
+        let store = self.store.lock();
         let searcher = HybridSearch::new(
             &store,
             self.config.bm25_weight,

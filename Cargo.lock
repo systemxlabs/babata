@@ -306,6 +306,7 @@ dependencies = [
  "libsimple",
  "log",
  "logforth",
+ "parking_lot",
  "reqwest 0.12.28",
  "rusqlite",
  "rust-embed",
