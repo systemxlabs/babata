@@ -38,8 +38,8 @@ pub fn create(prompt: &str, agent: Option<&str>, parent_task_id: Option<&str>) {
     }
 }
 
-pub fn list(status: Option<&str>, limit: Option<usize>) {
-    if let Err(err) = run_list(status, limit) {
+pub fn list(status: Option<&str>, limit: Option<usize>, pretty_format: bool) {
+    if let Err(err) = run_list(status, limit, pretty_format) {
         eprintln!("{err}");
         std::process::exit(1);
     }
@@ -120,7 +120,7 @@ fn run_create(prompt: &str, agent: Option<&str>, parent_task_id: Option<&str>) -
     })
 }
 
-fn run_list(status: Option<&str>, limit: Option<usize>) -> BabataResult<()> {
+fn run_list(status: Option<&str>, limit: Option<usize>, pretty_format: bool) -> BabataResult<()> {
     let runtime = build_runtime()?;
     runtime.block_on(async move {
         let client = Client::new();
@@ -154,7 +154,11 @@ fn run_list(status: Option<&str>, limit: Option<usize>) -> BabataResult<()> {
         let response: ListTasksResponse = serde_json::from_str(&body).map_err(|err| {
             BabataError::internal(format!("Failed to parse task list response body: {}", err))
         })?;
-        println!("{}", format_tasks_table(&response.tasks));
+        if pretty_format {
+            println!("{}", format_tasks_table(&response.tasks));
+        } else {
+            println!("{}", format_tasks_json_lines(&response.tasks)?);
+        }
         Ok(())
     })
 }
@@ -231,6 +235,19 @@ fn format_tasks_table(tasks: &[TaskResponse]) -> String {
     table.to_string()
 }
 
+fn format_tasks_json_lines(tasks: &[TaskResponse]) -> BabataResult<String> {
+    let lines = tasks
+        .iter()
+        .map(|task| {
+            serde_json::to_string(task).map_err(|err| {
+                BabataError::internal(format!("Failed to serialize task list item: {}", err))
+            })
+        })
+        .collect::<BabataResult<Vec<_>>>()?;
+
+    Ok(lines.join("\n"))
+}
+
 fn format_timestamp(timestamp_millis: i64) -> String {
     match Local.timestamp_millis_opt(timestamp_millis).single() {
         Some(datetime) => datetime.format("%Y-%m-%d %H:%M:%S").to_string(),
@@ -298,5 +315,40 @@ mod tests {
 
         assert!(summary.starts_with("hello [image_data] image/png "));
         assert!(summary.ends_with(&"x".repeat(80)));
+    }
+
+    #[test]
+    fn format_tasks_json_lines_renders_one_json_per_line() {
+        let tasks = vec![
+            TaskResponse {
+                task_id: "12345678-1234-1234-1234-123456789abc".to_string(),
+                prompt: vec![Content::Text {
+                    text: "first".to_string(),
+                }],
+                agent: Some("babata".to_string()),
+                status: "running".to_string(),
+                parent_task_id: None,
+                root_task_id: "12345678-1234-1234-1234-123456789abc".to_string(),
+                created_at: 1_773_994_800_000,
+            },
+            TaskResponse {
+                task_id: "abcdefab-cdef-cdef-cdef-abcdefabcdef".to_string(),
+                prompt: vec![Content::Text {
+                    text: "second".to_string(),
+                }],
+                agent: None,
+                status: "done".to_string(),
+                parent_task_id: None,
+                root_task_id: "abcdefab-cdef-cdef-cdef-abcdefabcdef".to_string(),
+                created_at: 1_773_994_800_001,
+            },
+        ];
+
+        let output = format_tasks_json_lines(&tasks).expect("format json lines");
+        let lines: Vec<&str> = output.lines().collect();
+
+        assert_eq!(lines.len(), 2);
+        assert!(lines[0].contains("\"task_id\":\"12345678-1234-1234-1234-123456789abc\""));
+        assert!(lines[1].contains("\"task_id\":\"abcdefab-cdef-cdef-cdef-abcdefabcdef\""));
     }
 }
