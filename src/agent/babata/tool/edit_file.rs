@@ -59,7 +59,7 @@ impl Tool for EditFileTool {
         &self.spec
     }
 
-    async fn execute(&self, args: &str, _context: &ToolContext) -> BabataResult<String> {
+    async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
         let args: Value = serde_json::from_str(args)?;
         let path = args["path"]
             .as_str()

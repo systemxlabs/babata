@@ -48,7 +48,7 @@ impl Tool for CreateSubtaskTool {
         &self.spec
     }
 
-    async fn execute(&self, args: &str, context: &ToolContext) -> BabataResult<String> {
+    async fn execute(&self, args: &str, context: &ToolContext<'_>) -> BabataResult<String> {
         let args: Value = serde_json::from_str(args)?;
         let prompt = args["prompt"]
             .as_str()

@@ -6,7 +6,7 @@ use log::{info, warn};
 use crate::{
     BabataResult,
     agent::{
-        Agent,
+        Agent, AgentTask,
         babata::{
             GenerationRequest, Provider, Tool, ToolContext, ToolSpec, build_system_prompt,
             build_tools, create_provider, load_skills, load_system_prompt_files,
@@ -16,7 +16,7 @@ use crate::{
     config::{AgentConfig, Config},
     error::BabataError,
     memory::{Memory, build_memory},
-    message::{Content, Message},
+    message::Message,
 };
 
 const PROVIDER_RETRY_MAX_TIMES: usize = 3;
@@ -62,7 +62,7 @@ impl Agent for BabataAgent {
         "babata"
     }
 
-    async fn execute(&self, prompt: Vec<Content>, tool_context: ToolContext) -> BabataResult<()> {
+    async fn execute(&self, task: AgentTask) -> BabataResult<()> {
         let config = Config::load()?;
         let agent_config = config.get_agent(BabataAgent::name())?;
         #[allow(irrefutable_let_patterns)]
@@ -83,6 +83,17 @@ impl Agent for BabataAgent {
 
         let system_prompt = build_system_prompt(&system_prompt_files, &skills)?;
 
+        let crate::agent::AgentTask {
+            task_id,
+            parent_task_id,
+            root_task_id,
+            prompt,
+        } = task;
+        let tool_context: ToolContext<'_> = ToolContext {
+            task_id: &task_id,
+            parent_task_id: parent_task_id.as_ref(),
+            root_task_id: &root_task_id,
+        };
         let context = self.memory.build_context(&prompt).await?;
         let mut conversation = vec![Message::UserPrompt { content: prompt }];
 

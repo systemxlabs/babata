@@ -24,13 +24,17 @@ pub use write_file::*;
 
 use crate::{BabataResult, channel::Channel};
 use serde_json::Value;
-use std::{collections::HashMap, fmt::Debug, sync::Arc};
+use std::{
+    collections::HashMap,
+    fmt::Debug,
+    sync::Arc,
+};
 use uuid::Uuid;
 
 #[async_trait::async_trait]
 pub trait Tool: Debug + Send + Sync {
     fn spec(&self) -> &ToolSpec;
-    async fn execute(&self, args: &str, context: &ToolContext) -> BabataResult<String>;
+    async fn execute(&self, args: &str, context: &ToolContext<'_>) -> BabataResult<String>;
 }
 
 #[derive(Debug, Clone)]
@@ -41,16 +45,19 @@ pub struct ToolSpec {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ToolContext {
-    pub task_id: Uuid,
-    pub parent_task_id: Option<Uuid>,
-    pub root_task_id: Uuid,
+pub struct ToolContext<'a> {
+    pub task_id: &'a Uuid,
+    pub parent_task_id: Option<&'a Uuid>,
+    pub root_task_id: &'a Uuid,
 }
 
-impl ToolContext {
+impl ToolContext<'_> {
     #[cfg(test)]
     pub fn test() -> Self {
-        let task_id = Uuid::nil();
+        use std::sync::OnceLock;
+
+        static TASK_ID: OnceLock<Uuid> = OnceLock::new();
+        let task_id = TASK_ID.get_or_init(Uuid::nil);
         Self {
             task_id,
             parent_task_id: None,

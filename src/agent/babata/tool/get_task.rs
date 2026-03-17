@@ -43,7 +43,7 @@ impl Tool for GetTaskTool {
         &self.spec
     }
 
-    async fn execute(&self, args: &str, _context: &ToolContext) -> BabataResult<String> {
+    async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
         let args: Value = serde_json::from_str(args)?;
         let task_id = args["task_id"]
             .as_str()

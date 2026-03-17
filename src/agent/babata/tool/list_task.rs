@@ -47,7 +47,7 @@ impl Tool for ListTaskTool {
         &self.spec
     }
 
-    async fn execute(&self, args: &str, _context: &ToolContext) -> BabataResult<String> {
+    async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
         let args: Value = serde_json::from_str(args)?;
         let status = args["status"].as_str();
         let limit = args["limit"].as_u64();

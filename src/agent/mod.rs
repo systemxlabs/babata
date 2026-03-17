@@ -2,6 +2,8 @@ pub mod babata;
 
 use std::{collections::HashMap, fmt::Debug, sync::Arc};
 
+use uuid::Uuid;
+
 use crate::{
     BabataResult,
     agent::babata::{BabataAgent, ToolContext},
@@ -15,7 +17,25 @@ pub trait Agent: Debug + Send + Sync {
     fn name() -> &'static str
     where
         Self: Sized;
-    async fn execute(&self, prompt: Vec<Content>, tool_context: ToolContext) -> BabataResult<()>;
+    async fn execute(&self, task: AgentTask) -> BabataResult<()>;
+}
+
+#[derive(Debug, Clone)]
+pub struct AgentTask {
+    pub task_id: Uuid,
+    pub parent_task_id: Option<Uuid>,
+    pub root_task_id: Uuid,
+    pub prompt: Vec<Content>,
+}
+
+impl AgentTask {
+    pub fn tool_context(&self) -> ToolContext<'_> {
+        ToolContext {
+            task_id: &self.task_id,
+            parent_task_id: self.parent_task_id.as_ref(),
+            root_task_id: &self.root_task_id,
+        }
+    }
 }
 
 pub fn build_agents(
