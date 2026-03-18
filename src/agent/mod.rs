@@ -1,4 +1,5 @@
 pub mod babata;
+pub mod codex;
 
 use std::{collections::HashMap, fmt::Debug, sync::Arc};
 
@@ -6,7 +7,10 @@ use uuid::Uuid;
 
 use crate::{
     BabataResult,
-    agent::babata::{BabataAgent, ToolContext},
+    agent::{
+        babata::{BabataAgent, ToolContext},
+        codex::CodexAgent,
+    },
     channel::Channel,
     config::{AgentConfig, Config},
     message::Content,
@@ -49,6 +53,11 @@ pub fn build_agents(
             AgentConfig::Babata(_) => {
                 let agent_name = BabataAgent::name().to_string();
                 let agent: Arc<dyn Agent> = Arc::new(BabataAgent::new(config, channels.clone())?);
+                agents.insert(agent_name, agent);
+            }
+            AgentConfig::Codex(_) => {
+                let agent_name = CodexAgent::name().to_string();
+                let agent: Arc<dyn Agent> = Arc::new(CodexAgent::new(config)?);
                 agents.insert(agent_name, agent);
             }
         }

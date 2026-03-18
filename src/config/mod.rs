@@ -12,7 +12,7 @@ use std::collections::HashSet;
 
 use crate::{
     BabataResult,
-    agent::{Agent, babata::BabataAgent},
+    agent::{Agent, babata::BabataAgent, codex::CodexAgent},
     error::BabataError,
     memory::{Memory, SimpleMemory},
     utils::babata_dir,
@@ -107,6 +107,18 @@ impl Config {
             }
         }
 
+        let mut agent_names = HashSet::new();
+        for agent in &self.agents {
+            agent.validate()?;
+            let normalized_name = agent.name().to_string();
+            if !agent_names.insert(normalized_name) {
+                return Err(BabataError::config(format!(
+                    "Duplicate agent '{}' found in configuration",
+                    agent.name()
+                )));
+            }
+        }
+
         for channel in &self.channels {
             match channel {
                 ChannelConfig::Telegram(telegram) => telegram.validate()?,
@@ -148,6 +160,7 @@ impl Config {
             matches!(
                 (existing, &agent_config),
                 (AgentConfig::Babata(_), AgentConfig::Babata(_))
+                    | (AgentConfig::Codex(_), AgentConfig::Codex(_))
             )
         }) {
             *existing = agent_config;
@@ -184,6 +197,7 @@ impl Config {
             .iter()
             .find(|agent| match agent {
                 AgentConfig::Babata(_) => agent_name.eq_ignore_ascii_case(BabataAgent::name()),
+                AgentConfig::Codex(_) => agent_name.eq_ignore_ascii_case(CodexAgent::name()),
             })
             .ok_or_else(|| {
                 BabataError::config(format!("Agent '{}' not found in config", agent_name))
