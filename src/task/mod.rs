@@ -7,7 +7,8 @@ pub use manager::*;
 use serde::{Deserialize, Serialize};
 pub use store::*;
 
-use crate::{error::BabataError, message::Content};
+use crate::{BabataResult, error::BabataError, message::Content, utils::babata_dir};
+use std::path::PathBuf;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -61,4 +62,8 @@ impl std::str::FromStr for TaskStatus {
 pub enum TaskExitEvent {
     Completed { task_id: Uuid },
     Failed { task_id: Uuid, error: BabataError },
+}
+
+pub fn task_dir(task_id: Uuid) -> BabataResult<PathBuf> {
+    Ok(babata_dir()?.join("tasks").join(task_id.to_string()))
 }

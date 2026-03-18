@@ -46,6 +46,9 @@ Babata home is stored under the user's home directory: `{USER_HOME}/.babata/`. W
 
 ## Tasks
 - Each user prompt is executed asynchronously as a task.
+- Each task has its own task directory under `{BABATA_HOME}/tasks/<task_id>/`.
+- Maintain `{BABATA_HOME}/tasks/<task_id>/task.md` to describe what the task is and how it should be done.
+- Maintain `{BABATA_HOME}/tasks/<task_id>/progress.md` to describe the current task progress, important updates, and next steps.
 - Tasks may be short-lived, such as answering a question like "what's the weather", or long-running, such as creating a scheduled job.
 - When handling a long-running or scheduled task, keep the task alive until the next required action should happen.
 - When creating a scheduled task that needs to wait until the next trigger time, use the `sleep` tool to sleep until that time and continue after waking up.

@@ -9,7 +9,10 @@ use uuid::Uuid;
 use crate::{
     BabataResult,
     error::BabataError,
-    task::{TaskExitEvent, TaskRecord, TaskRequest, TaskStatus, TaskStore, launcher::TaskLauncher},
+    task::{
+        TaskExitEvent, TaskRecord, TaskRequest, TaskStatus, TaskStore, launcher::TaskLauncher,
+        task_dir,
+    },
 };
 
 pub struct TaskManager {
@@ -32,9 +35,11 @@ impl TaskManager {
         })
     }
 
-    pub fn start(self: &Arc<Self>) {
+    pub fn start(self: &Arc<Self>) -> BabataResult<()> {
         let Some(mut exit_rx) = self.exit_rx.lock().take() else {
-            return;
+            return Err(BabataError::internal(
+                "Task manager exit loop has already been started",
+            ));
         };
 
         let task_manager = Arc::clone(self);
@@ -43,6 +48,42 @@ impl TaskManager {
                 task_manager.handle_task_exit(event);
             }
         });
+
+        self.recover_running_tasks()?;
+        Ok(())
+    }
+
+    fn recover_running_tasks(&self) -> BabataResult<()> {
+        let tasks = self.store.list_tasks(Some(TaskStatus::Running), None)?;
+        if tasks.is_empty() {
+            info!("No running tasks to recover on startup");
+            return Ok(());
+        }
+
+        info!("Recovering {} running task(s) from task store", tasks.len());
+        for task in tasks {
+            if self.running_tasks.lock().contains_key(&task.task_id) {
+                info!(
+                    "Skipping recovery for task {} because it is already running",
+                    task.task_id
+                );
+                continue;
+            }
+
+            self.ensure_task_dir(task.task_id)?;
+            let request = TaskRequest {
+                prompt: task.prompt,
+                parent_task_id: task.parent_task_id,
+                agent: task.agent,
+            };
+            let running_task =
+                self.launcher
+                    .launch(task.task_id, &request, self.exit_tx.clone())?;
+            self.running_tasks.lock().insert(task.task_id, running_task);
+            info!("Recovered running task {}", task.task_id);
+        }
+
+        Ok(())
     }
 
     pub fn create_task(&self, request: TaskRequest) -> BabataResult<Uuid> {
@@ -65,6 +106,7 @@ impl TaskManager {
             root_task_id,
             created_at: Utc::now().timestamp_millis(),
         })?;
+        self.ensure_task_dir(task_id)?;
 
         let running_task = self
             .launcher
@@ -139,6 +181,7 @@ impl TaskManager {
 
         self.store
             .update_task_status(task_id, TaskStatus::Canceled)?;
+        self.remove_task_dir(task_id);
         Ok(())
     }
 
@@ -189,7 +232,9 @@ impl TaskManager {
                 "Failed to update status to done for task {}: {}",
                 task_id, err
             );
+            return;
         }
+        self.remove_task_dir(task_id);
     }
 
     fn handle_task_failed(&self, task_id: Uuid, error: BabataError) {
@@ -231,6 +276,43 @@ impl TaskManager {
             Err(err) => {
                 error!("Failed to relaunch task {} after failure: {}", task_id, err);
             }
+        }
+    }
+
+    fn ensure_task_dir(&self, task_id: Uuid) -> BabataResult<()> {
+        let task_dir = task_dir(task_id)?;
+        std::fs::create_dir_all(&task_dir).map_err(|err| {
+            BabataError::internal(format!(
+                "Failed to create task directory '{}': {}",
+                task_dir.display(),
+                err
+            ))
+        })
+    }
+
+    fn remove_task_dir(&self, task_id: Uuid) {
+        let task_dir = match task_dir(task_id) {
+            Ok(path) => path,
+            Err(err) => {
+                error!(
+                    "Failed to resolve task directory for task {} cleanup: {}",
+                    task_id, err
+                );
+                return;
+            }
+        };
+
+        if !task_dir.exists() {
+            return;
+        }
+
+        if let Err(err) = std::fs::remove_dir_all(&task_dir) {
+            error!(
+                "Failed to remove task directory '{}' for task {}: {}",
+                task_dir.display(),
+                task_id,
+                err
+            );
         }
     }
 }

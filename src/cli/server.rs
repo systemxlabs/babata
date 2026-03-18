@@ -106,7 +106,7 @@ fn run_serve() -> BabataResult<()> {
         .map_err(|err| BabataError::internal(format!("Failed to build Tokio runtime: {err}")))?;
 
     runtime.block_on(async move {
-        task_manager.start();
+        task_manager.start()?;
         start_channel_loops(channels, task_manager.clone());
 
         broadcast_service_started(&task_manager).await;

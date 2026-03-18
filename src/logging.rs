@@ -15,7 +15,7 @@ pub fn init() -> BabataResult<()> {
 
 fn init_file_logger() -> BabataResult<()> {
     let log_dir = babata_dir()?.join("logs");
-    let max_log_files = NonZeroUsize::new(1).expect("1 is non-zero");
+    let max_log_files = NonZeroUsize::new(7).expect("non-zero");
 
     let file = FileBuilder::new(log_dir, "babata")
         .layout(TextLayout::default().no_color())
