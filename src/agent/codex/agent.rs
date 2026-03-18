@@ -1,7 +1,12 @@
-use std::{path::PathBuf, process::Stdio};
+use std::{
+    fs::File,
+    path::{Path, PathBuf},
+    process::Stdio,
+};
 
 use log::info;
 use tokio::{io::AsyncWriteExt, process::Command};
+use uuid::Uuid;
 
 use crate::{
     BabataResult,
@@ -9,6 +14,7 @@ use crate::{
     config::{AgentConfig, CodexAgentConfig, Config},
     error::BabataError,
     message::Content,
+    task::task_dir,
 };
 
 #[derive(Debug, Clone)]
@@ -69,6 +75,15 @@ impl CodexAgent {
             prompt_text
         ))
     }
+
+    fn output_paths(&self, task_id: Uuid) -> BabataResult<CodexOutputPaths> {
+        let task_dir = task_dir(task_id)?;
+        Ok(CodexOutputPaths {
+            last_message: task_dir.join("codex-last-message.md"),
+            stdout: task_dir.join("codex-stdout.log"),
+            stderr: task_dir.join("codex-stderr.log"),
+        })
+    }
 }
 
 #[async_trait::async_trait]
@@ -83,6 +98,7 @@ impl Agent for CodexAgent {
 
     async fn execute(&self, task: AgentTask) -> BabataResult<()> {
         let prompt = self.build_prompt(&task)?;
+        let output_paths = self.output_paths(task.task_id)?;
         info!(
             "Executing task {} with Codex CLI in workspace {}",
             task.task_id,
@@ -97,17 +113,35 @@ impl Agent for CodexAgent {
             .arg("--skip-git-repo-check")
             .arg("--dangerously-bypass-approvals-and-sandbox")
             .arg("--color")
-            .arg("never");
+            .arg("never")
+            .arg("--output-last-message")
+            .arg(&output_paths.last_message)
+            .kill_on_drop(true);
 
         if let Some(model) = &self.model {
             command.arg("--model").arg(model);
         }
 
+        let stdout = File::create(&output_paths.stdout).map_err(|err| {
+            BabataError::internal(format!(
+                "Failed to create Codex stdout log '{}': {}",
+                output_paths.stdout.display(),
+                err
+            ))
+        })?;
+        let stderr = File::create(&output_paths.stderr).map_err(|err| {
+            BabataError::internal(format!(
+                "Failed to create Codex stderr log '{}': {}",
+                output_paths.stderr.display(),
+                err
+            ))
+        })?;
+
         command
             .arg("-")
             .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+            .stdout(Stdio::from(stdout))
+            .stderr(Stdio::from(stderr));
 
         let mut child = command.spawn().map_err(|err| {
             BabataError::internal(format!(
@@ -129,28 +163,33 @@ impl Agent for CodexAgent {
         stdin.shutdown().await.map_err(|err| {
             BabataError::internal(format!("Failed to close Codex CLI stdin: {}", err))
         })?;
+        drop(stdin);
 
-        let output = child.wait_with_output().await.map_err(|err| {
+        let status = child.wait().await.map_err(|err| {
             BabataError::internal(format!("Failed to wait for Codex CLI process: {}", err))
         })?;
 
-        if output.status.success() {
+        if status.success() {
             return Ok(());
         }
 
-        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
         let mut details = Vec::new();
-        if let Some(code) = output.status.code() {
+        if let Some(code) = status.code() {
             details.push(format!("exit code {code}"));
         } else {
             details.push("terminated by signal".to_string());
         }
-        if !stdout.is_empty() {
-            details.push(format!("stdout: {stdout}"));
+        let last_message = read_trimmed_file(&output_paths.last_message)?;
+        let stdout_log = read_trimmed_file(&output_paths.stdout)?;
+        let stderr_log = read_trimmed_file(&output_paths.stderr)?;
+        if !last_message.is_empty() {
+            details.push(format!("last message: {last_message}"));
         }
-        if !stderr.is_empty() {
-            details.push(format!("stderr: {stderr}"));
+        if !stdout_log.is_empty() {
+            details.push(format!("stdout log: {stdout_log}"));
+        }
+        if !stderr_log.is_empty() {
+            details.push(format!("stderr log: {stderr_log}"));
         }
 
         Err(BabataError::internal(format!(
@@ -158,6 +197,40 @@ impl Agent for CodexAgent {
             details.join(", ")
         )))
     }
+}
+
+#[derive(Debug)]
+struct CodexOutputPaths {
+    last_message: PathBuf,
+    stdout: PathBuf,
+    stderr: PathBuf,
+}
+
+fn read_trimmed_file(path: &Path) -> BabataResult<String> {
+    let content = match std::fs::read_to_string(path) {
+        Ok(content) => content,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(String::new()),
+        Err(err) => {
+            return Err(BabataError::internal(format!(
+                "Failed to read file '{}': {}",
+                path.display(),
+                err
+            )));
+        }
+    };
+
+    let trimmed = content.trim();
+    if trimmed.is_empty() {
+        return Ok(String::new());
+    }
+
+    const MAX_CHARS: usize = 4_000;
+    if trimmed.chars().count() <= MAX_CHARS {
+        return Ok(trimmed.to_string());
+    }
+
+    let truncated: String = trimmed.chars().take(MAX_CHARS).collect();
+    Ok(format!("{truncated}..."))
 }
 
 fn prompt_to_text(prompt: &[Content]) -> BabataResult<String> {
