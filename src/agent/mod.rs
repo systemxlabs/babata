@@ -21,6 +21,9 @@ pub trait Agent: Debug + Send + Sync {
     fn name() -> &'static str
     where
         Self: Sized;
+    fn description() -> &'static str
+    where
+        Self: Sized;
     async fn execute(&self, task: AgentTask) -> BabataResult<()>;
 }
 

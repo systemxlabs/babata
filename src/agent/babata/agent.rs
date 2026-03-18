@@ -62,6 +62,10 @@ impl Agent for BabataAgent {
         "babata"
     }
 
+    fn description() -> &'static str {
+        "Use for general tasks, task orchestration, task management, and simple scripting"
+    }
+
     async fn execute(&self, task: AgentTask) -> BabataResult<()> {
         let config = Config::load()?;
         let agent_config = config.get_agent(BabataAgent::name())?;

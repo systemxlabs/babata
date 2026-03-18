@@ -77,6 +77,10 @@ impl Agent for CodexAgent {
         "codex"
     }
 
+    fn description() -> &'static str {
+        "Use for code writing and code review tasks"
+    }
+
     async fn execute(&self, task: AgentTask) -> BabataResult<()> {
         let prompt = self.build_prompt(&task)?;
         info!(
