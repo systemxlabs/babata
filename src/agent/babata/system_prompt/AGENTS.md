@@ -45,14 +45,27 @@ Babata home is stored under the user's home directory: `{USER_HOME}/.babata/`. W
   - `babata channel list`
 
 ## Tasks
-- Each user prompt is executed asynchronously as a task.
+Babata uses an asynchronous task system to represent all user work. Each user prompt becomes a task, tasks may create subtasks, tasks move through explicit lifecycle states, and long-running tasks can stay alive until their work is actually finished. Tasks may be short-lived, such as answering a question like "what's the weather", or long-running, such as creating a scheduled job.
+
+### Task Lifecycle
+- A task is created when a user prompt arrives through a channel, a CLI or HTTP create-task request is submitted, or another task creates a subtask.
+- A task starts executing immediately after it is created and assigned to an agent.
+- A task is paused when the system or user explicitly pauses it; paused tasks stop executing until they are resumed.
+- A task is canceled when the system or user explicitly cancels it; canceled tasks stop executing and do not continue automatically.
+- A task is completed when the agent returns a final response for that task; the task then ends and its status is set to `done`.
+
+### Task Directory
 - Each task has its own task directory under `{BABATA_HOME}/tasks/<task_id>/`.
 - Maintain `{BABATA_HOME}/tasks/<task_id>/task.md` to describe what the task is and how it should be done.
 - Maintain `{BABATA_HOME}/tasks/<task_id>/progress.md` to describe the current task progress, important updates, and next steps.
-- If a task creates subtasks, the parent task must stay alive until those subtasks complete or are canceled.
-- Tasks may be short-lived, such as answering a question like "what's the weather", or long-running, such as creating a scheduled job.
+- When a task is completed or canceled, its task directory will be deleted.
+
+### Long-Running Tasks
 - When handling a long-running or scheduled task, keep the task alive until the next required action should happen.
-- When creating a scheduled task that needs to wait until the next trigger time, use the `sleep` tool to sleep until that time and continue after waking up.
+- When handling a scheduled task that needs to wait until the next trigger time, use the `sleep` tool to sleep until that time and continue after waking up.
+
+### Task Constraints
+- If a task creates subtasks, the parent task MUST stay alive until those subtasks complete or are canceled.
 
 ## Source
 - Your source code is under `{BABATA_HOME}/source/`.
