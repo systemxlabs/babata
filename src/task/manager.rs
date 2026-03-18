@@ -229,6 +229,14 @@ impl TaskManager {
             return;
         }
 
+        if self.has_unfinished_subtasks(task_id) {
+            info!(
+                "Deferring completion for task {} because it still has unfinished subtasks",
+                task_id
+            );
+            return;
+        }
+
         info!("Task {} completed successfully", task_id);
         if let Err(err) = self.store.update_task_status(task_id, TaskStatus::Done) {
             error!(
@@ -316,6 +324,21 @@ impl TaskManager {
                 task_id,
                 err
             );
+        }
+    }
+
+    fn has_unfinished_subtasks(&self, task_id: Uuid) -> bool {
+        match self.store.list_subtasks(task_id) {
+            Ok(subtasks) => subtasks
+                .into_iter()
+                .any(|task| !matches!(task.status, TaskStatus::Done | TaskStatus::Canceled)),
+            Err(err) => {
+                error!(
+                    "Failed to load subtasks for task {} while checking completion: {}",
+                    task_id, err
+                );
+                false
+            }
         }
     }
 }
