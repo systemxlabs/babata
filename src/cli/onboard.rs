@@ -2,16 +2,21 @@ use std::path::Path;
 
 use crate::{
     BabataResult,
-    agent::babata::{
-        AnthropicProvider, CustomProvider, DeepSeekProvider, KimiProvider, Model, MoonshotProvider,
-        OpenAIProvider, Provider,
+    agent::{
+        Agent,
+        babata::{
+            AnthropicProvider, BabataAgent, CustomProvider, DeepSeekProvider, KimiProvider, Model,
+            MoonshotProvider, OpenAIProvider, Provider,
+        },
+        codex::CodexAgent,
     },
     channel::{Channel, TelegramChannel},
     config::{
-        AgentConfig, AnthropicProviderConfig, BabataAgentConfig, ChannelConfig, CompatibleApi,
-        Config, CustomProviderConfig, DeepSeekProviderConfig, EmbeddingConfig, HybridMemoryConfig,
-        KimiProviderConfig, LocalEmbeddingConfig, MemoryConfig, MoonshotProviderConfig,
-        OpenAIProviderConfig, ProviderConfig, RemoteEmbeddingConfig, TelegramChannelConfig,
+        AgentConfig, AnthropicProviderConfig, BabataAgentConfig, ChannelConfig, CodexAgentConfig,
+        CompatibleApi, Config, CustomProviderConfig, DeepSeekProviderConfig, EmbeddingConfig,
+        HybridMemoryConfig, KimiProviderConfig, LocalEmbeddingConfig, MemoryConfig,
+        MoonshotProviderConfig, OpenAIProviderConfig, ProviderConfig, RemoteEmbeddingConfig,
+        TelegramChannelConfig,
     },
     error::BabataError,
 };
@@ -57,8 +62,8 @@ fn run_onboard() -> BabataResult<()> {
         config.upsert_memory(memory_config);
     }
 
-    if let Some(babata_agent_config) = prompt_babata_agent_setup(&config)? {
-        config.upsert_agent(AgentConfig::Babata(babata_agent_config));
+    if let Some(agent_config) = prompt_agent_setup(&config)? {
+        config.upsert_agent(agent_config);
     }
 
     if let Some(channel_config) = prompt_channel_setup()? {
@@ -266,14 +271,58 @@ fn prompt_custom_compatible_api() -> BabataResult<CompatibleApi> {
     ))
 }
 
-fn prompt_babata_agent_setup(config: &Config) -> BabataResult<Option<BabataAgentConfig>> {
-    let selection = prompt_line("Configure babata agent? (Press Enter to skip, or Y to continue)")?;
-    match selection.trim() {
-        "" | "N" | "n" | "no" => return Ok(None),
-        "Y" | "y" | "yes" => {}
-        _ => return Err(BabataError::config("Invalid selection")),
+fn prompt_agent_setup(config: &Config) -> BabataResult<Option<AgentConfig>> {
+    println!("Select agent:");
+    let agents = available_agent_names();
+    for (idx, agent) in agents.iter().enumerate() {
+        println!("{}. {}", idx + 1, agent);
+    }
+    println!("{}. skip", agents.len() + 1);
+
+    let selection = prompt_line(&format!(
+        "Choice (1-{}, or press Enter to skip)",
+        agents.len() + 1
+    ))?;
+    let selection = selection.trim();
+    if selection.is_empty() || selection.eq_ignore_ascii_case("skip") {
+        return Ok(None);
     }
 
+    let idx: usize = selection
+        .parse()
+        .map_err(|_| BabataError::config("Invalid agent selection"))?;
+    if idx == agents.len() + 1 {
+        return Ok(None);
+    }
+
+    let Some(agent_name) = agents.get(idx.saturating_sub(1)) else {
+        return Err(BabataError::config("Invalid agent selection"));
+    };
+
+    if agent_name == BabataAgent::name() {
+        let agent = prompt_babata_agent_setup(config)?;
+        return Ok(Some(AgentConfig::Babata(agent)));
+    }
+
+    if agent_name == CodexAgent::name() {
+        let agent = prompt_codex_agent_setup()?;
+        return Ok(Some(AgentConfig::Codex(agent)));
+    }
+
+    Err(BabataError::config(format!(
+        "Unsupported agent '{}'",
+        agent_name
+    )))
+}
+
+fn available_agent_names() -> Vec<String> {
+    vec![
+        BabataAgent::name().to_string(),
+        CodexAgent::name().to_string(),
+    ]
+}
+
+fn prompt_babata_agent_setup(config: &Config) -> BabataResult<BabataAgentConfig> {
     if config.providers.is_empty() {
         return Err(BabataError::config(
             "No providers configured; cannot set main agent",
@@ -308,11 +357,41 @@ fn prompt_babata_agent_setup(config: &Config) -> BabataResult<Option<BabataAgent
         })?;
     let model = prompt_model_setup(provider_config)?;
     let memory = prompt_agent_memory_setup(config)?;
-    Ok(Some(BabataAgentConfig {
+    Ok(BabataAgentConfig {
         provider: provider_name.to_string(),
         model,
         memory,
-    }))
+    })
+}
+
+fn prompt_codex_agent_setup() -> BabataResult<CodexAgentConfig> {
+    let command = prompt_line("Codex command (press Enter for default 'codex')")?;
+    let workspace = prompt_line("Codex workspace directory")?;
+    let model_raw = prompt_line("Codex model (press Enter to use Codex CLI default)")?;
+
+    let command = if command.trim().is_empty() {
+        "codex".to_string()
+    } else {
+        command.trim().to_string()
+    };
+    let workspace = workspace.trim().to_string();
+    if workspace.is_empty() {
+        return Err(BabataError::config(
+            "Codex workspace directory cannot be empty",
+        ));
+    }
+
+    let model = if model_raw.trim().is_empty() {
+        None
+    } else {
+        Some(model_raw.trim().to_string())
+    };
+
+    Ok(CodexAgentConfig {
+        command,
+        workspace,
+        model,
+    })
 }
 
 fn prompt_model_setup(provider_config: &ProviderConfig) -> BabataResult<String> {
