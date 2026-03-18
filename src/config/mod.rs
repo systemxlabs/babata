@@ -118,6 +118,12 @@ impl Config {
                 )));
             }
         }
+        if !agent_names.contains(BabataAgent::name()) {
+            return Err(BabataError::config(format!(
+                "Configuration must include agent '{}'",
+                BabataAgent::name()
+            )));
+        }
 
         for channel in &self.channels {
             match channel {
@@ -211,5 +217,43 @@ impl Config {
             .ok_or_else(|| {
                 BabataError::config(format!("Provider '{}' not found in config", provider_name))
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn babata_agent() -> AgentConfig {
+        AgentConfig::Babata(BabataAgentConfig {
+            provider: "openai".to_string(),
+            model: "gpt-4.1".to_string(),
+            memory: "simple".to_string(),
+        })
+    }
+
+    #[test]
+    fn validate_requires_babata_agent() {
+        let config = Config {
+            providers: Vec::new(),
+            agents: Vec::new(),
+            channels: Vec::new(),
+            memory: Vec::new(),
+        };
+
+        let err = config.validate().expect_err("validate should fail");
+        assert!(err.to_string().contains("must include agent 'babata'"));
+    }
+
+    #[test]
+    fn validate_accepts_config_with_babata_agent() {
+        let config = Config {
+            providers: Vec::new(),
+            agents: vec![babata_agent()],
+            channels: Vec::new(),
+            memory: Vec::new(),
+        };
+
+        config.validate().expect("validate should succeed");
     }
 }
