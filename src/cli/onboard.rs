@@ -32,11 +32,6 @@ use rust_embed::RustEmbed;
 #[exclude = "*.exe"]
 struct EmbeddedProject;
 
-const EMBEDDED_SYSTEM_PROMPTS: &[(&str, &str)] = &[
-    ("AGENTS.md", include_str!("../../system_prompts/AGENTS.md")),
-    ("SOUL.md", include_str!("../../system_prompts/SOUL.md")),
-];
-
 const EMBEDDED_MACOS_SERVICE_TEMPLATE: &str =
     include_str!("../../services/babata.server.plist.template");
 const EMBEDDED_LINUX_SERVICE_TEMPLATE: &str =
@@ -92,18 +87,10 @@ fn run_onboard() -> BabataResult<()> {
 fn ensure_default_directories() -> BabataResult<()> {
     let base = crate::utils::babata_dir()?;
     let workspace = base.join("workspace");
-    let system_prompts_dir = base.join("system_prompts");
     let source_dir = base.join("source");
 
-    ensure_directory_if_missing(&system_prompts_dir)?;
-    println!("Created directory {}", system_prompts_dir.display());
     ensure_directory_if_missing(&workspace)?;
     println!("Created directory {}", workspace.display());
-
-    for (file_name, content) in EMBEDDED_SYSTEM_PROMPTS {
-        let target = system_prompts_dir.join(file_name);
-        overwrite_embedded_file(&target, content, "system prompt")?;
-    }
 
     // Clean and write embedded project source to disk
     remove_dir_all_if_exists(&source_dir)?;
@@ -177,30 +164,6 @@ fn remove_dir_all_if_exists(path: &Path) -> BabataResult<()> {
         })?;
         println!("Removed directory {}", path.display());
     }
-    Ok(())
-}
-
-fn overwrite_embedded_file(path: &Path, content: &str, kind: &str) -> BabataResult<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|err| {
-            BabataError::config(format!(
-                "Failed to create parent directory '{}' for {}: {}",
-                parent.display(),
-                kind,
-                err
-            ))
-        })?;
-    }
-
-    std::fs::write(path, content).map_err(|err| {
-        BabataError::config(format!(
-            "Failed to write {} file '{}': {}",
-            kind,
-            path.display(),
-            err
-        ))
-    })?;
-    println!("Overwrote default {} {}", kind, path.display());
     Ok(())
 }
 

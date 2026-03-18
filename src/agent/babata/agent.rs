@@ -9,7 +9,7 @@ use crate::{
         Agent, AgentTask,
         babata::{
             GenerationRequest, Provider, Tool, ToolContext, ToolSpec, build_system_prompt,
-            build_tools, create_provider, load_skills, load_system_prompt_files,
+            build_tools, create_provider, load_skills,
         },
     },
     channel::Channel,
@@ -80,12 +80,11 @@ impl Agent for BabataAgent {
         let provider = create_provider(provider_config)?;
         let model = babata_config.model.clone();
 
-        let system_prompt_files = load_system_prompt_files()?;
         let skills = load_skills()?;
 
         let tool_specs = self.collect_tool_specs();
 
-        let system_prompt = build_system_prompt(&system_prompt_files, &skills)?;
+        let system_prompt = build_system_prompt(&skills)?;
 
         let crate::agent::AgentTask {
             task_id,

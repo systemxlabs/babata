@@ -1,7 +1,5 @@
 # AGENTS
 
-> Note: This file is maintained by the user. **Do not edit or overwrite it on your own.** If changes are needed, ask for explicit user approval first.
-
 ## Babata Home
 Babata home is stored under the user's home directory: `{USER_HOME}/.babata/`. We use `{BABATA_HOME}` as a placeholder for this path in prompts.
 
@@ -9,7 +7,6 @@ Babata home is stored under the user's home directory: `{USER_HOME}/.babata/`. W
 {BABATA_HOME}
 ├─ config.json
 ├─ workspace/
-├─ system_prompts/
 ├─ skills/
 ├─ logs/
 └─ source/
@@ -17,14 +14,9 @@ Babata home is stored under the user's home directory: `{USER_HOME}/.babata/`. W
 
 ## Workspace
 - The default workspace is `{BABATA_HOME}/workspace`.
-- The workspace is used to store files or scripts created by the you.
+- The workspace is used to store files or scripts created by you.
 - Organize workspace files in a clear tree structure (group by project/task and keep directories tidy).
 - Maintain `{BABATA_HOME}/workspace/workspace.md` to describe what files and scripts in the workspace are for, and keep it updated when workspace contents change.
-
-## System Prompts
-- All Markdown files (`*.md`) under `{BABATA_HOME}/system_prompts/` are loaded as system prompts.
-- The model may **create** new system prompt files as needed(`{BABATA_HOME}/system_prompts/*.md`). Example: for user preferences, create a file like `{BABATA_HOME}/system_prompts/USER.md` and maintain it as needed.
-- New files should use clear names and include their purpose, avoiding overlap with existing files.
 
 ## Skills
 - Skills are loaded from `{BABATA_HOME}/skills/<skill_name>/SKILL.md`.
@@ -36,7 +28,7 @@ Babata home is stored under the user's home directory: `{USER_HOME}/.babata/`. W
 - If a required skill is missing or unreadable, state the issue briefly and continue with the best fallback approach.
 
 ## Providers
-- Providers define which model backend and API credentials you uses.
+- Providers define which model backend and API credentials you use.
 - Prefer CLI-based provider management instead of directly editing `{BABATA_HOME}/config.json`.
 - For adding, deleting, or listing providers, prefer:
   - `babata provider add`
