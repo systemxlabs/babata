@@ -9,6 +9,7 @@ use uuid::Uuid;
 use crate::{
     BabataResult,
     error::BabataError,
+    message::Content,
     task::{
         TaskExitEvent, TaskRecord, TaskRequest, TaskStatus, TaskStore, launcher::TaskLauncher,
         task_dir,
@@ -72,7 +73,6 @@ impl TaskManager {
                 continue;
             }
 
-            ensure_task_dir(task.task_id)?;
             let running_task = self.launcher.launch(&task, self.exit_tx.clone())?;
             self.running_tasks.lock().insert(task.task_id, running_task);
             info!("Recovered running task {}", task.task_id);
@@ -101,8 +101,8 @@ impl TaskManager {
             root_task_id,
             created_at: Utc::now().timestamp_millis(),
         };
+        initialize_task_dir(&task_record)?;
         self.store.insert_task(task_record.clone())?;
-        ensure_task_dir(task_id)?;
 
         let running_task = self.launcher.launch(&task_record, self.exit_tx.clone())?;
         {
@@ -339,6 +339,60 @@ fn ensure_task_dir(task_id: Uuid) -> BabataResult<()> {
     })
 }
 
+fn initialize_task_dir(task: &TaskRecord) -> BabataResult<()> {
+    ensure_task_dir(task.task_id)?;
+
+    let task_dir = task_dir(task.task_id)?;
+    let task_md_path = task_dir.join("task.md");
+    let progress_md_path = task_dir.join("progress.md");
+    let prompt = render_prompt_markdown(&task.prompt);
+    let agent = task.agent.as_deref().unwrap_or("babata");
+    let task_markdown = format!(
+        r#"# Task
+
+## Metadata
+- Task ID: {}
+- Root Task ID: {}
+- Parent Task ID: {}
+- Agent: {}
+- Status: {}
+
+## Initial Prompt
+{}
+"#,
+        task.task_id,
+        task.root_task_id,
+        task.parent_task_id
+            .map(|task_id| task_id.to_string())
+            .unwrap_or_else(|| "none".to_string()),
+        agent,
+        task.status,
+        prompt
+    );
+    let progress_markdown = r#"# Progress
+
+- Status: running
+- Updates: task created
+"#
+    .to_string();
+
+    std::fs::write(&task_md_path, task_markdown).map_err(|err| {
+        BabataError::internal(format!(
+            "Failed to write task file '{}': {}",
+            task_md_path.display(),
+            err
+        ))
+    })?;
+    std::fs::write(&progress_md_path, progress_markdown).map_err(|err| {
+        BabataError::internal(format!(
+            "Failed to write progress file '{}': {}",
+            progress_md_path.display(),
+            err
+        ))
+    })?;
+    Ok(())
+}
+
 fn remove_task_dir(task_id: Uuid) {
     let task_dir = match task_dir(task_id) {
         Ok(path) => path,
@@ -362,5 +416,23 @@ fn remove_task_dir(task_id: Uuid) {
             task_id,
             err
         );
+    }
+}
+
+fn render_prompt_markdown(prompt: &[Content]) -> String {
+    let lines = prompt
+        .iter()
+        .map(|content| match content {
+            Content::Text { text } => text.clone(),
+            Content::ImageUrl { url } => format!("- [image] {url}"),
+            Content::ImageData { media_type, .. } => format!("- [image_data] {media_type}"),
+            Content::AudioData { media_type, .. } => format!("- [audio_data] {media_type}"),
+        })
+        .collect::<Vec<_>>();
+
+    if lines.is_empty() {
+        "_No prompt provided._".to_string()
+    } else {
+        lines.join("\n\n")
     }
 }

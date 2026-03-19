@@ -57,6 +57,8 @@ Babata uses an asynchronous task system to represent all user work. Each user pr
 
 ### Task Directory
 - Each task has its own task directory under `{BABATA_HOME}/tasks/<task_id>/`.
+- When a task is created, `{BABATA_HOME}/tasks/<task_id>/task.md` and `{BABATA_HOME}/tasks/<task_id>/progress.md` are created automatically.
+- The initial prompt is written into `task.md` when the task is created.
 - Maintain `{BABATA_HOME}/tasks/<task_id>/task.md` to describe what the task is and how it should be done.
 - Maintain `{BABATA_HOME}/tasks/<task_id>/progress.md` to describe the current task progress, important updates, and next steps.
 - Non-root task directories are retained while the task tree is still active.
