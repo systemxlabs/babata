@@ -72,7 +72,7 @@ impl TaskManager {
                 continue;
             }
 
-            self.ensure_task_dir(task.task_id)?;
+            ensure_task_dir(task.task_id)?;
             let running_task = self.launcher.launch(&task, self.exit_tx.clone())?;
             self.running_tasks.lock().insert(task.task_id, running_task);
             info!("Recovered running task {}", task.task_id);
@@ -102,7 +102,7 @@ impl TaskManager {
             created_at: Utc::now().timestamp_millis(),
         };
         self.store.insert_task(task_record.clone())?;
-        self.ensure_task_dir(task_id)?;
+        ensure_task_dir(task_id)?;
 
         let running_task = self.launcher.launch(&task_record, self.exit_tx.clone())?;
         {
@@ -227,7 +227,9 @@ impl TaskManager {
             );
             return;
         }
-        self.remove_task_dir(task_id);
+        if task.task_id == task.root_task_id {
+            self.remove_task_dir_recursive(task_id);
+        }
     }
 
     fn handle_task_failed(&self, task_id: Uuid, error: BabataError) {
@@ -263,43 +265,6 @@ impl TaskManager {
         }
     }
 
-    fn ensure_task_dir(&self, task_id: Uuid) -> BabataResult<()> {
-        let task_dir = task_dir(task_id)?;
-        std::fs::create_dir_all(&task_dir).map_err(|err| {
-            BabataError::internal(format!(
-                "Failed to create task directory '{}': {}",
-                task_dir.display(),
-                err
-            ))
-        })
-    }
-
-    fn remove_task_dir(&self, task_id: Uuid) {
-        let task_dir = match task_dir(task_id) {
-            Ok(path) => path,
-            Err(err) => {
-                error!(
-                    "Failed to resolve task directory for task {} cleanup: {}",
-                    task_id, err
-                );
-                return;
-            }
-        };
-
-        if !task_dir.exists() {
-            return;
-        }
-
-        if let Err(err) = std::fs::remove_dir_all(&task_dir) {
-            error!(
-                "Failed to remove task directory '{}' for task {}: {}",
-                task_dir.display(),
-                task_id,
-                err
-            );
-        }
-    }
-
     fn remove_task_dir_recursive(&self, task_id: Uuid) {
         let subtasks = match self.store.list_subtasks(task_id) {
             Ok(subtasks) => subtasks,
@@ -316,7 +281,7 @@ impl TaskManager {
             self.remove_task_dir_recursive(subtask.task_id);
         }
 
-        self.remove_task_dir(task_id);
+        remove_task_dir(task_id);
     }
 
     fn has_unfinished_subtasks(&self, task_id: Uuid) -> bool {
@@ -361,4 +326,41 @@ impl TaskManager {
 pub struct RunningTask {
     pub task_id: Uuid,
     pub handle: JoinHandle<()>,
+}
+
+fn ensure_task_dir(task_id: Uuid) -> BabataResult<()> {
+    let task_dir = task_dir(task_id)?;
+    std::fs::create_dir_all(&task_dir).map_err(|err| {
+        BabataError::internal(format!(
+            "Failed to create task directory '{}': {}",
+            task_dir.display(),
+            err
+        ))
+    })
+}
+
+fn remove_task_dir(task_id: Uuid) {
+    let task_dir = match task_dir(task_id) {
+        Ok(path) => path,
+        Err(err) => {
+            error!(
+                "Failed to resolve task directory for task {} cleanup: {}",
+                task_id, err
+            );
+            return;
+        }
+    };
+
+    if !task_dir.exists() {
+        return;
+    }
+
+    if let Err(err) = std::fs::remove_dir_all(&task_dir) {
+        error!(
+            "Failed to remove task directory '{}' for task {}: {}",
+            task_dir.display(),
+            task_id,
+            err
+        );
+    }
 }

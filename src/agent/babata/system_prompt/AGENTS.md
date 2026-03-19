@@ -59,7 +59,8 @@ Babata uses an asynchronous task system to represent all user work. Each user pr
 - Each task has its own task directory under `{BABATA_HOME}/tasks/<task_id>/`.
 - Maintain `{BABATA_HOME}/tasks/<task_id>/task.md` to describe what the task is and how it should be done.
 - Maintain `{BABATA_HOME}/tasks/<task_id>/progress.md` to describe the current task progress, important updates, and next steps.
-- When a task is completed or canceled, its task directory will be deleted.
+- Non-root task directories are retained while the task tree is still active.
+- When a root task is completed or canceled, the task directories for the whole task tree will be deleted recursively.
 
 ### Long-Running Tasks
 - When handling a long-running or scheduled task, keep the task alive until the next required action should happen.
