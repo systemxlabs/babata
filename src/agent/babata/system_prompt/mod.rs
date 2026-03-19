@@ -20,7 +20,7 @@ pub fn build_system_prompts(config: &Config, skills: &[Skill]) -> BabataResult<V
         .map(|section| (*section).to_string())
         .collect::<Vec<_>>();
     sections.push(build_runtime_prompt()?);
-    sections.push(build_agents_prompt(config)?);
+    sections.push(build_agents_prompt(config));
 
     if let Some(workspace_prompt) = load_workspace_prompt()? {
         sections.push(workspace_prompt);
@@ -52,37 +52,23 @@ pub fn build_runtime_prompt() -> BabataResult<String> {
     ))
 }
 
-pub fn build_agents_prompt(config: &Config) -> BabataResult<String> {
+pub fn build_agents_prompt(config: &Config) -> String {
     let mut agent_sections = Vec::with_capacity(config.agents.len());
     for agent in &config.agents {
-        let config_json = serde_json::to_string_pretty(agent).map_err(|err| {
-            BabataError::config(format!(
-                "Failed to serialize agent config '{}' for prompt: {}",
-                agent.name(),
-                err
-            ))
-        });
-
         agent_sections.push(format!(
-            r#"### Agent `{}`
-Description: {}
-
-Config:
-```json
-{}
-```"#,
+            "- `{}`: {}",
             agent.name(),
             agent_description(agent),
-            config_json?
         ));
     }
 
-    Ok(format!(
-        r#"Configured task agents:
+    format!(
+        r#"Configured agents:
+{}
 
-{}"#,
-        agent_sections.join("\n\n")
-    ))
+You can chose an agent from the list above to use for tasks."#,
+        agent_sections.join("\n")
+    )
 }
 
 pub fn build_skills_prompt(skills: &[Skill]) -> Option<String> {
@@ -200,7 +186,7 @@ mod tests {
             memory: Vec::new(),
         };
 
-        let prompt = build_agents_prompt(&config).expect("build agents prompt");
+        let prompt = build_agents_prompt(&config);
 
         assert!(prompt.contains("Configured task agents:"));
         assert!(prompt.contains("Agent `babata`"));
