@@ -73,14 +73,7 @@ impl TaskManager {
             }
 
             self.ensure_task_dir(task.task_id)?;
-            let request = TaskRequest {
-                prompt: task.prompt,
-                parent_task_id: task.parent_task_id,
-                agent: task.agent,
-            };
-            let running_task =
-                self.launcher
-                    .launch(task.task_id, &request, self.exit_tx.clone())?;
+            let running_task = self.launcher.launch(&task, self.exit_tx.clone())?;
             self.running_tasks.lock().insert(task.task_id, running_task);
             info!("Recovered running task {}", task.task_id);
         }
@@ -99,7 +92,7 @@ impl TaskManager {
             task_id
         };
 
-        self.store.insert_task(TaskRecord {
+        let task_record = TaskRecord {
             task_id,
             prompt: request.prompt.clone(),
             agent: request.agent.clone(),
@@ -107,12 +100,11 @@ impl TaskManager {
             parent_task_id: request.parent_task_id,
             root_task_id,
             created_at: Utc::now().timestamp_millis(),
-        })?;
+        };
+        self.store.insert_task(task_record.clone())?;
         self.ensure_task_dir(task_id)?;
 
-        let running_task = self
-            .launcher
-            .launch(task_id, &request, self.exit_tx.clone())?;
+        let running_task = self.launcher.launch(&task_record, self.exit_tx.clone())?;
         {
             let mut guard = self.running_tasks.lock();
             guard.insert(task_id, running_task);
@@ -149,14 +141,7 @@ impl TaskManager {
             )));
         }
 
-        let request = TaskRequest {
-            prompt: task.prompt,
-            parent_task_id: task.parent_task_id,
-            agent: task.agent,
-        };
-        let running_task = self
-            .launcher
-            .launch(task_id, &request, self.exit_tx.clone())?;
+        let running_task = self.launcher.launch(&task, self.exit_tx.clone())?;
         {
             let mut guard = self.running_tasks.lock();
             guard.insert(task_id, running_task);
@@ -271,16 +256,7 @@ impl TaskManager {
         }
 
         warn!("Task {} failed and will be relaunched: {}", task_id, error);
-        let request = TaskRequest {
-            prompt: task.prompt,
-            parent_task_id: task.parent_task_id,
-            agent: task.agent,
-        };
-
-        match self
-            .launcher
-            .launch(task_id, &request, self.exit_tx.clone())
-        {
+        match self.launcher.launch(&task, self.exit_tx.clone()) {
             Ok(running_task) => {
                 self.running_tasks.lock().insert(task_id, running_task);
             }
