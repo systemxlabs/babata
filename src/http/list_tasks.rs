@@ -23,7 +23,7 @@ pub(super) async fn handle(
 
     match state
         .task_manager
-        .list_tasks(status, query.limit, query.offset)
+        .list_tasks(status, Some(query.limit), query.offset)
     {
         Ok(tasks) => Json(ListTasksResponse::from_records(tasks)).into_response(),
         Err(err) => ApiError::from_babata_error(err).into_response(),
@@ -34,8 +34,7 @@ pub(super) async fn handle(
 pub(super) struct ListTasksQuery {
     #[serde(default)]
     status: Option<String>,
-    #[serde(default)]
-    limit: Option<usize>,
+    limit: usize,
     #[serde(default)]
     offset: Option<usize>,
 }

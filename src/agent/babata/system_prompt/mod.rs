@@ -14,12 +14,13 @@ use crate::{
 
 const BASE_SYSTEM_PROMPTS: &[&str] = &[include_str!("SYSTEM.md"), include_str!("SOUL.md")];
 
-pub fn build_system_prompts(skills: &[Skill]) -> BabataResult<Vec<String>> {
+pub fn build_system_prompts(config: &Config, skills: &[Skill]) -> BabataResult<Vec<String>> {
     let mut sections = BASE_SYSTEM_PROMPTS
         .iter()
         .map(|section| (*section).to_string())
         .collect::<Vec<_>>();
     sections.push(build_runtime_prompt()?);
+    sections.push(build_agents_prompt(config)?);
 
     if let Some(workspace_prompt) = load_workspace_prompt()? {
         sections.push(workspace_prompt);
@@ -158,13 +159,25 @@ mod tests {
     }
 
     #[test]
-    fn build_system_prompts_includes_base_sections_and_runtime() {
-        let prompts = build_system_prompts(&[]).expect("build system prompts");
+    fn build_system_prompts_includes_base_sections_runtime_and_agents() {
+        let config = Config {
+            providers: Vec::new(),
+            agents: vec![AgentConfig::Babata(BabataAgentConfig {
+                provider: "openai".to_string(),
+                model: "gpt-4.1".to_string(),
+                memory: "simple".to_string(),
+            })],
+            channels: Vec::new(),
+            memory: Vec::new(),
+        };
 
-        assert_eq!(prompts.len(), 3);
+        let prompts = build_system_prompts(&config, &[]).expect("build system prompts");
+
+        assert_eq!(prompts.len(), 4);
         assert!(prompts[0].contains("# AGENTS") || prompts[0].contains("# SYSTEM"));
         assert!(prompts[1].contains("Be genuinely helpful"));
         assert!(prompts[2].contains("Runtime context:"));
+        assert!(prompts[3].contains("Configured task agents:"));
     }
 
     #[test]

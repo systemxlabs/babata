@@ -84,7 +84,7 @@ impl Agent for BabataAgent {
 
         let tool_specs = self.collect_tool_specs();
 
-        let system_prompts = build_system_prompts(&skills)?;
+        let system_prompts = build_system_prompts(&config, &skills)?;
 
         let crate::agent::AgentTask {
             task_id,
