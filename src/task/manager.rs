@@ -162,13 +162,10 @@ impl TaskManager {
             )));
         }
 
-        if let Some(running_task) = self.running_tasks.lock().remove(&task_id) {
-            running_task.handle.abort();
+        self.cancel_task_recursive(task_id)?;
+        if task.task_id == task.root_task_id {
+            self.remove_task_dir_recursive(task_id);
         }
-
-        self.store
-            .update_task_status(task_id, TaskStatus::Canceled)?;
-        self.remove_task_dir(task_id);
         Ok(())
     }
 
@@ -303,6 +300,25 @@ impl TaskManager {
         }
     }
 
+    fn remove_task_dir_recursive(&self, task_id: Uuid) {
+        let subtasks = match self.store.list_subtasks(task_id) {
+            Ok(subtasks) => subtasks,
+            Err(err) => {
+                error!(
+                    "Failed to load subtasks for task {} while cleaning task tree directories: {}",
+                    task_id, err
+                );
+                return;
+            }
+        };
+
+        for subtask in subtasks {
+            self.remove_task_dir_recursive(subtask.task_id);
+        }
+
+        self.remove_task_dir(task_id);
+    }
+
     fn has_unfinished_subtasks(&self, task_id: Uuid) -> bool {
         match self.store.list_subtasks(task_id) {
             Ok(subtasks) => subtasks
@@ -316,6 +332,28 @@ impl TaskManager {
                 false
             }
         }
+    }
+
+    fn cancel_task_recursive(&self, task_id: Uuid) -> BabataResult<()> {
+        let task = self.store.get_task(task_id)?;
+        let subtasks = self.store.list_subtasks(task_id)?;
+
+        for subtask in subtasks {
+            self.cancel_task_recursive(subtask.task_id)?;
+        }
+
+        if matches!(task.status, TaskStatus::Done | TaskStatus::Canceled) {
+            return Ok(());
+        }
+
+        info!("Cancelling task {} recursively", task_id);
+        if let Some(running_task) = self.running_tasks.lock().remove(&task_id) {
+            running_task.handle.abort();
+        }
+
+        self.store
+            .update_task_status(task_id, TaskStatus::Canceled)?;
+        Ok(())
     }
 }
 

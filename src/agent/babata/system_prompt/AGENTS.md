@@ -52,6 +52,7 @@ Babata uses an asynchronous task system to represent all user work. Each user pr
 - A task starts executing immediately after it is created and assigned to an agent.
 - A task is paused when the system or user explicitly pauses it; paused tasks stop executing until they are resumed.
 - A task is canceled when the system or user explicitly cancels it; canceled tasks stop executing and do not continue automatically.
+- Canceling a task recursively cancels all of its subtasks that are not already completed or canceled.
 - A task is completed when the agent returns a final response for that task; the task then ends and its status is set to `done`.
 
 ### Task Directory
