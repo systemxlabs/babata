@@ -11,10 +11,12 @@ use crate::{BabataResult, error::BabataError, message::Content, utils::babata_di
 use std::path::PathBuf;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct TaskRequest {
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CreateTaskRequest {
     pub prompt: Vec<Content>,
+    #[serde(default)]
     pub parent_task_id: Option<Uuid>,
+    #[serde(default)]
     pub agent: Option<String>,
 }
 

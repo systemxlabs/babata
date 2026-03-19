@@ -14,7 +14,7 @@ use crate::{
     message::Content,
 };
 use crate::{
-    task::{TaskLauncher, TaskManager, TaskRequest},
+    task::{CreateTaskRequest, TaskLauncher, TaskManager},
     utils::babata_dir,
 };
 
@@ -132,7 +132,7 @@ async fn broadcast_service_started(task_manager: &Arc<TaskManager>) {
         text: format!("Send below notification to each channel: \n{notification}"),
     };
 
-    let task = TaskRequest {
+    let task = CreateTaskRequest {
         prompt: vec![prompt],
         parent_task_id: None,
         agent: None,

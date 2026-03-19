@@ -10,7 +10,7 @@ use crate::{
     BabataResult,
     config::{ChannelConfig, Config},
     message::Content,
-    task::{TaskManager, TaskRequest},
+    task::{CreateTaskRequest, TaskManager},
 };
 use log::{error, info, warn};
 
@@ -64,7 +64,7 @@ pub fn start_channel_loops(
                             let mut prompt = vec![Content::Text { text: "Your user send you message from telegram, the message content is below:".to_string() }];
                             prompt.extend(content);
 
-                            let task = TaskRequest {
+                            let task = CreateTaskRequest {
                                 prompt,
                                 parent_task_id: None,
                                 agent: None,

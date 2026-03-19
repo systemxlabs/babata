@@ -1,13 +1,14 @@
 use chrono::{Local, TimeZone};
 use comfy_table::{ContentArrangement, Table, presets::ASCII_MARKDOWN};
 use reqwest::Client;
-use serde_json::json;
+use uuid::Uuid;
 
 use crate::{
     BabataResult,
     error::BabataError,
     http::{DEFAULT_HTTP_BASE_URL, ListTasksResponse, TaskResponse},
     message::Content,
+    task::CreateTaskRequest,
 };
 
 pub fn pause(task_id: &str) {
@@ -87,13 +88,25 @@ fn run_create(prompt: &str, agent: Option<&str>, parent_task_id: Option<&str>) -
 
     let runtime = build_runtime()?;
     runtime.block_on(async move {
+        let parent_task_id = match parent_task_id {
+            Some(parent_task_id) => Some(Uuid::parse_str(parent_task_id).map_err(|err| {
+                BabataError::config(format!(
+                    "Invalid parent_task_id '{}': {}",
+                    parent_task_id, err
+                ))
+            })?),
+            None => None,
+        };
+        let request = CreateTaskRequest {
+            prompt: vec![Content::Text {
+                text: prompt.to_string(),
+            }],
+            agent: agent.map(ToOwned::to_owned),
+            parent_task_id,
+        };
         let response = Client::new()
             .post(format!("{DEFAULT_HTTP_BASE_URL}/tasks"))
-            .json(&json!({
-                "prompt": prompt,
-                "agent": agent,
-                "parent_task_id": parent_task_id,
-            }))
+            .json(&request)
             .send()
             .await
             .map_err(|err| {

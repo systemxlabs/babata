@@ -11,8 +11,8 @@ use crate::{
     error::BabataError,
     message::Content,
     task::{
-        TaskExitEvent, TaskRecord, TaskRequest, TaskStatus, TaskStore, launcher::TaskLauncher,
-        task_dir,
+        CreateTaskRequest, TaskExitEvent, TaskRecord, TaskStatus, TaskStore,
+        launcher::TaskLauncher, task_dir,
     },
 };
 
@@ -81,7 +81,7 @@ impl TaskManager {
         Ok(())
     }
 
-    pub fn create_task(&self, request: TaskRequest) -> BabataResult<Uuid> {
+    pub fn create_task(&self, request: CreateTaskRequest) -> BabataResult<Uuid> {
         let task_id = Uuid::new_v4();
         info!("Creating task {} with request: {:?}", task_id, request);
 

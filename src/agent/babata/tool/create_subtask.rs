@@ -6,6 +6,8 @@ use crate::{
     agent::babata::{Tool, ToolContext, ToolSpec},
     error::BabataError,
     http::DEFAULT_HTTP_BASE_URL,
+    message::Content,
+    task::CreateTaskRequest,
 };
 
 #[derive(Debug)]
@@ -58,11 +60,13 @@ impl Tool for CreateSubtaskTool {
             return Err(BabataError::tool("prompt cannot be empty"));
         }
 
-        let request_body = json!({
-            "prompt": prompt,
-            "agent": args["agent"].as_str(),
-            "parent_task_id": context.task_id,
-        });
+        let request_body = CreateTaskRequest {
+            prompt: vec![Content::Text {
+                text: prompt.to_string(),
+            }],
+            agent: args["agent"].as_str().map(ToOwned::to_owned),
+            parent_task_id: Some(*context.task_id),
+        };
 
         let response = self
             .http_client
