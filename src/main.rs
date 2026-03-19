@@ -41,6 +41,9 @@ fn main() {
             babata::cli::TaskAction::Pause { task_id } => babata::cli::task::pause(&task_id),
             babata::cli::TaskAction::Resume { task_id } => babata::cli::task::resume(&task_id),
             babata::cli::TaskAction::Cancel { task_id } => babata::cli::task::cancel(&task_id),
+            babata::cli::TaskAction::Relaunch { task_id, reason } => {
+                babata::cli::task::relaunch(&task_id, &reason)
+            }
             babata::cli::TaskAction::Create {
                 prompt,
                 agent,

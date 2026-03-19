@@ -135,6 +135,13 @@ pub enum TaskAction {
         #[arg(value_name = "TASK_ID", help = "Task UUID")]
         task_id: String,
     },
+    #[command(about = "Relaunch a running task by id")]
+    Relaunch {
+        #[arg(value_name = "TASK_ID", help = "Task UUID")]
+        task_id: String,
+        #[arg(long, value_name = "REASON", help = "Relaunch reason")]
+        reason: String,
+    },
     #[command(about = "Create a task")]
     Create {
         #[arg(long, value_name = "PROMPT", help = "Task prompt text")]
