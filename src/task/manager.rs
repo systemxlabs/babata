@@ -73,7 +73,13 @@ impl TaskManager {
                 continue;
             }
 
-            let running_task = self.launcher.launch(&task, self.exit_tx.clone())?;
+            let reason = format!(
+                "Task {} is being relaunched to continue running when server started.",
+                task.task_id
+            );
+            let running_task = self
+                .launcher
+                .relaunch(&task, self.exit_tx.clone(), &reason)?;
             self.running_tasks.lock().insert(task.task_id, running_task);
             info!("Recovered running task {}", task.task_id);
         }
@@ -141,7 +147,13 @@ impl TaskManager {
             )));
         }
 
-        let running_task = self.launcher.launch(&task, self.exit_tx.clone())?;
+        let reason = format!(
+            "Task {} is being relaunched because it was resumed from paused status by a user or system request.",
+            task_id
+        );
+        let running_task = self
+            .launcher
+            .relaunch(&task, self.exit_tx.clone(), &reason)?;
         {
             let mut guard = self.running_tasks.lock();
             guard.insert(task_id, running_task);
@@ -212,10 +224,22 @@ impl TaskManager {
         }
 
         if self.has_unfinished_subtasks(task_id) {
-            info!(
-                "Deferring completion for task {} because it still has unfinished subtasks",
+            let reason = format!(
+                "Task {} is being relaunched because it attempted to finish while there are still unfinished subtasks. A parent task must remain running until all of its subtasks are done or canceled.",
                 task_id
             );
+            info!("{reason}");
+            match self.launcher.relaunch(&task, self.exit_tx.clone(), &reason) {
+                Ok(running_task) => {
+                    self.running_tasks.lock().insert(task_id, running_task);
+                }
+                Err(err) => {
+                    error!(
+                        "Failed to relaunch task {} after deferred completion: {}",
+                        task_id, err
+                    );
+                }
+            }
             return;
         }
 
@@ -255,7 +279,11 @@ impl TaskManager {
         }
 
         warn!("Task {} failed and will be relaunched: {}", task_id, error);
-        match self.launcher.launch(&task, self.exit_tx.clone()) {
+        let reason = format!(
+            "Task {} is being relaunched after the previous execution failed with error: {}",
+            task_id, error
+        );
+        match self.launcher.relaunch(&task, self.exit_tx.clone(), &reason) {
             Ok(running_task) => {
                 self.running_tasks.lock().insert(task_id, running_task);
             }
