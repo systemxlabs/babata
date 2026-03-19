@@ -8,7 +8,7 @@ use crate::{
     agent::{
         Agent, AgentTask,
         babata::{
-            GenerationRequest, Provider, Tool, ToolContext, ToolSpec, build_system_prompt,
+            GenerationRequest, Provider, Tool, ToolContext, ToolSpec, build_system_prompts,
             build_tools, create_provider, load_skills,
         },
     },
@@ -84,7 +84,7 @@ impl Agent for BabataAgent {
 
         let tool_specs = self.collect_tool_specs();
 
-        let system_prompt = build_system_prompt(&skills)?;
+        let system_prompts = build_system_prompts(&skills)?;
 
         let crate::agent::AgentTask {
             task_id,
@@ -106,7 +106,7 @@ impl Agent for BabataAgent {
             let message = generate_with_retry(
                 provider.as_ref(),
                 &model,
-                &system_prompt,
+                &system_prompts,
                 &conversation,
                 &context,
                 &tool_specs,
@@ -163,7 +163,7 @@ impl Agent for BabataAgent {
 async fn generate_with_retry(
     provider: &dyn Provider,
     model: &str,
-    system_prompt: &str,
+    system_prompts: &[String],
     prompts: &[Message],
     context: &str,
     tool_specs: &[ToolSpec],
@@ -176,7 +176,7 @@ async fn generate_with_retry(
     (|| async {
         let response = provider
             .generate(GenerationRequest {
-                system_prompt,
+                system_prompts,
                 model,
                 prompts,
                 context,

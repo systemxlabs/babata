@@ -52,14 +52,17 @@ impl OpenAICompatibleProvider {
 
     fn format_messages(
         &self,
-        system_prompt: &str,
+        system_prompts: &[String],
         context: &str,
         prompts: &[Message],
     ) -> BabataResult<Vec<ChatCompletionMessageParam>> {
-        let mut request_messages = Vec::with_capacity(prompts.len() + 2);
+        let mut request_messages = Vec::with_capacity(prompts.len() + system_prompts.len() + 1);
 
-        let system_prompt = system_prompt.trim();
-        if !system_prompt.is_empty() {
+        for system_prompt in system_prompts {
+            let system_prompt = system_prompt.trim();
+            if system_prompt.is_empty() {
+                continue;
+            }
             request_messages.push(ChatCompletionMessageParam::System {
                 content: system_prompt.to_string(),
             });
@@ -173,7 +176,7 @@ impl OpenAICompatibleProvider {
         let request_body = ChatCompletionRequest {
             model: request.model.to_string(),
             messages: self.format_messages(
-                request.system_prompt,
+                request.system_prompts,
                 request.context,
                 request.prompts,
             )?,
@@ -455,7 +458,7 @@ mod tests {
         }];
 
         let payload = provider
-            .format_messages("", "", &messages)
+            .format_messages(&[], "", &messages)
             .expect("format messages");
         let payload = serde_json::to_value(payload).expect("serialize formatted messages");
 
@@ -481,7 +484,7 @@ mod tests {
         }];
 
         let payload = provider
-            .format_messages("", "previous context", &prompts)
+            .format_messages(&[], "previous context", &prompts)
             .expect("format messages");
         let payload = serde_json::to_value(payload).expect("serialize formatted messages");
 
@@ -489,5 +492,29 @@ mod tests {
         assert_eq!(payload[0]["content"], json!("Context:\nprevious context"));
         assert_eq!(payload[1]["role"], json!("user"));
         assert_eq!(payload[1]["content"][0]["text"], json!("latest prompt"));
+    }
+
+    #[test]
+    fn format_messages_keeps_multiple_system_prompts_before_context() {
+        let provider = OpenAICompatibleProvider::new("test-key", "https://example.com/v1");
+        let system_prompts = vec!["first rules".to_string(), "second rules".to_string()];
+        let prompts = vec![Message::UserPrompt {
+            content: vec![Content::Text {
+                text: "latest prompt".to_string(),
+            }],
+        }];
+
+        let payload = provider
+            .format_messages(&system_prompts, "previous context", &prompts)
+            .expect("format messages");
+        let payload = serde_json::to_value(payload).expect("serialize formatted messages");
+
+        assert_eq!(payload[0]["role"], json!("system"));
+        assert_eq!(payload[0]["content"], json!("first rules"));
+        assert_eq!(payload[1]["role"], json!("system"));
+        assert_eq!(payload[1]["content"], json!("second rules"));
+        assert_eq!(payload[2]["role"], json!("system"));
+        assert_eq!(payload[2]["content"], json!("Context:\nprevious context"));
+        assert_eq!(payload[3]["role"], json!("user"));
     }
 }

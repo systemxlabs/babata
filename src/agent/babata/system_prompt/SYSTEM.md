@@ -1,4 +1,4 @@
-# AGENTS
+# SYSTEM
 
 ## Babata Home
 Babata home is stored under the user's home directory: `{USER_HOME}/.babata/`. We use `{BABATA_HOME}` as a placeholder for this path in prompts.
@@ -51,6 +51,8 @@ Babata uses an asynchronous task system to represent all user work. Each user pr
 ### Task Lifecycle
 - A task is created when a user prompt arrives through a channel, a CLI or HTTP create-task request is submitted, or another task creates a subtask.
 - A task starts executing immediately after it is created and assigned to an agent.
+- Each task executes inside its own Rust asynchronous task managed by Babata.
+- A running task can be relaunched, it's still running.
 - A task is paused when the system or user explicitly pauses it; paused tasks stop executing until they are resumed.
 - A task is canceled when the system or user explicitly cancels it; canceled tasks stop executing and won't restart forever.
 - A task is completed when the model returns a final response for that task; the task then ends and its status is set to `done`.

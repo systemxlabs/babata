@@ -158,7 +158,7 @@ impl AnthropicCompatibleProvider {
         &self,
         request: GenerationRequest<'a>,
     ) -> BabataResult<GenerationResponse> {
-        let system = build_system_blocks(request.system_prompt, request.context);
+        let system = build_system_blocks(request.system_prompts, request.context);
 
         let request_body = AnthropicRequest {
             model: request.model.to_string(),
@@ -271,12 +271,18 @@ impl AnthropicCompatibleProvider {
     }
 }
 
-fn build_system_blocks(system_prompt: &str, context: &str) -> Option<Vec<AnthropicSystemBlock>> {
-    let system_prompt = system_prompt.trim();
+fn build_system_blocks(
+    system_prompts: &[String],
+    context: &str,
+) -> Option<Vec<AnthropicSystemBlock>> {
     let context = context.trim();
 
     let mut blocks = Vec::new();
-    if !system_prompt.is_empty() {
+    for system_prompt in system_prompts {
+        let system_prompt = system_prompt.trim();
+        if system_prompt.is_empty() {
+            continue;
+        }
         blocks.push(AnthropicSystemBlock::Text {
             text: system_prompt.to_string(),
         });
@@ -371,14 +377,21 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn build_system_blocks_keeps_system_prompt_and_context_separate() {
-        let blocks = build_system_blocks("system rules", "memory context");
+    fn build_system_blocks_keeps_system_prompts_and_context_separate() {
+        let blocks = build_system_blocks(
+            &["system rules".to_string(), "more rules".to_string()],
+            "memory context",
+        );
         assert_eq!(
             serde_json::to_value(blocks).expect("serialize system blocks"),
             json!([
                 {
                     "type": "text",
                     "text": "system rules"
+                },
+                {
+                    "type": "text",
+                    "text": "more rules"
                 },
                 {
                     "type": "text",
@@ -405,7 +418,7 @@ mod tests {
         }];
 
         let request = crate::agent::babata::GenerationRequest {
-            system_prompt: "",
+            system_prompts: &[],
             model: "claude-opus-4-6",
             prompts: &messages,
             context: "",
@@ -463,7 +476,7 @@ mod tests {
 
         let request = crate::agent::babata::provider::GenerationRequest {
             model: "claude-opus-4-6",
-            system_prompt: "",
+            system_prompts: &[],
             prompts: &messages,
             context: "",
             tools: &tools,
@@ -506,7 +519,7 @@ mod tests {
         // Second request: get final response with tool results
         let request = crate::agent::babata::GenerationRequest {
             model: "claude-opus-4-6",
-            system_prompt: "",
+            system_prompts: &[],
             prompts: &messages,
             context: "",
             tools: &tools,
