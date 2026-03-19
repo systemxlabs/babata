@@ -113,16 +113,16 @@ impl TaskStore {
     pub fn list_tasks(
         &self,
         status: Option<TaskStatus>,
-        limit: Option<usize>,
+        limit: usize,
         offset: Option<usize>,
     ) -> BabataResult<Vec<TaskRecord>> {
-        if matches!(limit, Some(0)) {
+        if limit == 0 {
             return Ok(Vec::new());
         }
 
         let conn = self.connect()?;
-        let tasks = match (status, limit, offset) {
-            (Some(status), Some(limit), Some(offset)) => {
+        let tasks = match (status, offset) {
+            (Some(status), Some(offset)) => {
                 let mut stmt = conn
                     .prepare(
                         "SELECT task_id, description, agent, status, parent_task_id, root_task_id, created_at
@@ -147,7 +147,7 @@ impl TaskStore {
                     })?,
                 )?
             }
-            (Some(status), Some(limit), None) => {
+            (Some(status), None) => {
                 let mut stmt = conn
                     .prepare(
                         "SELECT task_id, description, agent, status, parent_task_id, root_task_id, created_at
@@ -169,50 +169,7 @@ impl TaskStore {
                         })?,
                 )?
             }
-            (Some(status), None, Some(offset)) => {
-                let mut stmt = conn
-                    .prepare(
-                        "SELECT task_id, description, agent, status, parent_task_id, root_task_id, created_at
-                         FROM tasks
-                         WHERE status = ?1
-                         ORDER BY created_at DESC
-                         LIMIT -1 OFFSET ?2",
-                    )
-                    .map_err(|err| {
-                        BabataError::internal(format!(
-                            "Failed to prepare task list query statement: {}",
-                            err
-                        ))
-                    })?;
-                collect_task_records(
-                    stmt.query_map(params![status.as_str(), offset as i64], parse_task_record)
-                        .map_err(|err| {
-                            BabataError::internal(format!("Failed to query task rows: {}", err))
-                        })?,
-                )?
-            }
-            (Some(status), None, None) => {
-                let mut stmt = conn
-                    .prepare(
-                        "SELECT task_id, description, agent, status, parent_task_id, root_task_id, created_at
-                         FROM tasks
-                         WHERE status = ?1
-                         ORDER BY created_at DESC",
-                    )
-                    .map_err(|err| {
-                        BabataError::internal(format!(
-                            "Failed to prepare task list query statement: {}",
-                            err
-                        ))
-                    })?;
-                collect_task_records(
-                    stmt.query_map(params![status.as_str()], parse_task_record)
-                        .map_err(|err| {
-                            BabataError::internal(format!("Failed to query task rows: {}", err))
-                        })?,
-                )?
-            }
-            (None, Some(limit), Some(offset)) => {
+            (None, Some(offset)) => {
                 let mut stmt = conn
                     .prepare(
                         "SELECT task_id, description, agent, status, parent_task_id, root_task_id, created_at
@@ -233,7 +190,7 @@ impl TaskStore {
                         })?,
                 )?
             }
-            (None, Some(limit), None) => {
+            (None, None) => {
                 let mut stmt = conn
                     .prepare(
                         "SELECT task_id, description, agent, status, parent_task_id, root_task_id, created_at
@@ -253,44 +210,6 @@ impl TaskStore {
                             BabataError::internal(format!("Failed to query task rows: {}", err))
                         })?,
                 )?
-            }
-            (None, None, Some(offset)) => {
-                let mut stmt = conn
-                    .prepare(
-                        "SELECT task_id, description, agent, status, parent_task_id, root_task_id, created_at
-                         FROM tasks
-                         ORDER BY created_at DESC
-                         LIMIT -1 OFFSET ?1",
-                    )
-                    .map_err(|err| {
-                        BabataError::internal(format!(
-                            "Failed to prepare task list query statement: {}",
-                            err
-                        ))
-                    })?;
-                collect_task_records(
-                    stmt.query_map(params![offset as i64], parse_task_record)
-                        .map_err(|err| {
-                            BabataError::internal(format!("Failed to query task rows: {}", err))
-                        })?,
-                )?
-            }
-            (None, None, None) => {
-                let mut stmt = conn
-                    .prepare(
-                        "SELECT task_id, description, agent, status, parent_task_id, root_task_id, created_at
-                         FROM tasks
-                         ORDER BY created_at DESC",
-                    )
-                    .map_err(|err| {
-                        BabataError::internal(format!(
-                            "Failed to prepare task list query statement: {}",
-                            err
-                        ))
-                    })?;
-                collect_task_records(stmt.query_map([], parse_task_record).map_err(|err| {
-                    BabataError::internal(format!("Failed to query task rows: {}", err))
-                })?)?
             }
         };
 

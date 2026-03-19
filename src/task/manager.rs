@@ -57,7 +57,7 @@ impl TaskManager {
     fn recover_running_tasks(&self) -> BabataResult<()> {
         let tasks = self
             .store
-            .list_tasks(Some(TaskStatus::Running), None, None)?;
+            .list_tasks(Some(TaskStatus::Running), 1000, None)?;
         if tasks.is_empty() {
             info!("No running tasks to recover on startup");
             return Ok(());
@@ -214,7 +214,7 @@ impl TaskManager {
     pub fn list_tasks(
         &self,
         status: Option<TaskStatus>,
-        limit: Option<usize>,
+        limit: usize,
         offset: Option<usize>,
     ) -> BabataResult<Vec<TaskRecord>> {
         self.store.list_tasks(status, limit, offset)

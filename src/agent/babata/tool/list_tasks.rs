@@ -20,7 +20,7 @@ impl ListTasksTool {
             spec: ToolSpec {
                 name: "list_tasks".to_string(),
                 description:
-                    "List tasks by querying the local TaskStore. Supports optional status filter and offset, and requires a limit."
+                    "List tasks by querying the local TaskStore. Supports optional status filter and offset. The limit parameter is required."
                         .to_string(),
                 parameters: json!({
                     "type": "object",
@@ -61,10 +61,10 @@ impl Tool for ListTasksTool {
             None => None,
         };
         let limit = match args["limit"].as_u64() {
-            Some(limit) => Some(usize::try_from(limit).map_err(|_| {
+            Some(limit) => usize::try_from(limit).map_err(|_| {
                 BabataError::tool(format!("limit '{}' is too large for this platform", limit))
-            })?),
-            None => Some(100),
+            })?,
+            None => return Err(BabataError::tool("limit is required")),
         };
         let offset = match args["offset"].as_u64() {
             Some(offset) => Some(usize::try_from(offset).map_err(|_| {
