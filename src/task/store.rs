@@ -4,14 +4,12 @@ use rusqlite::{Connection, OptionalExtension, Row, params};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{
-    BabataResult, error::BabataError, message::Content, task::TaskStatus, utils::babata_dir,
-};
+use crate::{BabataResult, error::BabataError, task::TaskStatus, utils::babata_dir};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TaskRecord {
     pub task_id: Uuid,
-    pub prompt: Vec<Content>,
+    pub description: String,
     pub agent: Option<String>,
     pub status: TaskStatus,
     pub parent_task_id: Option<Uuid>,
@@ -32,18 +30,12 @@ impl TaskStore {
 
     pub fn insert_task(&self, record: TaskRecord) -> BabataResult<()> {
         let conn = self.connect()?;
-        let prompt_json = serde_json::to_string(&record.prompt).map_err(|err| {
-            BabataError::internal(format!(
-                "Failed to serialize task prompt into JSON: {}",
-                err
-            ))
-        })?;
         conn.execute(
-            "INSERT INTO tasks (task_id, prompt, agent, status, parent_task_id, root_task_id, created_at)
+            "INSERT INTO tasks (task_id, description, agent, status, parent_task_id, root_task_id, created_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
                 record.task_id.to_string(),
-                prompt_json,
+                record.description,
                 record.agent,
                 record.status.as_str(),
                 record.parent_task_id.map(|id| id.to_string()),
@@ -52,6 +44,27 @@ impl TaskStore {
             ],
         )
         .map_err(|err| BabataError::internal(format!("Failed to insert task row: {}", err)))?;
+        Ok(())
+    }
+
+    pub fn update_task_description(&self, task_id: Uuid, description: String) -> BabataResult<()> {
+        let conn = self.connect()?;
+        let updated = conn
+            .execute(
+                "UPDATE tasks SET description = ?1 WHERE task_id = ?2",
+                params![description, task_id.to_string()],
+            )
+            .map_err(|err| {
+                BabataError::internal(format!("Failed to update task description row: {}", err))
+            })?;
+
+        if updated == 0 {
+            return Err(BabataError::internal(format!(
+                "Task '{}' not found",
+                task_id
+            )));
+        }
+
         Ok(())
     }
 
@@ -80,7 +93,7 @@ impl TaskStore {
         let conn = self.connect()?;
         let mut stmt = conn
             .prepare(
-                "SELECT task_id, prompt, agent, status, parent_task_id, root_task_id, created_at
+                "SELECT task_id, description, agent, status, parent_task_id, root_task_id, created_at
                  FROM tasks
                  WHERE task_id = ?1",
             )
@@ -112,7 +125,7 @@ impl TaskStore {
             (Some(status), Some(limit), Some(offset)) => {
                 let mut stmt = conn
                     .prepare(
-                        "SELECT task_id, prompt, agent, status, parent_task_id, root_task_id, created_at
+                        "SELECT task_id, description, agent, status, parent_task_id, root_task_id, created_at
                          FROM tasks
                          WHERE status = ?1
                          ORDER BY created_at DESC
@@ -137,7 +150,7 @@ impl TaskStore {
             (Some(status), Some(limit), None) => {
                 let mut stmt = conn
                     .prepare(
-                        "SELECT task_id, prompt, agent, status, parent_task_id, root_task_id, created_at
+                        "SELECT task_id, description, agent, status, parent_task_id, root_task_id, created_at
                          FROM tasks
                          WHERE status = ?1
                          ORDER BY created_at DESC
@@ -159,7 +172,7 @@ impl TaskStore {
             (Some(status), None, Some(offset)) => {
                 let mut stmt = conn
                     .prepare(
-                        "SELECT task_id, prompt, agent, status, parent_task_id, root_task_id, created_at
+                        "SELECT task_id, description, agent, status, parent_task_id, root_task_id, created_at
                          FROM tasks
                          WHERE status = ?1
                          ORDER BY created_at DESC
@@ -181,7 +194,7 @@ impl TaskStore {
             (Some(status), None, None) => {
                 let mut stmt = conn
                     .prepare(
-                        "SELECT task_id, prompt, agent, status, parent_task_id, root_task_id, created_at
+                        "SELECT task_id, description, agent, status, parent_task_id, root_task_id, created_at
                          FROM tasks
                          WHERE status = ?1
                          ORDER BY created_at DESC",
@@ -202,7 +215,7 @@ impl TaskStore {
             (None, Some(limit), Some(offset)) => {
                 let mut stmt = conn
                     .prepare(
-                        "SELECT task_id, prompt, agent, status, parent_task_id, root_task_id, created_at
+                        "SELECT task_id, description, agent, status, parent_task_id, root_task_id, created_at
                          FROM tasks
                          ORDER BY created_at DESC
                          LIMIT ?1 OFFSET ?2",
@@ -223,7 +236,7 @@ impl TaskStore {
             (None, Some(limit), None) => {
                 let mut stmt = conn
                     .prepare(
-                        "SELECT task_id, prompt, agent, status, parent_task_id, root_task_id, created_at
+                        "SELECT task_id, description, agent, status, parent_task_id, root_task_id, created_at
                          FROM tasks
                          ORDER BY created_at DESC
                          LIMIT ?1",
@@ -244,7 +257,7 @@ impl TaskStore {
             (None, None, Some(offset)) => {
                 let mut stmt = conn
                     .prepare(
-                        "SELECT task_id, prompt, agent, status, parent_task_id, root_task_id, created_at
+                        "SELECT task_id, description, agent, status, parent_task_id, root_task_id, created_at
                          FROM tasks
                          ORDER BY created_at DESC
                          LIMIT -1 OFFSET ?1",
@@ -265,7 +278,7 @@ impl TaskStore {
             (None, None, None) => {
                 let mut stmt = conn
                     .prepare(
-                        "SELECT task_id, prompt, agent, status, parent_task_id, root_task_id, created_at
+                        "SELECT task_id, description, agent, status, parent_task_id, root_task_id, created_at
                          FROM tasks
                          ORDER BY created_at DESC",
                     )
@@ -288,7 +301,7 @@ impl TaskStore {
         let conn = self.connect()?;
         let mut stmt = conn
             .prepare(
-                "SELECT task_id, prompt, agent, status, parent_task_id, root_task_id, created_at
+                "SELECT task_id, description, agent, status, parent_task_id, root_task_id, created_at
                  FROM tasks
                  WHERE parent_task_id = ?1
                  ORDER BY created_at DESC",
@@ -335,7 +348,7 @@ impl TaskStore {
         conn.execute(
             "CREATE TABLE IF NOT EXISTS tasks (
                 task_id TEXT PRIMARY KEY,
-                prompt TEXT NOT NULL,
+                description TEXT NOT NULL,
                 agent TEXT,
                 status TEXT NOT NULL,
                 parent_task_id TEXT,
@@ -368,7 +381,7 @@ impl TaskStore {
 
 fn parse_task_record(row: &Row<'_>) -> rusqlite::Result<TaskRecord> {
     let task_id_raw = row.get::<_, String>(0)?;
-    let prompt_raw = row.get::<_, String>(1)?;
+    let description = row.get::<_, String>(1)?;
     let agent = row.get::<_, Option<String>>(2)?;
     let status_raw = row.get::<_, String>(3)?;
     let parent_task_id_raw = row.get::<_, Option<String>>(4)?;
@@ -377,9 +390,6 @@ fn parse_task_record(row: &Row<'_>) -> rusqlite::Result<TaskRecord> {
 
     let task_id = Uuid::parse_str(&task_id_raw).map_err(|err| {
         rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(err))
-    })?;
-    let prompt = serde_json::from_str::<Vec<Content>>(&prompt_raw).map_err(|err| {
-        rusqlite::Error::FromSqlConversionFailure(1, rusqlite::types::Type::Text, Box::new(err))
     })?;
     let status = status_raw.parse::<TaskStatus>().map_err(|err| {
         rusqlite::Error::FromSqlConversionFailure(
@@ -405,7 +415,7 @@ fn parse_task_record(row: &Row<'_>) -> rusqlite::Result<TaskRecord> {
 
     Ok(TaskRecord {
         task_id,
-        prompt,
+        description,
         agent,
         status,
         parent_task_id,

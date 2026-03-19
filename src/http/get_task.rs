@@ -28,7 +28,7 @@ pub(super) async fn handle(State(state): State<HttpApp>, Path(task_id): Path<Str
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct TaskResponse {
     pub(crate) task_id: String,
-    pub(crate) prompt: Vec<crate::message::Content>,
+    pub(crate) description: String,
     pub(crate) agent: Option<String>,
     pub(crate) status: String,
     pub(crate) parent_task_id: Option<String>,
@@ -40,7 +40,7 @@ impl TaskResponse {
     pub(crate) fn from_record(record: TaskRecord) -> Self {
         Self {
             task_id: record.task_id.to_string(),
-            prompt: record.prompt,
+            description: record.description,
             agent: record.agent,
             status: record.status.as_str().to_string(),
             parent_task_id: record.parent_task_id.map(|task_id| task_id.to_string()),

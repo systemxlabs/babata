@@ -7,6 +7,7 @@ mod list_tasks;
 mod read_file;
 mod shell;
 mod sleep;
+mod update_task_description;
 mod user_feedback;
 mod wait_task;
 mod write_file;
@@ -20,6 +21,7 @@ pub use list_tasks::*;
 pub use read_file::*;
 pub use shell::*;
 pub use sleep::*;
+pub use update_task_description::*;
 pub use user_feedback::*;
 pub use wait_task::*;
 pub use write_file::*;
@@ -79,6 +81,7 @@ pub fn build_tools(
         Arc::new(ListSubtasksTool::new()?),
         Arc::new(WaitTaskTool::new()?),
         Arc::new(SleepTool::new()),
+        Arc::new(UpdateTaskDescriptionTool::new()?),
         Arc::new(UserFeedbackTool::new(channels)),
     ];
 

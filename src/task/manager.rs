@@ -94,14 +94,14 @@ impl TaskManager {
 
         let task_record = TaskRecord {
             task_id,
-            prompt: request.prompt.clone(),
+            description: render_prompt_markdown(&request.prompt),
             agent: request.agent.clone(),
             status: TaskStatus::Running,
             parent_task_id: request.parent_task_id,
             root_task_id,
             created_at: Utc::now().timestamp_millis(),
         };
-        initialize_task_dir(&task_record)?;
+        initialize_task_dir(&task_record, &request.prompt)?;
         self.store.insert_task(task_record.clone())?;
 
         let running_task = self.launcher.launch(&task_record, self.exit_tx.clone())?;
@@ -339,13 +339,13 @@ fn ensure_task_dir(task_id: Uuid) -> BabataResult<()> {
     })
 }
 
-fn initialize_task_dir(task: &TaskRecord) -> BabataResult<()> {
+fn initialize_task_dir(task: &TaskRecord, prompt: &[Content]) -> BabataResult<()> {
     ensure_task_dir(task.task_id)?;
 
     let task_dir = task_dir(task.task_id)?;
     let task_md_path = task_dir.join("task.md");
     let progress_md_path = task_dir.join("progress.md");
-    let prompt = render_prompt_markdown(&task.prompt);
+    let prompt = render_prompt_markdown(prompt);
     let agent = task.agent.as_deref().unwrap_or("babata");
     let task_markdown = format!(
         r#"# Task

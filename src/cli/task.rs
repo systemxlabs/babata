@@ -229,7 +229,7 @@ fn format_tasks_table(tasks: &[TaskResponse]) -> String {
             "AGENT",
             "PARENT",
             "CREATED AT",
-            "PROMPT",
+            "DESCRIPTION",
         ]);
 
     for task in tasks {
@@ -241,7 +241,7 @@ fn format_tasks_table(tasks: &[TaskResponse]) -> String {
                 .clone()
                 .unwrap_or_else(|| "-".to_string()),
             format_timestamp(task.created_at),
-            summarize_prompt(&task.prompt),
+            task.description.clone(),
         ]);
     }
 
@@ -268,32 +268,15 @@ fn format_timestamp(timestamp_millis: i64) -> String {
     }
 }
 
-fn summarize_prompt(prompt: &[Content]) -> String {
-    prompt
-        .iter()
-        .map(|content| match content {
-            Content::Text { text } => text.clone(),
-            Content::ImageUrl { url } => format!("[image] {url}"),
-            Content::ImageData { media_type, .. } => format!("[image_data] {}", media_type),
-            Content::AudioData { media_type, .. } => format!("[audio_data] {}", media_type),
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
 #[cfg(test)]
 mod tests {
-    use crate::message::MediaType;
-
     use super::*;
 
     #[test]
     fn format_tasks_table_renders_headers_and_rows() {
         let tasks = vec![TaskResponse {
             task_id: "12345678-1234-1234-1234-123456789abc".to_string(),
-            prompt: vec![Content::Text {
-                text: "run a very long task prompt here".to_string(),
-            }],
+            description: "run a very long task prompt here".to_string(),
             agent: Some("babata".to_string()),
             status: "running".to_string(),
             parent_task_id: None,
@@ -312,32 +295,11 @@ mod tests {
     }
 
     #[test]
-    fn summarize_prompt_formats_non_text_content_without_truncation() {
-        let summary = summarize_prompt(&[
-            Content::Text {
-                text: "hello".to_string(),
-            },
-            Content::ImageData {
-                data: "abc".to_string(),
-                media_type: MediaType::ImagePng,
-            },
-            Content::Text {
-                text: "x".repeat(80),
-            },
-        ]);
-
-        assert!(summary.starts_with("hello [image_data] image/png "));
-        assert!(summary.ends_with(&"x".repeat(80)));
-    }
-
-    #[test]
     fn format_tasks_json_lines_renders_one_json_per_line() {
         let tasks = vec![
             TaskResponse {
                 task_id: "12345678-1234-1234-1234-123456789abc".to_string(),
-                prompt: vec![Content::Text {
-                    text: "first".to_string(),
-                }],
+                description: "first".to_string(),
                 agent: Some("babata".to_string()),
                 status: "running".to_string(),
                 parent_task_id: None,
@@ -346,9 +308,7 @@ mod tests {
             },
             TaskResponse {
                 task_id: "abcdefab-cdef-cdef-cdef-abcdefabcdef".to_string(),
-                prompt: vec![Content::Text {
-                    text: "second".to_string(),
-                }],
+                description: "second".to_string(),
                 agent: None,
                 status: "done".to_string(),
                 parent_task_id: None,
