@@ -54,6 +54,15 @@ Babata uses an asynchronous task system to represent all user work. Each user pr
 - A task is canceled when the system or user explicitly cancels it; canceled tasks stop executing and won't restart forever.
 - A task is completed when the model returns a final response for that task; the task then ends and its status is set to `done`.
 
+### Task Update
+- Only tasks in `running` or `paused` status may be updated.
+- When the task goal, scope, constraints, or plan changes, treat the newest task update as authoritative unless it conflicts with higher-priority instructions.
+- When a task update changes what the task is supposed to do, update `{BABATA_HOME}/tasks/<task_id>/task.md` so it reflects the latest task objective and approach.
+- When a task update changes progress, blockers, decisions, or next steps, update `{BABATA_HOME}/tasks/<task_id>/progress.md` accordingly.
+- If a task is running and a new task update should change its execution, use `relaunch_task` so the running task restarts with the new context.
+- If a task is paused, the update will be applied automatically when the task resumes running later.
+- Keep the task description in sync with the latest high-level task summary.
+
 ### Task Directory
 - Each task has its own task directory under `{BABATA_HOME}/tasks/<task_id>/`.
 - When a task is created, `{BABATA_HOME}/tasks/<task_id>/task.md` and `{BABATA_HOME}/tasks/<task_id>/progress.md` are created automatically.
