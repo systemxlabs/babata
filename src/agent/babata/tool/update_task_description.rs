@@ -1,4 +1,5 @@
 use serde_json::{Value, json};
+use uuid::Uuid;
 
 use crate::{
     BabataResult,
@@ -19,11 +20,15 @@ impl UpdateTaskDescriptionTool {
             spec: ToolSpec {
                 name: "update_task_description".to_string(),
                 description:
-                    "Update the current task description in the local TaskStore. Use this to keep the task summary accurate as the task evolves."
+                    "Update a task description in the local TaskStore. If task_id is omitted, update the current task. Use this to keep task summaries accurate as work evolves."
                         .to_string(),
                 parameters: json!({
                     "type": "object",
                     "properties": {
+                        "task_id": {
+                            "type": "string",
+                            "description": "Optional UUID of the task to update. If omitted, the current task is used."
+                        },
                         "description": {
                             "type": "string",
                             "description": "The new task description"
@@ -45,6 +50,12 @@ impl Tool for UpdateTaskDescriptionTool {
 
     async fn execute(&self, args: &str, context: &ToolContext<'_>) -> BabataResult<String> {
         let args: Value = serde_json::from_str(args)?;
+        let task_id = match args["task_id"].as_str() {
+            Some(task_id) => Uuid::parse_str(task_id).map_err(|err| {
+                BabataError::tool(format!("Invalid task_id '{}': {}", task_id, err))
+            })?,
+            None => *context.task_id,
+        };
         let description = args["description"]
             .as_str()
             .ok_or_else(|| BabataError::tool("Missing required parameter: description"))?
@@ -56,11 +67,11 @@ impl Tool for UpdateTaskDescriptionTool {
         }
 
         self.task_store
-            .update_task_description(*context.task_id, description.clone())?;
+            .update_task_description(task_id, description.clone())?;
 
         Ok(format!(
             "Updated description for task '{}': {}",
-            context.task_id, description
+            task_id, description
         ))
     }
 }
