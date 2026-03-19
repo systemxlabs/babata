@@ -1,5 +1,5 @@
 mod control_task;
-mod create_subtask;
+mod create_task;
 mod edit_file;
 mod get_task;
 mod list_subtasks;
@@ -14,7 +14,7 @@ mod wait_task;
 mod write_file;
 
 pub use control_task::*;
-pub use create_subtask::*;
+pub use create_task::*;
 pub use edit_file::*;
 pub use get_task::*;
 pub use list_subtasks::*;
@@ -77,7 +77,7 @@ pub fn build_tools(
         Arc::new(WriteFileTool::new()),
         Arc::new(EditFileTool::new()),
         Arc::new(ControlTaskTool::new()?),
-        Arc::new(CreateSubtaskTool::new()?),
+        Arc::new(CreateTaskTool::new()?),
         Arc::new(GetTaskTool::new()?),
         Arc::new(ListTasksTool::new()?),
         Arc::new(ListSubtasksTool::new()?),
