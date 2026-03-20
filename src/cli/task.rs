@@ -6,7 +6,10 @@ use uuid::Uuid;
 use crate::{
     BabataResult,
     error::BabataError,
-    http::{CountTasksResponse, DEFAULT_HTTP_BASE_URL, ListTasksResponse, RelaunchTaskRequest, TaskResponse},
+    http::{
+        CountTasksResponse, DEFAULT_HTTP_BASE_URL, ListTasksResponse, RelaunchTaskRequest,
+        TaskResponse,
+    },
     message::Content,
     task::CreateTaskRequest,
 };

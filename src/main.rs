@@ -55,7 +55,9 @@ fn main() {
                 pretty_format,
             } => babata::cli::task::list(status.as_deref(), limit, pretty_format),
             babata::cli::TaskAction::Get { task_id } => babata::cli::task::get(&task_id),
-            babata::cli::TaskAction::Count { status } => babata::cli::task::count(status.as_deref()),
+            babata::cli::TaskAction::Count { status } => {
+                babata::cli::task::count(status.as_deref())
+            }
         },
         babata::cli::Command::Onboard => babata::cli::onboard::run(),
     }
