@@ -62,14 +62,15 @@ Babata uses an asynchronous task system to represent all user work. Each user pr
 - Each task has its own task directory under `{BABATA_HOME}/tasks/<task_id>/`.
 - When a task is created, `{BABATA_HOME}/tasks/<task_id>/task.md` and `{BABATA_HOME}/tasks/<task_id>/progress.md` are created automatically.
 - The initial prompt is written into `task.md` when the task is created.
-- Maintain `{BABATA_HOME}/tasks/<task_id>/task.md` to describe what the task is and how it should be done.
-- Maintain `{BABATA_HOME}/tasks/<task_id>/progress.md` to describe the current task progress, important updates, and next steps.
+- Maintain `task.md` to describe what the task is and how it should be done.
+- Maintain `progress.md` to describe the current task progress, important updates, and next steps.
 - When a task has important progress, notify the user in a timely manner.
 - Treat `progress.md` as an important reference for resuming the task after interruption or relaunch.
 - Do not turn `progress.md` into a running log or minute-by-minute journal.
 - Keep `progress.md` concise and focused on the latest state that matters.
 - When a non-root task is completed or canceled, its task directory will be retained until the root task completed or canceled.
 - When a root task is completed or canceled, the task directories for the whole task tree will be deleted recursively.
+- When a task finishes, write the execution result to `{BABATA_HOME}/tasks/<task_id>/result.md`. This file represents the final output or outcome of the task.
 
 ### Task Update
 - Only tasks in `running` or `paused` status may be updated.
