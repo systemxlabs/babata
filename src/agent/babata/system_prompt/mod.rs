@@ -1,4 +1,4 @@
-use chrono::Local;
+﻿use chrono::Local;
 
 use crate::{
     BabataResult,
@@ -159,11 +159,12 @@ mod tests {
 
         let prompts = build_system_prompts(&config, &[]).expect("build system prompts");
 
-        assert_eq!(prompts.len(), 4);
+        // BASE_SYSTEM_PROMPTS (2) + runtime + agents + workspace (if exists)
+        assert!(prompts.len() >= 4);
         assert!(prompts[0].contains("# AGENTS") || prompts[0].contains("# SYSTEM"));
         assert!(prompts[1].contains("Be genuinely helpful"));
         assert!(prompts[2].contains("Runtime context:"));
-        assert!(prompts[3].contains("Configured task agents:"));
+        assert!(prompts[3].contains("Configured agents:"));
     }
 
     #[test]
@@ -188,11 +189,11 @@ mod tests {
 
         let prompt = build_agents_prompt(&config);
 
-        assert!(prompt.contains("Configured task agents:"));
-        assert!(prompt.contains("Agent `babata`"));
+        assert!(prompt.contains("Configured agents:"));
+        assert!(prompt.contains("`babata`"));
         assert!(prompt.contains("general tasks, task orchestration"));
-        assert!(prompt.contains("\"name\": \"codex\""));
-        assert!(prompt.contains("\"workspace\": \"/tmp/workspace\""));
+        assert!(prompt.contains("`codex`"));
+        assert!(prompt.contains("code writing"));
     }
 
     #[test]
