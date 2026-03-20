@@ -216,6 +216,33 @@ impl TaskStore {
         Ok(tasks)
     }
 
+    pub fn count_tasks(&self, status: Option<TaskStatus>) -> BabataResult<usize> {
+        let conn = self.connect()?;
+        let count = match status {
+            Some(status) => conn
+                .query_row(
+                    "SELECT COUNT(*) FROM tasks WHERE status = ?1",
+                    params![status.as_str()],
+                    |row| row.get::<_, i64>(0),
+                )
+                .map_err(|err| {
+                    BabataError::internal(format!("Failed to count filtered task rows: {}", err))
+                })?,
+            None => conn
+                .query_row("SELECT COUNT(*) FROM tasks", [], |row| row.get::<_, i64>(0))
+                .map_err(|err| {
+                    BabataError::internal(format!("Failed to count task rows: {}", err))
+                })?,
+        };
+
+        usize::try_from(count).map_err(|err| {
+            BabataError::internal(format!(
+                "Failed to convert task count '{}' to usize: {}",
+                count, err
+            ))
+        })
+    }
+
     pub fn list_subtasks(&self, parent_task_id: Uuid) -> BabataResult<Vec<TaskRecord>> {
         let conn = self.connect()?;
         let mut stmt = conn

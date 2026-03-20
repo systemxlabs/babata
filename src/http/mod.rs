@@ -1,4 +1,5 @@
 mod control_task;
+mod count_tasks;
 mod create_task;
 mod error;
 mod get_task;
@@ -54,6 +55,7 @@ impl HttpApp {
 fn router(task_manager: Arc<TaskManager>) -> Router {
     Router::new()
         .route("/health", get(health))
+        .route("/tasks/count", get(count_tasks::handle))
         .route("/tasks", get(list_tasks::handle).post(create_task::handle))
         .route("/tasks/{task_id}", get(get_task::handle))
         .route("/tasks/{task_id}/pause", post(control_task::pause))

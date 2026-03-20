@@ -224,6 +224,10 @@ impl TaskManager {
         self.store.get_task(task_id)
     }
 
+    pub fn count_tasks(&self, status: Option<TaskStatus>) -> BabataResult<usize> {
+        self.store.count_tasks(status)
+    }
+
     fn handle_task_exit(&self, event: TaskExitEvent) {
         match event {
             TaskExitEvent::Completed { task_id } => self.handle_task_completed(task_id),
