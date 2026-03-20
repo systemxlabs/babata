@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::{
     BabataResult,
     error::BabataError,
-    http::{DEFAULT_HTTP_BASE_URL, ListTasksResponse, RelaunchTaskRequest, TaskResponse},
+    http::{CountTasksResponse, DEFAULT_HTTP_BASE_URL, ListTasksResponse, RelaunchTaskRequest, TaskResponse},
     message::Content,
     task::CreateTaskRequest,
 };
@@ -55,6 +55,13 @@ pub fn list(status: Option<&str>, limit: Option<usize>, pretty_format: bool) {
 
 pub fn get(task_id: &str) {
     if let Err(err) = run_get(task_id) {
+        eprintln!("{err}");
+        std::process::exit(1);
+    }
+}
+
+pub fn count(status: Option<&str>) {
+    if let Err(err) = run_count(status) {
         eprintln!("{err}");
         std::process::exit(1);
     }
@@ -245,6 +252,42 @@ fn run_get(task_id: &str) -> BabataResult<()> {
             BabataError::internal(format!("Failed to read task get response body: {}", err))
         })?;
         println!("{body}");
+        Ok(())
+    })
+}
+
+fn run_count(status: Option<&str>) -> BabataResult<()> {
+    let runtime = build_runtime()?;
+    runtime.block_on(async move {
+        let client = Client::new();
+        let mut request = client.get(format!("{DEFAULT_HTTP_BASE_URL}/tasks/count"));
+        if let Some(status) = status {
+            request = request.query(&[("status", status)]);
+        }
+
+        let response = request.send().await.map_err(|err| {
+            BabataError::internal(format!(
+                "Failed to call local HTTP API for task count: {}",
+                err
+            ))
+        })?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(BabataError::internal(format!(
+                "Task count request failed with status {}: {}",
+                status, body
+            )));
+        }
+
+        let body = response.text().await.map_err(|err| {
+            BabataError::internal(format!("Failed to read task count response body: {}", err))
+        })?;
+        let count_response: CountTasksResponse = serde_json::from_str(&body).map_err(|err| {
+            BabataError::internal(format!("Failed to parse task count response body: {}", err))
+        })?;
+        println!("{}", count_response.count);
         Ok(())
     })
 }

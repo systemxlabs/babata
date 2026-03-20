@@ -172,4 +172,9 @@ pub enum TaskAction {
         #[arg(value_name = "TASK_ID", help = "Task UUID")]
         task_id: String,
     },
+    #[command(about = "Count tasks")]
+    Count {
+        #[arg(long, value_name = "STATUS", help = "Optional task status filter")]
+        status: Option<String>,
+    },
 }
