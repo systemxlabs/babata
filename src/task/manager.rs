@@ -261,10 +261,21 @@ impl TaskManager {
             return;
         }
 
-        let relaunch_reason =
-            completion_relaunch_reason(&task, self.has_unfinished_subtasks(task_id));
-        if let Some((reason, failure_context)) = relaunch_reason {
-            self.relaunch_after_completion(&task, &reason, failure_context);
+        if self.has_unfinished_subtasks(task_id) {
+            let reason = format!(
+                "Task {} is being relaunched because it attempted to finish while there are still unfinished subtasks. A parent task must remain running until all of its subtasks are done or canceled.",
+                task.task_id
+            );
+            self.relaunch_after_completion(&task, &reason, "deferred completion");
+            return;
+        }
+
+        if task.never_ends {
+            let reason = format!(
+                "Task {} is being relaunched because it is configured with never_ends=true and should keep running after reporting completion.",
+                task.task_id
+            );
+            self.relaunch_after_completion(&task, &reason, "never-ending completion");
             return;
         }
 
@@ -507,33 +518,6 @@ fn render_prompt_markdown(prompt: &[Content]) -> String {
     }
 }
 
-fn completion_relaunch_reason(
-    task: &TaskRecord,
-    has_unfinished_subtasks: bool,
-) -> Option<(String, &'static str)> {
-    if has_unfinished_subtasks {
-        return Some((
-            format!(
-                "Task {} is being relaunched because it attempted to finish while there are still unfinished subtasks. A parent task must remain running until all of its subtasks are done or canceled.",
-                task.task_id
-            ),
-            "deferred completion",
-        ));
-    }
-
-    if task.never_ends {
-        return Some((
-            format!(
-                "Task {} is being relaunched because it is configured with never_ends=true and should keep running after reporting completion.",
-                task.task_id
-            ),
-            "never-ending completion",
-        ));
-    }
-
-    None
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -622,27 +606,6 @@ mod tests {
             running_task.handle.abort();
         }
         remove_task_dir(task_id);
-    }
-
-    #[test]
-    fn completion_relaunch_reason_respects_never_ends() {
-        let task = task_record(true);
-
-        let reason = completion_relaunch_reason(&task, false).expect("never_ends should relaunch");
-
-        assert!(reason.0.contains("never_ends=true"));
-        assert_eq!(reason.1, "never-ending completion");
-    }
-
-    #[test]
-    fn completion_relaunch_reason_prefers_unfinished_subtasks() {
-        let task = task_record(true);
-
-        let reason =
-            completion_relaunch_reason(&task, true).expect("unfinished subtasks should relaunch");
-
-        assert!(reason.0.contains("unfinished subtasks"));
-        assert_eq!(reason.1, "deferred completion");
     }
 
     #[tokio::test]
