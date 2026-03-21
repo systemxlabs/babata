@@ -15,7 +15,6 @@ pub struct TaskRecord {
     pub parent_task_id: Option<Uuid>,
     pub root_task_id: Uuid,
     pub created_at: i64,
-    #[serde(default)]
     pub never_ends: bool,
 }
 
@@ -401,6 +400,31 @@ mod tests {
 
     fn temp_db_path(test_name: &str) -> PathBuf {
         std::env::temp_dir().join(format!("babata-{test_name}-{}.db", Uuid::new_v4()))
+    }
+
+    #[test]
+    fn task_record_requires_never_ends_when_deserializing() {
+        let task_id = Uuid::new_v4();
+        let mut payload = serde_json::to_value(TaskRecord {
+            task_id,
+            description: "missing never_ends".to_string(),
+            agent: Some("codex".to_string()),
+            status: TaskStatus::Running,
+            parent_task_id: None,
+            root_task_id: task_id,
+            created_at: 123,
+            never_ends: true,
+        })
+        .expect("serialize task record");
+        payload
+            .as_object_mut()
+            .expect("task record json object")
+            .remove("never_ends");
+
+        let error = serde_json::from_value::<TaskRecord>(payload)
+            .expect_err("missing never_ends should fail");
+
+        assert!(error.to_string().contains("never_ends"));
     }
 
     #[test]

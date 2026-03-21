@@ -37,14 +37,14 @@ impl CreateTaskTool {
                         },
                         "never_ends": {
                             "type": "boolean",
-                            "description": "Optional flag stored on the task record. Defaults to false."
+                            "description": "Boolean flag stored on the task record."
                         },
                         "task_type": {
                             "type": "string",
                             "description": "The type of task to create: 'subtask' or 'root'. Defaults to 'subtask'."
                         }
                     },
-                    "required": ["prompt"]
+                    "required": ["prompt", "never_ends"]
                 }),
             },
             http_client: Client::new(),
@@ -74,7 +74,7 @@ impl Tool for CreateTaskTool {
             }],
             agent: args["agent"].as_str().map(ToOwned::to_owned),
             parent_task_id: parse_parent_task_id(&args, context)?,
-            never_ends: args["never_ends"].as_bool().unwrap_or(false),
+            never_ends: parse_never_ends(&args)?,
         };
 
         let response = self
@@ -120,9 +120,18 @@ fn parse_parent_task_id(
     }
 }
 
+fn parse_never_ends(args: &Value) -> BabataResult<bool> {
+    match args.get("never_ends") {
+        Some(value) => value
+            .as_bool()
+            .ok_or_else(|| BabataError::tool("Parameter never_ends must be a boolean")),
+        None => Err(BabataError::tool("Missing required parameter: never_ends")),
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::parse_parent_task_id;
+    use super::{parse_never_ends, parse_parent_task_id};
     use crate::agent::babata::ToolContext;
     use serde_json::json;
     use uuid::Uuid;
@@ -152,5 +161,33 @@ mod tests {
         let parent_task_id =
             parse_parent_task_id(&json!({ "task_type": "root" }), &context).expect("root task");
         assert_eq!(parent_task_id, None);
+    }
+
+    #[test]
+    fn parse_never_ends_requires_parameter() {
+        let error = parse_never_ends(&json!({})).expect_err("missing never_ends should fail");
+        assert!(
+            error
+                .to_string()
+                .contains("Missing required parameter: never_ends")
+        );
+    }
+
+    #[test]
+    fn parse_never_ends_requires_boolean_value() {
+        let error =
+            parse_never_ends(&json!({ "never_ends": "yes" })).expect_err("string should fail");
+        assert!(
+            error
+                .to_string()
+                .contains("Parameter never_ends must be a boolean")
+        );
+    }
+
+    #[test]
+    fn parse_never_ends_accepts_boolean_value() {
+        let never_ends = parse_never_ends(&json!({ "never_ends": true }))
+            .expect("boolean never_ends should parse");
+        assert!(never_ends);
     }
 }

@@ -18,8 +18,47 @@ pub struct CreateTaskRequest {
     pub parent_task_id: Option<Uuid>,
     #[serde(default)]
     pub agent: Option<String>,
-    #[serde(default)]
     pub never_ends: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::CreateTaskRequest;
+    use crate::message::Content;
+    use serde_json::json;
+    use uuid::Uuid;
+
+    #[test]
+    fn create_task_request_requires_never_ends_when_deserializing() {
+        let error = serde_json::from_value::<CreateTaskRequest>(json!({
+            "prompt": [{ "type": "text", "text": "hello" }],
+        }))
+        .expect_err("missing never_ends should fail");
+
+        assert!(error.to_string().contains("never_ends"));
+    }
+
+    #[test]
+    fn create_task_request_deserializes_with_explicit_never_ends() {
+        let parent_task_id = Uuid::new_v4();
+        let request = serde_json::from_value::<CreateTaskRequest>(json!({
+            "prompt": [{ "type": "text", "text": "hello" }],
+            "parent_task_id": parent_task_id,
+            "agent": "codex",
+            "never_ends": true,
+        }))
+        .expect("request should deserialize");
+
+        assert_eq!(
+            request.prompt,
+            vec![Content::Text {
+                text: "hello".to_string()
+            }]
+        );
+        assert_eq!(request.parent_task_id, Some(parent_task_id));
+        assert_eq!(request.agent.as_deref(), Some("codex"));
+        assert!(request.never_ends);
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
