@@ -282,11 +282,6 @@ impl TaskStore {
         .map_err(|err| {
             BabataError::internal(format!("Failed to initialize tasks table: {}", err))
         })?;
-        ensure_tasks_table_column(
-            &conn,
-            "never_ends",
-            "ALTER TABLE tasks ADD COLUMN never_ends INTEGER NOT NULL DEFAULT 0",
-        )?;
 
         Ok(Self { db_path })
     }
@@ -353,38 +348,6 @@ fn parse_task_record(row: &Row<'_>) -> rusqlite::Result<TaskRecord> {
     })
 }
 
-fn ensure_tasks_table_column(
-    conn: &Connection,
-    column_name: &str,
-    alter_statement: &str,
-) -> BabataResult<()> {
-    let mut stmt = conn
-        .prepare("PRAGMA table_info(tasks)")
-        .map_err(|err| BabataError::internal(format!("Failed to inspect tasks table: {}", err)))?;
-    let columns = stmt
-        .query_map([], |row| row.get::<_, String>(1))
-        .map_err(|err| {
-            BabataError::internal(format!("Failed to query tasks table columns: {}", err))
-        })?;
-
-    for column in columns {
-        let column = column.map_err(|err| {
-            BabataError::internal(format!("Failed to decode tasks table column info: {}", err))
-        })?;
-        if column == column_name {
-            return Ok(());
-        }
-    }
-
-    conn.execute(alter_statement, []).map_err(|err| {
-        BabataError::internal(format!(
-            "Failed to add '{}' column to tasks table: {}",
-            column_name, err
-        ))
-    })?;
-    Ok(())
-}
-
 fn collect_task_records(
     rows: impl Iterator<Item = rusqlite::Result<TaskRecord>>,
 ) -> BabataResult<Vec<TaskRecord>> {
@@ -425,49 +388,6 @@ mod tests {
             .expect_err("missing never_ends should fail");
 
         assert!(error.to_string().contains("never_ends"));
-    }
-
-    #[test]
-    fn open_adds_never_ends_column_to_existing_database() {
-        let db_path = temp_db_path("task-store-migration");
-        let task_id = Uuid::new_v4();
-
-        let conn = Connection::open(&db_path).expect("open sqlite db");
-        conn.execute(
-            "CREATE TABLE tasks (
-                task_id TEXT PRIMARY KEY,
-                description TEXT NOT NULL,
-                agent TEXT,
-                status TEXT NOT NULL,
-                parent_task_id TEXT,
-                root_task_id TEXT NOT NULL,
-                created_at INTEGER NOT NULL
-            )",
-            [],
-        )
-        .expect("create legacy tasks table");
-        conn.execute(
-            "INSERT INTO tasks (task_id, description, agent, status, parent_task_id, root_task_id, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            params![
-                task_id.to_string(),
-                "legacy task",
-                Option::<String>::None,
-                TaskStatus::Running.as_str(),
-                Option::<String>::None,
-                task_id.to_string(),
-                123_i64,
-            ],
-        )
-        .expect("insert legacy task");
-        drop(conn);
-
-        let store = TaskStore::open(&db_path).expect("open store");
-        let task = store.get_task(task_id).expect("load task");
-
-        assert!(!task.never_ends);
-
-        let _ = std::fs::remove_file(&db_path);
     }
 
     #[test]
