@@ -238,10 +238,6 @@ impl TaskManager {
 
     fn handle_task_completed(&self, task_id: Uuid) {
         self.running_tasks.lock().remove(&task_id);
-        self.check_task_completed(task_id);
-    }
-
-    fn check_task_completed(&self, task_id: Uuid) {
         let task = match self.store.get_task(task_id) {
             Ok(task) => task,
             Err(err) => {
@@ -638,7 +634,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn check_task_completed_marks_root_task_done_and_cleans_directory() {
+    async fn handle_task_completed_marks_root_task_done_and_cleans_directory() {
         let temp_root = temp_test_root("manager-complete-root");
         fs::create_dir_all(&temp_root).expect("create temp root");
         let manager = build_test_manager(&temp_root);
@@ -655,7 +651,7 @@ mod tests {
             .insert_task(task.clone())
             .expect("insert task record");
 
-        manager.check_task_completed(task.task_id);
+        manager.handle_task_completed(task.task_id);
 
         let stored_task = manager.store.get_task(task.task_id).expect("load task");
         assert_eq!(stored_task.status, TaskStatus::Done);
@@ -665,7 +661,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn check_task_completed_relaunches_when_subtasks_are_unfinished() {
+    async fn handle_task_completed_relaunches_when_subtasks_are_unfinished() {
         let temp_root = temp_test_root("manager-unfinished-subtasks");
         fs::create_dir_all(&temp_root).expect("create temp root");
         let manager = build_test_manager(&temp_root);
@@ -694,7 +690,7 @@ mod tests {
             .insert_task(subtask.clone())
             .expect("insert subtask record");
 
-        manager.check_task_completed(task.task_id);
+        manager.handle_task_completed(task.task_id);
 
         let stored_task = manager
             .store
