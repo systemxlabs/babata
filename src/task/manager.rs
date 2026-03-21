@@ -238,7 +238,6 @@ impl TaskManager {
 
     fn handle_task_completed(&self, task_id: Uuid) {
         self.running_tasks.lock().remove(&task_id);
-
         let task = match self.store.get_task(task_id) {
             Ok(task) => task,
             Err(err) => {
@@ -261,20 +260,18 @@ impl TaskManager {
         if self.has_unfinished_subtasks(task_id) {
             let reason = format!(
                 "Task {} is being relaunched because it attempted to finish while there are still unfinished subtasks. A parent task must remain running until all of its subtasks are done or canceled.",
-                task_id
+                task.task_id
             );
-            info!("{reason}");
-            match self.launcher.relaunch(&task, self.exit_tx.clone(), &reason) {
-                Ok(running_task) => {
-                    self.running_tasks.lock().insert(task_id, running_task);
-                }
-                Err(err) => {
-                    error!(
-                        "Failed to relaunch task {} after deferred completion: {}",
-                        task_id, err
-                    );
-                }
-            }
+            self.relaunch_after_completion(&task, &reason, "deferred completion");
+            return;
+        }
+
+        if task.never_ends {
+            let reason = format!(
+                "Task {} is being relaunched because it is configured with never_ends=true and should keep running after reporting completion.",
+                task.task_id
+            );
+            self.relaunch_after_completion(&task, &reason, "never-ending completion");
             return;
         }
 
@@ -288,6 +285,21 @@ impl TaskManager {
         }
         if task.task_id == task.root_task_id {
             self.remove_task_dir_recursive(task_id);
+        }
+    }
+
+    fn relaunch_after_completion(&self, task: &TaskRecord, reason: &str, failure_context: &str) {
+        info!("{reason}");
+        match self.launcher.relaunch(task, self.exit_tx.clone(), reason) {
+            Ok(running_task) => {
+                self.running_tasks.lock().insert(task.task_id, running_task);
+            }
+            Err(err) => {
+                error!(
+                    "Failed to relaunch task {} after {}: {}",
+                    task.task_id, failure_context, err
+                );
+            }
         }
     }
 
@@ -499,5 +511,201 @@ fn render_prompt_markdown(prompt: &[Content]) -> String {
         "_No prompt provided._".to_string()
     } else {
         lines.join("\n\n")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{AgentConfig, CodexAgentConfig, Config};
+    use std::{collections::HashMap, fs, path::PathBuf};
+    use uuid::Uuid;
+
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
+
+    fn task_record(never_ends: bool) -> TaskRecord {
+        let task_id = Uuid::new_v4();
+        TaskRecord {
+            task_id,
+            description: "test task".to_string(),
+            agent: Some("codex".to_string()),
+            status: TaskStatus::Running,
+            parent_task_id: None,
+            root_task_id: task_id,
+            created_at: 123,
+            never_ends,
+        }
+    }
+
+    fn subtask_record(parent_task_id: Uuid, root_task_id: Uuid) -> TaskRecord {
+        TaskRecord {
+            task_id: Uuid::new_v4(),
+            description: "test subtask".to_string(),
+            agent: Some("codex".to_string()),
+            status: TaskStatus::Running,
+            parent_task_id: Some(parent_task_id),
+            root_task_id,
+            created_at: 123,
+            never_ends: false,
+        }
+    }
+
+    fn temp_test_root(test_name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("babata-{test_name}-{}", Uuid::new_v4()))
+    }
+
+    fn create_dummy_codex_command(dir: &std::path::Path) -> PathBuf {
+        #[cfg(windows)]
+        {
+            let command_path = dir.join("fake-codex.cmd");
+            fs::write(&command_path, "@echo off\r\nexit /b 0\r\n").expect("write fake codex cmd");
+            command_path
+        }
+
+        #[cfg(not(windows))]
+        {
+            let command_path = dir.join("fake-codex");
+            fs::write(&command_path, "#!/bin/sh\nexit 0\n").expect("write fake codex script");
+            let mut permissions = fs::metadata(&command_path)
+                .expect("read fake codex metadata")
+                .permissions();
+            permissions.set_mode(0o755);
+            fs::set_permissions(&command_path, permissions).expect("chmod fake codex script");
+            command_path
+        }
+    }
+
+    fn build_test_manager(temp_root: &std::path::Path) -> TaskManager {
+        let workspace = temp_root.join("workspace");
+        fs::create_dir_all(&workspace).expect("create workspace");
+
+        let command = create_dummy_codex_command(temp_root);
+        let config = Config {
+            providers: Vec::new(),
+            agents: vec![AgentConfig::Codex(CodexAgentConfig {
+                command: command.display().to_string(),
+                workspace: workspace.display().to_string(),
+                model: None,
+            })],
+            channels: Vec::new(),
+            memory: Vec::new(),
+        };
+
+        let store = TaskStore::open(temp_root.join("task.db")).expect("open temp task store");
+        let launcher = TaskLauncher::new(&config, HashMap::new()).expect("build task launcher");
+        TaskManager::new(store, launcher).expect("build task manager")
+    }
+
+    fn cleanup_task_artifacts(manager: &TaskManager, task_id: Uuid) {
+        if let Some(running_task) = manager.running_tasks.lock().remove(&task_id) {
+            running_task.handle.abort();
+        }
+        remove_task_dir(task_id);
+    }
+
+    #[tokio::test]
+    async fn handle_task_completed_relaunches_never_ending_task() {
+        let temp_root = temp_test_root("manager-never-ends");
+        fs::create_dir_all(&temp_root).expect("create temp root");
+        let manager = build_test_manager(&temp_root);
+        let task = task_record(true);
+        initialize_task_dir(
+            &task,
+            &[Content::Text {
+                text: "keep running".to_string(),
+            }],
+        )
+        .expect("initialize task dir");
+        manager
+            .store
+            .insert_task(task.clone())
+            .expect("insert task record");
+
+        manager.handle_task_completed(task.task_id);
+
+        let stored_task = manager.store.get_task(task.task_id).expect("load task");
+        assert_eq!(stored_task.status, TaskStatus::Running);
+        assert!(manager.running_tasks.lock().contains_key(&task.task_id));
+        assert!(task_dir(task.task_id).expect("resolve task dir").exists());
+
+        cleanup_task_artifacts(&manager, task.task_id);
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[tokio::test]
+    async fn handle_task_completed_marks_root_task_done_and_cleans_directory() {
+        let temp_root = temp_test_root("manager-complete-root");
+        fs::create_dir_all(&temp_root).expect("create temp root");
+        let manager = build_test_manager(&temp_root);
+        let task = task_record(false);
+        initialize_task_dir(
+            &task,
+            &[Content::Text {
+                text: "finish task".to_string(),
+            }],
+        )
+        .expect("initialize task dir");
+        manager
+            .store
+            .insert_task(task.clone())
+            .expect("insert task record");
+
+        manager.handle_task_completed(task.task_id);
+
+        let stored_task = manager.store.get_task(task.task_id).expect("load task");
+        assert_eq!(stored_task.status, TaskStatus::Done);
+        assert!(!task_dir(task.task_id).expect("resolve task dir").exists());
+
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[tokio::test]
+    async fn handle_task_completed_relaunches_when_subtasks_are_unfinished() {
+        let temp_root = temp_test_root("manager-unfinished-subtasks");
+        fs::create_dir_all(&temp_root).expect("create temp root");
+        let manager = build_test_manager(&temp_root);
+        let task = task_record(false);
+        let subtask = subtask_record(task.task_id, task.root_task_id);
+        initialize_task_dir(
+            &task,
+            &[Content::Text {
+                text: "wait for subtask".to_string(),
+            }],
+        )
+        .expect("initialize task dir");
+        initialize_task_dir(
+            &subtask,
+            &[Content::Text {
+                text: "subtask still running".to_string(),
+            }],
+        )
+        .expect("initialize subtask dir");
+        manager
+            .store
+            .insert_task(task.clone())
+            .expect("insert parent task record");
+        manager
+            .store
+            .insert_task(subtask.clone())
+            .expect("insert subtask record");
+
+        manager.handle_task_completed(task.task_id);
+
+        let stored_task = manager
+            .store
+            .get_task(task.task_id)
+            .expect("load parent task");
+        assert_eq!(stored_task.status, TaskStatus::Running);
+        assert!(manager.running_tasks.lock().contains_key(&task.task_id));
+        assert!(
+            task_dir(task.task_id)
+                .expect("resolve parent task dir")
+                .exists()
+        );
+
+        cleanup_task_artifacts(&manager, task.task_id);
+        remove_task_dir(subtask.task_id);
+        let _ = fs::remove_dir_all(&temp_root);
     }
 }
