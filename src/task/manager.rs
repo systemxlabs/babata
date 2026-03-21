@@ -238,7 +238,10 @@ impl TaskManager {
 
     fn handle_task_completed(&self, task_id: Uuid) {
         self.running_tasks.lock().remove(&task_id);
+        self.check_task_completed(task_id);
+    }
 
+    fn check_task_completed(&self, task_id: Uuid) {
         let task = match self.store.get_task(task_id) {
             Ok(task) => task,
             Err(err) => {
@@ -555,6 +558,19 @@ mod tests {
         }
     }
 
+    fn subtask_record(parent_task_id: Uuid, root_task_id: Uuid) -> TaskRecord {
+        TaskRecord {
+            task_id: Uuid::new_v4(),
+            description: "test subtask".to_string(),
+            agent: Some("codex".to_string()),
+            status: TaskStatus::Running,
+            parent_task_id: Some(parent_task_id),
+            root_task_id,
+            created_at: 123,
+            never_ends: false,
+        }
+    }
+
     fn temp_test_root(test_name: &str) -> PathBuf {
         std::env::temp_dir().join(format!("babata-{test_name}-{}", Uuid::new_v4()))
     }
@@ -655,6 +671,82 @@ mod tests {
         assert!(task_dir(task.task_id).expect("resolve task dir").exists());
 
         cleanup_task_artifacts(&manager, task.task_id);
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[tokio::test]
+    async fn check_task_completed_marks_root_task_done_and_cleans_directory() {
+        let temp_root = temp_test_root("manager-complete-root");
+        fs::create_dir_all(&temp_root).expect("create temp root");
+        let manager = build_test_manager(&temp_root);
+        let task = task_record(false);
+        initialize_task_dir(
+            &task,
+            &[Content::Text {
+                text: "finish task".to_string(),
+            }],
+        )
+        .expect("initialize task dir");
+        manager
+            .store
+            .insert_task(task.clone())
+            .expect("insert task record");
+
+        manager.check_task_completed(task.task_id);
+
+        let stored_task = manager.store.get_task(task.task_id).expect("load task");
+        assert_eq!(stored_task.status, TaskStatus::Done);
+        assert!(!task_dir(task.task_id).expect("resolve task dir").exists());
+
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[tokio::test]
+    async fn check_task_completed_relaunches_when_subtasks_are_unfinished() {
+        let temp_root = temp_test_root("manager-unfinished-subtasks");
+        fs::create_dir_all(&temp_root).expect("create temp root");
+        let manager = build_test_manager(&temp_root);
+        let task = task_record(false);
+        let subtask = subtask_record(task.task_id, task.root_task_id);
+        initialize_task_dir(
+            &task,
+            &[Content::Text {
+                text: "wait for subtask".to_string(),
+            }],
+        )
+        .expect("initialize task dir");
+        initialize_task_dir(
+            &subtask,
+            &[Content::Text {
+                text: "subtask still running".to_string(),
+            }],
+        )
+        .expect("initialize subtask dir");
+        manager
+            .store
+            .insert_task(task.clone())
+            .expect("insert parent task record");
+        manager
+            .store
+            .insert_task(subtask.clone())
+            .expect("insert subtask record");
+
+        manager.check_task_completed(task.task_id);
+
+        let stored_task = manager
+            .store
+            .get_task(task.task_id)
+            .expect("load parent task");
+        assert_eq!(stored_task.status, TaskStatus::Running);
+        assert!(manager.running_tasks.lock().contains_key(&task.task_id));
+        assert!(
+            task_dir(task.task_id)
+                .expect("resolve parent task dir")
+                .exists()
+        );
+
+        cleanup_task_artifacts(&manager, task.task_id);
+        remove_task_dir(subtask.task_id);
         let _ = fs::remove_dir_all(&temp_root);
     }
 }
