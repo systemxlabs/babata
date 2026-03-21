@@ -22,6 +22,7 @@ pub(super) async fn handle(
         prompt: request.prompt,
         parent_task_id: request.parent_task_id,
         agent: request.agent.filter(|value| !value.trim().is_empty()),
+        never_ends: request.never_ends,
     }) {
         Ok(task_id) => (
             StatusCode::CREATED,

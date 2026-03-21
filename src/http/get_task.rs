@@ -34,6 +34,8 @@ pub(crate) struct TaskResponse {
     pub(crate) parent_task_id: Option<String>,
     pub(crate) root_task_id: String,
     pub(crate) created_at: i64,
+    #[serde(default)]
+    pub(crate) never_ends: bool,
 }
 
 impl TaskResponse {
@@ -46,6 +48,7 @@ impl TaskResponse {
             parent_task_id: record.parent_task_id.map(|task_id| task_id.to_string()),
             root_task_id: record.root_task_id.to_string(),
             created_at: record.created_at,
+            never_ends: record.never_ends,
         }
     }
 }

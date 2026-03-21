@@ -106,6 +106,7 @@ impl TaskManager {
             parent_task_id: request.parent_task_id,
             root_task_id,
             created_at: Utc::now().timestamp_millis(),
+            never_ends: request.never_ends,
         };
         initialize_task_dir(&task_record, &request.prompt)?;
         self.store.insert_task(task_record.clone())?;
@@ -414,6 +415,7 @@ fn initialize_task_dir(task: &TaskRecord, prompt: &[Content]) -> BabataResult<()
 - Parent Task ID: {}
 - Agent: {}
 - Status: {}
+- Never Ends: {}
 
 ## Initial Prompt
 {}
@@ -425,6 +427,7 @@ fn initialize_task_dir(task: &TaskRecord, prompt: &[Content]) -> BabataResult<()
             .unwrap_or_else(|| "none".to_string()),
         agent,
         task.status,
+        task.never_ends,
         prompt
     );
     let progress_markdown = r#"# Progress

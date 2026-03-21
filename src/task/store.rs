@@ -15,6 +15,8 @@ pub struct TaskRecord {
     pub parent_task_id: Option<Uuid>,
     pub root_task_id: Uuid,
     pub created_at: i64,
+    #[serde(default)]
+    pub never_ends: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -31,8 +33,8 @@ impl TaskStore {
     pub fn insert_task(&self, record: TaskRecord) -> BabataResult<()> {
         let conn = self.connect()?;
         conn.execute(
-            "INSERT INTO tasks (task_id, description, agent, status, parent_task_id, root_task_id, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO tasks (task_id, description, agent, status, parent_task_id, root_task_id, created_at, never_ends)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 record.task_id.to_string(),
                 record.description,
@@ -41,6 +43,7 @@ impl TaskStore {
                 record.parent_task_id.map(|id| id.to_string()),
                 record.root_task_id.to_string(),
                 record.created_at,
+                record.never_ends,
             ],
         )
         .map_err(|err| BabataError::internal(format!("Failed to insert task row: {}", err)))?;
@@ -93,7 +96,7 @@ impl TaskStore {
         let conn = self.connect()?;
         let mut stmt = conn
             .prepare(
-                "SELECT task_id, description, agent, status, parent_task_id, root_task_id, created_at
+                "SELECT task_id, description, agent, status, parent_task_id, root_task_id, created_at, never_ends
                  FROM tasks
                  WHERE task_id = ?1",
             )
@@ -125,7 +128,7 @@ impl TaskStore {
             (Some(status), Some(offset)) => {
                 let mut stmt = conn
                     .prepare(
-                        "SELECT task_id, description, agent, status, parent_task_id, root_task_id, created_at
+                        "SELECT task_id, description, agent, status, parent_task_id, root_task_id, created_at, never_ends
                          FROM tasks
                          WHERE status = ?1
                          ORDER BY created_at DESC
@@ -150,7 +153,7 @@ impl TaskStore {
             (Some(status), None) => {
                 let mut stmt = conn
                     .prepare(
-                        "SELECT task_id, description, agent, status, parent_task_id, root_task_id, created_at
+                        "SELECT task_id, description, agent, status, parent_task_id, root_task_id, created_at, never_ends
                          FROM tasks
                          WHERE status = ?1
                          ORDER BY created_at DESC
@@ -172,7 +175,7 @@ impl TaskStore {
             (None, Some(offset)) => {
                 let mut stmt = conn
                     .prepare(
-                        "SELECT task_id, description, agent, status, parent_task_id, root_task_id, created_at
+                        "SELECT task_id, description, agent, status, parent_task_id, root_task_id, created_at, never_ends
                          FROM tasks
                          ORDER BY created_at DESC
                          LIMIT ?1 OFFSET ?2",
@@ -193,7 +196,7 @@ impl TaskStore {
             (None, None) => {
                 let mut stmt = conn
                     .prepare(
-                        "SELECT task_id, description, agent, status, parent_task_id, root_task_id, created_at
+                        "SELECT task_id, description, agent, status, parent_task_id, root_task_id, created_at, never_ends
                          FROM tasks
                          ORDER BY created_at DESC
                          LIMIT ?1",
@@ -220,7 +223,7 @@ impl TaskStore {
         let conn = self.connect()?;
         let mut stmt = conn
             .prepare(
-                "SELECT task_id, description, agent, status, parent_task_id, root_task_id, created_at
+                "SELECT task_id, description, agent, status, parent_task_id, root_task_id, created_at, never_ends
                  FROM tasks
                  WHERE parent_task_id = ?1
                  ORDER BY created_at DESC",
@@ -272,13 +275,19 @@ impl TaskStore {
                 status TEXT NOT NULL,
                 parent_task_id TEXT,
                 root_task_id TEXT NOT NULL,
-                created_at INTEGER NOT NULL
+                created_at INTEGER NOT NULL,
+                never_ends INTEGER NOT NULL DEFAULT 0
             )",
             [],
         )
         .map_err(|err| {
             BabataError::internal(format!("Failed to initialize tasks table: {}", err))
         })?;
+        ensure_tasks_table_column(
+            &conn,
+            "never_ends",
+            "ALTER TABLE tasks ADD COLUMN never_ends INTEGER NOT NULL DEFAULT 0",
+        )?;
 
         Ok(Self { db_path })
     }
@@ -306,6 +315,7 @@ fn parse_task_record(row: &Row<'_>) -> rusqlite::Result<TaskRecord> {
     let parent_task_id_raw = row.get::<_, Option<String>>(4)?;
     let root_task_id_raw = row.get::<_, String>(5)?;
     let created_at = row.get::<_, i64>(6)?;
+    let never_ends = row.get::<_, bool>(7)?;
 
     let task_id = Uuid::parse_str(&task_id_raw).map_err(|err| {
         rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(err))
@@ -340,7 +350,40 @@ fn parse_task_record(row: &Row<'_>) -> rusqlite::Result<TaskRecord> {
         parent_task_id,
         root_task_id,
         created_at,
+        never_ends,
     })
+}
+
+fn ensure_tasks_table_column(
+    conn: &Connection,
+    column_name: &str,
+    alter_statement: &str,
+) -> BabataResult<()> {
+    let mut stmt = conn
+        .prepare("PRAGMA table_info(tasks)")
+        .map_err(|err| BabataError::internal(format!("Failed to inspect tasks table: {}", err)))?;
+    let columns = stmt
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|err| {
+            BabataError::internal(format!("Failed to query tasks table columns: {}", err))
+        })?;
+
+    for column in columns {
+        let column = column.map_err(|err| {
+            BabataError::internal(format!("Failed to decode tasks table column info: {}", err))
+        })?;
+        if column == column_name {
+            return Ok(());
+        }
+    }
+
+    conn.execute(alter_statement, []).map_err(|err| {
+        BabataError::internal(format!(
+            "Failed to add '{}' column to tasks table: {}",
+            column_name, err
+        ))
+    })?;
+    Ok(())
 }
 
 fn collect_task_records(
@@ -350,4 +393,81 @@ fn collect_task_records(
         row.map_err(|err| BabataError::internal(format!("Failed to decode task row: {}", err)))
     })
     .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_db_path(test_name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("babata-{test_name}-{}.db", Uuid::new_v4()))
+    }
+
+    #[test]
+    fn open_adds_never_ends_column_to_existing_database() {
+        let db_path = temp_db_path("task-store-migration");
+        let task_id = Uuid::new_v4();
+
+        let conn = Connection::open(&db_path).expect("open sqlite db");
+        conn.execute(
+            "CREATE TABLE tasks (
+                task_id TEXT PRIMARY KEY,
+                description TEXT NOT NULL,
+                agent TEXT,
+                status TEXT NOT NULL,
+                parent_task_id TEXT,
+                root_task_id TEXT NOT NULL,
+                created_at INTEGER NOT NULL
+            )",
+            [],
+        )
+        .expect("create legacy tasks table");
+        conn.execute(
+            "INSERT INTO tasks (task_id, description, agent, status, parent_task_id, root_task_id, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                task_id.to_string(),
+                "legacy task",
+                Option::<String>::None,
+                TaskStatus::Running.as_str(),
+                Option::<String>::None,
+                task_id.to_string(),
+                123_i64,
+            ],
+        )
+        .expect("insert legacy task");
+        drop(conn);
+
+        let store = TaskStore::open(&db_path).expect("open store");
+        let task = store.get_task(task_id).expect("load task");
+
+        assert!(!task.never_ends);
+
+        let _ = std::fs::remove_file(&db_path);
+    }
+
+    #[test]
+    fn insert_task_persists_never_ends() {
+        let db_path = temp_db_path("task-store-never-ends");
+        let store = TaskStore::open(&db_path).expect("open store");
+        let task_id = Uuid::new_v4();
+
+        store
+            .insert_task(TaskRecord {
+                task_id,
+                description: "persist never_ends".to_string(),
+                agent: Some("codex".to_string()),
+                status: TaskStatus::Running,
+                parent_task_id: None,
+                root_task_id: task_id,
+                created_at: 456,
+                never_ends: true,
+            })
+            .expect("insert task");
+
+        let task = store.get_task(task_id).expect("load task");
+        assert!(task.never_ends);
+
+        let _ = std::fs::remove_file(&db_path);
+    }
 }

@@ -136,6 +136,7 @@ async fn broadcast_service_started(task_manager: &Arc<TaskManager>) {
         prompt: vec![prompt],
         parent_task_id: None,
         agent: None,
+        never_ends: false,
     };
     if let Err(e) = task_manager.create_task(task) {
         error!("Failed to create service started notification task: {}", e);

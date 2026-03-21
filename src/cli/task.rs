@@ -39,8 +39,8 @@ pub fn relaunch(task_id: &str, reason: &str) {
     }
 }
 
-pub fn create(prompt: &str, agent: Option<&str>, parent_task_id: Option<&str>) {
-    if let Err(err) = run_create(prompt, agent, parent_task_id) {
+pub fn create(prompt: &str, agent: Option<&str>, parent_task_id: Option<&str>, never_ends: bool) {
+    if let Err(err) = run_create(prompt, agent, parent_task_id, never_ends) {
         eprintln!("{err}");
         std::process::exit(1);
     }
@@ -123,7 +123,12 @@ fn run_relaunch(task_id: &str, reason: &str) -> BabataResult<()> {
     })
 }
 
-fn run_create(prompt: &str, agent: Option<&str>, parent_task_id: Option<&str>) -> BabataResult<()> {
+fn run_create(
+    prompt: &str,
+    agent: Option<&str>,
+    parent_task_id: Option<&str>,
+    never_ends: bool,
+) -> BabataResult<()> {
     if prompt.trim().is_empty() {
         return Err(BabataError::config("prompt cannot be empty"));
     }
@@ -145,6 +150,7 @@ fn run_create(prompt: &str, agent: Option<&str>, parent_task_id: Option<&str>) -
             }],
             agent: agent.map(ToOwned::to_owned),
             parent_task_id,
+            never_ends,
         };
         let response = Client::new()
             .post(format!("{DEFAULT_HTTP_BASE_URL}/tasks"))
@@ -268,6 +274,7 @@ fn format_tasks_table(tasks: &[TaskResponse]) -> String {
         .set_header([
             "TASK ID",
             "STATUS",
+            "NEVER ENDS",
             "AGENT",
             "PARENT",
             "CREATED AT",
@@ -278,6 +285,7 @@ fn format_tasks_table(tasks: &[TaskResponse]) -> String {
         table.add_row([
             task.task_id.clone(),
             task.status.clone(),
+            task.never_ends.to_string(),
             task.agent.clone().unwrap_or_else(|| "-".to_string()),
             task.parent_task_id
                 .clone()
@@ -324,14 +332,17 @@ mod tests {
             parent_task_id: None,
             root_task_id: "12345678-1234-1234-1234-123456789abc".to_string(),
             created_at: 1_773_994_800_000,
+            never_ends: false,
         }];
 
         let table = format_tasks_table(&tasks);
 
         assert!(table.contains("TASK ID"));
         assert!(table.contains("STATUS"));
+        assert!(table.contains("NEVER ENDS"));
         assert!(table.contains("12345678-1234-1234-1234-123456789abc"));
         assert!(table.contains("running"));
+        assert!(table.contains("false"));
         assert!(table.contains("babata"));
         assert!(table.contains("run a very long task prompt here"));
     }
@@ -347,6 +358,7 @@ mod tests {
                 parent_task_id: None,
                 root_task_id: "12345678-1234-1234-1234-123456789abc".to_string(),
                 created_at: 1_773_994_800_000,
+                never_ends: true,
             },
             TaskResponse {
                 task_id: "abcdefab-cdef-cdef-cdef-abcdefabcdef".to_string(),
@@ -356,6 +368,7 @@ mod tests {
                 parent_task_id: None,
                 root_task_id: "abcdefab-cdef-cdef-cdef-abcdefabcdef".to_string(),
                 created_at: 1_773_994_800_001,
+                never_ends: false,
             },
         ];
 
@@ -364,6 +377,7 @@ mod tests {
 
         assert_eq!(lines.len(), 2);
         assert!(lines[0].contains("\"task_id\":\"12345678-1234-1234-1234-123456789abc\""));
+        assert!(lines[0].contains("\"never_ends\":true"));
         assert!(lines[1].contains("\"task_id\":\"abcdefab-cdef-cdef-cdef-abcdefabcdef\""));
     }
 

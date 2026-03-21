@@ -35,6 +35,10 @@ impl CreateTaskTool {
                             "type": "string",
                             "description": "Optional agent name for the task"
                         },
+                        "never_ends": {
+                            "type": "boolean",
+                            "description": "Optional flag stored on the task record. Defaults to false."
+                        },
                         "task_type": {
                             "type": "string",
                             "description": "The type of task to create: 'subtask' or 'root'. Defaults to 'subtask'."
@@ -70,6 +74,7 @@ impl Tool for CreateTaskTool {
             }],
             agent: args["agent"].as_str().map(ToOwned::to_owned),
             parent_task_id: parse_parent_task_id(&args, context)?,
+            never_ends: args["never_ends"].as_bool().unwrap_or(false),
         };
 
         let response = self

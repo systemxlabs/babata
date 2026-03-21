@@ -18,6 +18,8 @@ pub struct CreateTaskRequest {
     pub parent_task_id: Option<Uuid>,
     #[serde(default)]
     pub agent: Option<String>,
+    #[serde(default)]
+    pub never_ends: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
