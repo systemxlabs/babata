@@ -102,6 +102,7 @@ mod tests {
                 parent_task_id: None,
                 root_task_id: task_id,
                 created_at: 0,
+                never_ends: false,
             })
             .expect("insert task");
 

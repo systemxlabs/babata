@@ -154,6 +154,8 @@ pub enum TaskAction {
             help = "Optional parent task UUID"
         )]
         parent_task_id: Option<String>,
+        #[arg(long, help = "Set the never_ends flag on the created task record")]
+        never_ends: bool,
     },
     #[command(about = "List tasks")]
     List {

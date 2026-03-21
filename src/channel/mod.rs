@@ -68,6 +68,7 @@ pub fn start_channel_loops(
                                 prompt,
                                 parent_task_id: None,
                                 agent: None,
+                                never_ends: false,
                             };
 
                             if let Err(err) = task_manager.create_task(task) {
