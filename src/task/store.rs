@@ -49,16 +49,44 @@ impl TaskStore {
         Ok(())
     }
 
-    pub fn update_task_description(&self, task_id: Uuid, description: String) -> BabataResult<()> {
+    pub fn update_task(
+        &self,
+        task_id: Uuid,
+        description: Option<String>,
+        never_ends: Option<bool>,
+    ) -> BabataResult<()> {
         let conn = self.connect()?;
-        let updated = conn
-            .execute(
-                "UPDATE tasks SET description = ?1 WHERE task_id = ?2",
-                params![description, task_id.to_string()],
-            )
-            .map_err(|err| {
-                BabataError::internal(format!("Failed to update task description row: {}", err))
-            })?;
+        let updated = match (description, never_ends) {
+            (Some(description), Some(never_ends)) => conn
+                .execute(
+                    "UPDATE tasks SET description = ?1, never_ends = ?2 WHERE task_id = ?3",
+                    params![description, never_ends, task_id.to_string()],
+                )
+                .map_err(|err| {
+                    BabataError::internal(format!("Failed to update task row: {}", err))
+                })?,
+            (Some(description), None) => conn
+                .execute(
+                    "UPDATE tasks SET description = ?1 WHERE task_id = ?2",
+                    params![description, task_id.to_string()],
+                )
+                .map_err(|err| {
+                    BabataError::internal(format!("Failed to update task row: {}", err))
+                })?,
+            (None, Some(never_ends)) => conn
+                .execute(
+                    "UPDATE tasks SET never_ends = ?1 WHERE task_id = ?2",
+                    params![never_ends, task_id.to_string()],
+                )
+                .map_err(|err| {
+                    BabataError::internal(format!("Failed to update task row: {}", err))
+                })?,
+            (None, None) => {
+                return Err(BabataError::internal(
+                    "At least one task field must be provided for update".to_string(),
+                ));
+            }
+        };
 
         if updated == 0 {
             return Err(BabataError::internal(format!(
@@ -437,6 +465,36 @@ mod tests {
             .expect("insert task");
 
         let task = store.get_task(task_id).expect("load task");
+        assert!(task.never_ends);
+
+        let _ = std::fs::remove_file(&db_path);
+    }
+
+    #[test]
+    fn update_task_persists_description_and_never_ends() {
+        let db_path = temp_db_path("task-store-update-task");
+        let store = TaskStore::open(&db_path).expect("open store");
+        let task_id = Uuid::new_v4();
+
+        store
+            .insert_task(TaskRecord {
+                task_id,
+                description: "before".to_string(),
+                agent: Some("codex".to_string()),
+                status: TaskStatus::Running,
+                parent_task_id: None,
+                root_task_id: task_id,
+                created_at: 789,
+                never_ends: false,
+            })
+            .expect("insert task");
+
+        store
+            .update_task(task_id, Some("after".to_string()), Some(true))
+            .expect("update task");
+
+        let task = store.get_task(task_id).expect("load task");
+        assert_eq!(task.description, "after");
         assert!(task.never_ends);
 
         let _ = std::fs::remove_file(&db_path);
