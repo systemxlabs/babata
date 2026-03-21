@@ -269,7 +269,7 @@ impl TaskStore {
         )
     }
 
-    fn open(db_path: impl AsRef<Path>) -> BabataResult<Self> {
+    pub(crate) fn open(db_path: impl AsRef<Path>) -> BabataResult<Self> {
         let db_path = db_path.as_ref().to_path_buf();
         let Some(parent) = db_path.parent() else {
             return Err(BabataError::internal(format!(
