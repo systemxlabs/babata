@@ -128,6 +128,7 @@ impl Config {
         for channel in &self.channels {
             match channel {
                 ChannelConfig::Telegram(telegram) => telegram.validate()?,
+                ChannelConfig::Wechat(wechat) => wechat.validate()?,
             }
         }
 
@@ -152,6 +153,7 @@ impl Config {
             matches!(
                 (existing, &channel_config),
                 (ChannelConfig::Telegram(_), ChannelConfig::Telegram(_))
+                    | (ChannelConfig::Wechat(_), ChannelConfig::Wechat(_))
             )
         }) {
             *existing = channel_config;

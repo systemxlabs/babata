@@ -1,6 +1,8 @@
 mod telegram;
+mod wechat;
 
 pub use telegram::*;
+pub use wechat::*;
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -43,6 +45,14 @@ pub fn build_channels(config: &Config) -> BabataResult<HashMap<String, Arc<dyn C
                     Arc::new(channel),
                 );
             }
+            ChannelConfig::Wechat(wechat_config) => {
+                wechat_config.validate()?;
+                let channel = WechatChannel::new(wechat_config.clone())?;
+                channels.insert(
+                    channel_config.name().to_ascii_lowercase(),
+                    Arc::new(channel),
+                );
+            }
         }
     }
 
@@ -61,7 +71,12 @@ pub fn start_channel_loops(
                 match channel.try_receive().await {
                     Ok(content) => {
                         if !content.is_empty() {
-                            let mut prompt = vec![Content::Text { text: "Your user send you message from telegram, the message content is below:".to_string() }];
+                            let mut prompt = vec![Content::Text {
+                                text: format!(
+                                    "Your user sent you a message from {}, the message content is below:",
+                                    channel_name
+                                ),
+                            }];
                             prompt.extend(content);
 
                             let task = CreateTaskRequest {

@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     BabataResult,
-    channel::{Channel, TelegramChannel},
+    channel::{Channel, TelegramChannel, WechatChannel},
     error::BabataError,
 };
 
@@ -10,6 +10,7 @@ use crate::{
 #[serde(tag = "name", rename_all = "snake_case")]
 pub enum ChannelConfig {
     Telegram(TelegramChannelConfig),
+    Wechat(WechatChannelConfig),
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -36,10 +37,33 @@ impl TelegramChannelConfig {
     }
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+pub struct WechatChannelConfig {
+    pub token: String,
+    pub user_id: String,
+}
+
+impl WechatChannelConfig {
+    pub fn validate(&self) -> BabataResult<()> {
+        if self.token.trim().is_empty() {
+            return Err(BabataError::config("Wechat channel token cannot be empty"));
+        }
+
+        if self.user_id.trim().is_empty() {
+            return Err(BabataError::config(
+                "Wechat channel user_id cannot be empty",
+            ));
+        }
+
+        Ok(())
+    }
+}
+
 impl ChannelConfig {
     pub fn name(&self) -> &'static str {
         match self {
             ChannelConfig::Telegram(_) => TelegramChannel::name(),
+            ChannelConfig::Wechat(_) => WechatChannel::name(),
         }
     }
 
@@ -67,6 +91,26 @@ mod tests {
         let config = TelegramChannelConfig {
             bot_token: "token".to_string(),
             user_id: 0,
+        };
+
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn wechat_config_rejects_empty_token() {
+        let config = WechatChannelConfig {
+            token: " ".to_string(),
+            user_id: "wxid_123".to_string(),
+        };
+
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn wechat_config_rejects_empty_user_id() {
+        let config = WechatChannelConfig {
+            token: "token".to_string(),
+            user_id: " ".to_string(),
         };
 
         assert!(config.validate().is_err());

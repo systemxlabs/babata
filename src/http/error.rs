@@ -23,7 +23,9 @@ impl ApiError {
 
     pub(crate) fn from_babata_error(err: BabataError) -> Self {
         match err {
-            BabataError::Config(message, _) | BabataError::Tool(message, _) => Self {
+            BabataError::Config(message, _)
+            | BabataError::Tool(message, _)
+            | BabataError::Channel(message, _) => Self {
                 status: StatusCode::BAD_REQUEST,
                 message,
             },

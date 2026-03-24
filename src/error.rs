@@ -6,6 +6,7 @@ pub enum BabataError {
     Provider(String, &'static Location<'static>),
     Memory(String, &'static Location<'static>),
     Tool(String, &'static Location<'static>),
+    Channel(String, &'static Location<'static>),
     Internal(String, &'static Location<'static>),
 }
 
@@ -31,6 +32,11 @@ impl BabataError {
     }
 
     #[track_caller]
+    pub fn channel(message: impl Into<String>) -> Self {
+        BabataError::Channel(message.into(), Location::caller())
+    }
+
+    #[track_caller]
     pub fn internal(message: impl Into<String>) -> Self {
         BabataError::Internal(message.into(), Location::caller())
     }
@@ -43,6 +49,7 @@ impl std::fmt::Display for BabataError {
             BabataError::Provider(msg, loc) => write!(f, "Provider error at {}: {}", loc, msg),
             BabataError::Memory(msg, loc) => write!(f, "Memory error at {}: {}", loc, msg),
             BabataError::Tool(msg, loc) => write!(f, "Tool error at {}: {}", loc, msg),
+            BabataError::Channel(msg, loc) => write!(f, "Channel error at {}: {}", loc, msg),
             BabataError::Internal(msg, loc) => write!(f, "Internal error at {}: {}", loc, msg),
         }
     }
