@@ -39,14 +39,16 @@ impl TelegramChannelConfig {
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct WechatChannelConfig {
-    pub token: String,
+    pub bot_token: String,
     pub user_id: String,
 }
 
 impl WechatChannelConfig {
     pub fn validate(&self) -> BabataResult<()> {
-        if self.token.trim().is_empty() {
-            return Err(BabataError::config("Wechat channel token cannot be empty"));
+        if self.bot_token.trim().is_empty() {
+            return Err(BabataError::config(
+                "Wechat channel bot_token cannot be empty",
+            ));
         }
 
         if self.user_id.trim().is_empty() {
@@ -97,9 +99,9 @@ mod tests {
     }
 
     #[test]
-    fn wechat_config_rejects_empty_token() {
+    fn wechat_config_rejects_empty_bot_token() {
         let config = WechatChannelConfig {
-            token: " ".to_string(),
+            bot_token: " ".to_string(),
             user_id: "wxid_123".to_string(),
         };
 
@@ -109,7 +111,7 @@ mod tests {
     #[test]
     fn wechat_config_rejects_empty_user_id() {
         let config = WechatChannelConfig {
-            token: "token".to_string(),
+            bot_token: "token".to_string(),
             user_id: " ".to_string(),
         };
 

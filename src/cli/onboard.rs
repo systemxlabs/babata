@@ -536,8 +536,8 @@ fn prompt_telegram_channel_config() -> BabataResult<TelegramChannelConfig> {
 }
 
 fn prompt_wechat_channel_config() -> BabataResult<WechatChannelConfig> {
-    let token = prompt_line("Wechat bot token")?;
-    if token.trim().is_empty() {
+    let bot_token = prompt_line("Wechat bot token")?;
+    if bot_token.trim().is_empty() {
         return Err(BabataError::config("Wechat bot token cannot be empty"));
     }
 
@@ -546,7 +546,7 @@ fn prompt_wechat_channel_config() -> BabataResult<WechatChannelConfig> {
         return Err(BabataError::config("Wechat user ID cannot be empty"));
     }
 
-    Ok(WechatChannelConfig { token, user_id })
+    Ok(WechatChannelConfig { bot_token, user_id })
 }
 
 fn parse_telegram_user_id(raw: &str) -> BabataResult<i64> {

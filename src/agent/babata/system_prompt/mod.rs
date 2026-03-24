@@ -86,7 +86,7 @@ pub fn build_channels_prompt(config: &Config) -> BabataResult<String> {
                     .unwrap_or_else(|| "unavailable".to_string());
                 format!(
                     "`wechat`: receives messages from Wechat user_id `{}`; bot token: `{}`; latest context token: `{}`",
-                    wechat.user_id, wechat.token, latest_context_token
+                    wechat.user_id, wechat.bot_token, latest_context_token
                 )
             }
         };
@@ -262,7 +262,7 @@ mod tests {
                     user_id: 123456,
                 }),
                 ChannelConfig::Wechat(WechatChannelConfig {
-                    token: "token".to_string(),
+                    bot_token: "token".to_string(),
                     user_id: "wxid_123".to_string(),
                 }),
             ],

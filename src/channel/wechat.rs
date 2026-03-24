@@ -34,7 +34,7 @@ type Aes128EcbDec = ecb::Decryptor<Aes128>;
 #[derive(Debug)]
 pub struct WechatChannel {
     client: Client,
-    token: String,
+    bot_token: String,
     user_id: String,
     get_updates_buf: Mutex<Option<String>>,
 }
@@ -45,7 +45,7 @@ impl WechatChannel {
 
         Ok(Self {
             client: Client::new(),
-            token: config.token,
+            bot_token: config.bot_token,
             user_id: config.user_id,
             get_updates_buf: Mutex::new(get_updates_buf),
         })
@@ -359,7 +359,7 @@ impl WechatChannel {
         );
         headers.insert(
             AUTHORIZATION,
-            HeaderValue::from_str(&format!("Bearer {}", self.token)).map_err(|err| {
+            HeaderValue::from_str(&format!("Bearer {}", self.bot_token)).map_err(|err| {
                 BabataError::channel(format!("Invalid Wechat authorization header: {err}"))
             })?,
         );
