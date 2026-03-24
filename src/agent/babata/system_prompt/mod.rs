@@ -276,7 +276,7 @@ mod tests {
         assert!(prompt.contains("Telegram user_id `123456`"));
         assert!(prompt.contains("`wechat`"));
         assert!(prompt.contains("Wechat user_id `wxid_123`"));
-        assert!(prompt.contains("latest_context_token `"));
+        assert!(prompt.contains("latest context token: `"));
     }
 
     #[test]

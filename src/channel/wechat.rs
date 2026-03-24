@@ -1,5 +1,4 @@
 use std::{
-    collections::HashMap,
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -89,6 +88,10 @@ impl WechatChannel {
         let mut content = Vec::new();
 
         for message in incoming {
+            if message.message_type != WechatProtocolMessageType::User {
+                continue;
+            }
+
             if message.conversation.user_id != self.user_id {
                 continue;
             }
@@ -582,21 +585,27 @@ struct WechatConversation {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct WechatIncomingMessage {
     conversation: WechatConversation,
+    message_type: WechatProtocolMessageType,
+    message_state: WechatProtocolMessageState,
     items: Vec<WechatMessageItem>,
 }
 
-impl From<RawWechatIncomingMessage> for WechatIncomingMessage {
-    fn from(value: RawWechatIncomingMessage) -> Self {
-        Self {
-            conversation: WechatConversation {
-                user_id: if !value.from_user_id.trim().is_empty() {
-                    value.from_user_id
-                } else {
-                    value.to_user_id
-                },
-                context_token: value.context_token,
+impl From<WechatProtocolMessage> for WechatIncomingMessage {
+    fn from(value: WechatProtocolMessage) -> Self {
+        let conversation = WechatConversation {
+            user_id: if !value.from_user_id.trim().is_empty() {
+                value.from_user_id
+            } else {
+                value.to_user_id
             },
-            items: parse_items(value.item_list),
+            context_token: value.context_token,
+        };
+
+        Self {
+            conversation,
+            message_type: value.message_type.into(),
+            message_state: value.message_state.into(),
+            items: parse_protocol_items(value.item_list),
         }
     }
 }
@@ -607,6 +616,65 @@ enum WechatMessageItem {
     VoiceTranscription(String),
     Quote(Vec<WechatMessageItem>),
     Attachment(WechatAttachment),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WechatProtocolMessageType {
+    User,
+    Bot,
+    Unknown(u8),
+}
+
+impl From<u8> for WechatProtocolMessageType {
+    fn from(value: u8) -> Self {
+        match value {
+            1 => Self::User,
+            2 => Self::Bot,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WechatProtocolMessageState {
+    New,
+    Generating,
+    Finish,
+    Unknown(u8),
+}
+
+impl From<u8> for WechatProtocolMessageState {
+    fn from(value: u8) -> Self {
+        match value {
+            0 => Self::New,
+            1 => Self::Generating,
+            2 => Self::Finish,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WechatProtocolItemType {
+    Text,
+    Image,
+    Voice,
+    File,
+    Video,
+    Unknown(u8),
+}
+
+impl From<u8> for WechatProtocolItemType {
+    fn from(value: u8) -> Self {
+        match value {
+            1 => Self::Text,
+            2 => Self::Image,
+            3 => Self::Voice,
+            4 => Self::File,
+            5 => Self::Video,
+            _ => Self::Unknown(value),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -650,48 +718,174 @@ struct WechatAttachment {
     mime_type: Option<String>,
 }
 
+impl WechatAttachment {
+    fn from_image(item: &WechatImageItem) -> Option<Self> {
+        let media = item.media.as_ref();
+        let encrypted_query_param = media
+            .and_then(|media| non_empty(media.encrypt_query_param.as_str()))
+            .map(ToString::to_string);
+        let download_url = item
+            .url
+            .as_deref()
+            .and_then(non_empty)
+            .map(ToString::to_string);
+        let file_key = media
+            .and_then(WechatCdnMedia::file_key)
+            .or_else(|| encrypted_query_param.clone())
+            .or_else(|| download_url.clone())?;
+        let mut aes_key_candidates = Vec::new();
+        if let Some(aeskey) = item.aeskey.as_deref().and_then(non_empty) {
+            push_unique(&mut aes_key_candidates, aeskey.to_string());
+        }
+        if let Some(media_aes_key) = media
+            .and_then(|media| media.aes_key.as_deref())
+            .and_then(non_empty)
+            .map(ToString::to_string)
+        {
+            push_unique(&mut aes_key_candidates, media_aes_key.clone());
+            if let Some(decoded) = decode_base64_hex_key(&media_aes_key) {
+                push_unique(&mut aes_key_candidates, decoded);
+            }
+        }
+
+        Some(Self {
+            kind: WechatAttachmentKind::Image,
+            file_key,
+            encrypted_query_param,
+            aes_key: aes_key_candidates.first().cloned(),
+            aes_key_candidates,
+            download_url,
+            file_name: Some(WechatAttachmentKind::Image.default_file_name().to_string()),
+            file_size: item.mid_size.or(item.hd_size).or(item.thumb_size),
+            mime_type: infer_mime_type_from_url(item.url.as_deref()),
+        })
+    }
+
+    fn from_voice(item: &WechatVoiceItem) -> Option<Self> {
+        let media = item.media.as_ref()?;
+        let encrypted_query_param = non_empty(media.encrypt_query_param.as_str())?.to_string();
+        let mut aes_key_candidates = Vec::new();
+        push_aes_key_candidate(&mut aes_key_candidates, media.aes_key.as_deref());
+        Some(Self {
+            kind: WechatAttachmentKind::Audio,
+            file_key: media
+                .file_key()
+                .unwrap_or_else(|| encrypted_query_param.clone()),
+            encrypted_query_param: Some(encrypted_query_param),
+            aes_key: aes_key_candidates.first().cloned(),
+            aes_key_candidates,
+            download_url: None,
+            file_name: Some("voice.silk".to_string()),
+            file_size: None,
+            mime_type: Some("audio/silk".to_string()),
+        })
+    }
+
+    fn from_file(item: &WechatFileItem) -> Option<Self> {
+        let media = item.media.as_ref()?;
+        let encrypted_query_param = non_empty(media.encrypt_query_param.as_str())?.to_string();
+        let mut aes_key_candidates = Vec::new();
+        push_aes_key_candidate(&mut aes_key_candidates, media.aes_key.as_deref());
+        Some(Self {
+            kind: WechatAttachmentKind::File,
+            file_key: media
+                .file_key()
+                .unwrap_or_else(|| encrypted_query_param.clone()),
+            encrypted_query_param: Some(encrypted_query_param),
+            aes_key: aes_key_candidates.first().cloned(),
+            aes_key_candidates,
+            download_url: None,
+            file_name: item
+                .file_name
+                .as_deref()
+                .and_then(non_empty)
+                .map(ToString::to_string),
+            file_size: item.len.as_deref().and_then(parse_u64_str),
+            mime_type: item
+                .file_name
+                .as_deref()
+                .and_then(infer_mime_type_from_name),
+        })
+    }
+
+    fn from_video(item: &WechatVideoItem) -> Option<Self> {
+        let media = item.media.as_ref()?;
+        let encrypted_query_param = non_empty(media.encrypt_query_param.as_str())?.to_string();
+        let mut aes_key_candidates = Vec::new();
+        push_aes_key_candidate(&mut aes_key_candidates, media.aes_key.as_deref());
+        Some(Self {
+            kind: WechatAttachmentKind::Video,
+            file_key: media
+                .file_key()
+                .unwrap_or_else(|| encrypted_query_param.clone()),
+            encrypted_query_param: Some(encrypted_query_param),
+            aes_key: aes_key_candidates.first().cloned(),
+            aes_key_candidates,
+            download_url: None,
+            file_name: Some("video.mp4".to_string()),
+            file_size: item.video_size,
+            mime_type: Some("video/mp4".to_string()),
+        })
+    }
+}
+
 #[derive(Debug)]
 struct DownloadedWechatAttachment {
     mime_type: String,
     data: Vec<u8>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct WechatGetUpdatesPayload {
     #[serde(default)]
     get_updates_buf: Option<String>,
     #[serde(default)]
-    msg_list: Vec<RawWechatIncomingMessage>,
+    longpolling_timeout_ms: Option<u64>,
     #[serde(default)]
-    msgs: Vec<RawWechatIncomingMessage>,
+    msg_list: Vec<WechatProtocolMessage>,
+    #[serde(default)]
+    msgs: Vec<WechatProtocolMessage>,
 }
 
-#[derive(Debug, Deserialize)]
-struct RawWechatIncomingMessage {
+#[derive(Debug, Clone, Deserialize)]
+struct WechatProtocolMessage {
     #[serde(default)]
     from_user_id: String,
     #[serde(default)]
     to_user_id: String,
     #[serde(default)]
+    message_type: u8,
+    #[serde(default)]
+    message_state: u8,
+    #[serde(default)]
     context_token: String,
     #[serde(default)]
-    item_list: Vec<RawWechatItem>,
+    item_list: Vec<WechatProtocolItem>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct RawWechatItem {
+struct WechatProtocolItem {
     #[serde(rename = "type")]
     item_type: u8,
     #[serde(default)]
-    body: Option<Value>,
-    #[serde(default)]
     text_item: Option<WechatTextItem>,
     #[serde(default)]
-    voice_transcription_body: Option<String>,
+    image_item: Option<WechatImageItem>,
     #[serde(default)]
-    ref_item_list: Vec<RawWechatItem>,
-    #[serde(flatten)]
-    extra: HashMap<String, Value>,
+    voice_item: Option<WechatVoiceItem>,
+    #[serde(default)]
+    file_item: Option<WechatFileItem>,
+    #[serde(default)]
+    video_item: Option<WechatVideoItem>,
+    #[serde(default)]
+    ref_msg: Option<WechatRefMessage>,
+}
+
+impl WechatProtocolItem {
+    fn item_type(&self) -> WechatProtocolItemType {
+        self.item_type.into()
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -700,275 +894,175 @@ struct WechatTextItem {
     text: String,
 }
 
-impl RawWechatItem {
-    fn attachment(&self, kind: WechatAttachmentKind) -> Option<WechatAttachment> {
-        let aes_key_candidates = self.aes_key_candidates();
-        let aes_key = aes_key_candidates.first().cloned();
-        let encrypted_query_param = self.string_path_field(&[
-            &["encrypt_query_param"],
-            &["media", "encrypt_query_param"],
-            &["image_item", "encrypt_query_param"],
-            &["image_item", "media", "encrypt_query_param"],
-            &["video_item", "encrypt_query_param"],
-            &["video_item", "media", "encrypt_query_param"],
-            &["file_item", "encrypt_query_param"],
-            &["file_item", "media", "encrypt_query_param"],
-            &["audio_item", "encrypt_query_param"],
-            &["audio_item", "media", "encrypt_query_param"],
-        ]);
-        let download_url = self.string_path_field(&[
-            &["url"],
-            &["image_item", "url"],
-            &["video_item", "url"],
-            &["file_item", "url"],
-            &["audio_item", "url"],
-        ]);
-        let file_key = self
-            .string_path_field(&[
-                &["filekey"],
-                &["file_key"],
-                &["media", "filekey"],
-                &["media", "file_key"],
-                &["image_item", "filekey"],
-                &["image_item", "file_key"],
-                &["image_item", "media", "filekey"],
-                &["image_item", "media", "file_key"],
-                &["video_item", "filekey"],
-                &["video_item", "file_key"],
-                &["video_item", "media", "filekey"],
-                &["video_item", "media", "file_key"],
-                &["file_item", "filekey"],
-                &["file_item", "file_key"],
-                &["file_item", "media", "filekey"],
-                &["file_item", "media", "file_key"],
-                &["audio_item", "filekey"],
-                &["audio_item", "file_key"],
-                &["audio_item", "media", "filekey"],
-                &["audio_item", "media", "file_key"],
-            ])
-            .or_else(|| encrypted_query_param.clone())
-            .or_else(|| download_url.clone())?;
-        Some(WechatAttachment {
-            kind,
-            file_key,
-            encrypted_query_param,
-            aes_key,
-            aes_key_candidates,
-            download_url,
-            file_name: self.string_path_field(&[
-                &["file_name"],
-                &["image_item", "file_name"],
-                &["video_item", "file_name"],
-                &["file_item", "file_name"],
-                &["audio_item", "file_name"],
-            ]),
-            file_size: self.u64_path_field(&[
-                &["file_size"],
-                &["mid_size"],
-                &["len"],
-                &["image_item", "file_size"],
-                &["image_item", "mid_size"],
-                &["video_item", "file_size"],
-                &["video_item", "len"],
-                &["file_item", "file_size"],
-                &["file_item", "len"],
-                &["audio_item", "file_size"],
-                &["audio_item", "len"],
-            ]),
-            mime_type: self.string_path_field(&[
-                &["mime_type"],
-                &["image_item", "mime_type"],
-                &["video_item", "mime_type"],
-                &["file_item", "mime_type"],
-                &["audio_item", "mime_type"],
-            ]),
-        })
-    }
+#[allow(dead_code)]
+#[derive(Debug, Clone, Deserialize)]
+struct WechatImageItem {
+    #[serde(default)]
+    media: Option<WechatCdnMedia>,
+    #[serde(default)]
+    aeskey: Option<String>,
+    #[serde(default)]
+    url: Option<String>,
+    #[serde(default)]
+    mid_size: Option<u64>,
+    #[serde(default)]
+    thumb_size: Option<u64>,
+    #[serde(default)]
+    thumb_height: Option<u64>,
+    #[serde(default)]
+    thumb_width: Option<u64>,
+    #[serde(default)]
+    hd_size: Option<u64>,
+}
 
-    fn aes_key_candidates(&self) -> Vec<String> {
-        let mut candidates = Vec::new();
-        for value in self.string_path_fields(&[
-            &["aeskey"],
-            &["image_item", "aeskey"],
-            &["video_item", "aeskey"],
-            &["file_item", "aeskey"],
-            &["audio_item", "aeskey"],
-            &["aes_key"],
-            &["media", "aes_key"],
-            &["image_item", "aes_key"],
-            &["image_item", "media", "aes_key"],
-            &["video_item", "aes_key"],
-            &["video_item", "media", "aes_key"],
-            &["file_item", "aes_key"],
-            &["file_item", "media", "aes_key"],
-            &["audio_item", "aes_key"],
-            &["audio_item", "media", "aes_key"],
-        ]) {
-            push_unique(&mut candidates, value.clone());
-            if let Some(decoded) = decode_base64_hex_key(&value) {
-                push_unique(&mut candidates, decoded);
-            }
-        }
-        candidates
-    }
+#[allow(dead_code)]
+#[derive(Debug, Clone, Deserialize)]
+struct WechatVoiceItem {
+    #[serde(default)]
+    media: Option<WechatCdnMedia>,
+    #[serde(default)]
+    encode_type: Option<u64>,
+    #[serde(default)]
+    text: Option<String>,
+    #[serde(default)]
+    playtime: Option<u64>,
+}
 
-    fn string_path_field(&self, paths: &[&[&str]]) -> Option<String> {
-        paths.iter().find_map(|path| {
-            self.path_field(path)
-                .and_then(Value::as_str)
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .map(ToString::to_string)
-        })
-    }
+#[allow(dead_code)]
+#[derive(Debug, Clone, Deserialize)]
+struct WechatFileItem {
+    #[serde(default)]
+    media: Option<WechatCdnMedia>,
+    #[serde(default)]
+    file_name: Option<String>,
+    #[serde(default)]
+    md5: Option<String>,
+    #[serde(default)]
+    len: Option<String>,
+}
 
-    fn string_path_fields(&self, paths: &[&[&str]]) -> Vec<String> {
-        let mut values = Vec::new();
-        for path in paths {
-            if let Some(value) = self
-                .path_field(path)
-                .and_then(Value::as_str)
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-            {
-                push_unique(&mut values, value.to_string());
-            }
-        }
-        values
-    }
+#[allow(dead_code)]
+#[derive(Debug, Clone, Deserialize)]
+struct WechatVideoItem {
+    #[serde(default)]
+    media: Option<WechatCdnMedia>,
+    #[serde(default)]
+    video_size: Option<u64>,
+    #[serde(default)]
+    play_length: Option<u64>,
+    #[serde(default)]
+    thumb_media: Option<WechatCdnMedia>,
+}
 
-    fn u64_path_field(&self, paths: &[&[&str]]) -> Option<u64> {
-        paths.iter().find_map(|path| {
-            let value = self.path_field(path)?;
-            value
-                .as_u64()
-                .or_else(|| value.as_str().and_then(|value| value.parse::<u64>().ok()))
-        })
-    }
+#[derive(Debug, Clone, Deserialize)]
+struct WechatRefMessage {
+    #[serde(default)]
+    title: Option<String>,
+    #[serde(default)]
+    message_item: Option<Box<WechatProtocolItem>>,
+}
 
-    fn path_field(&self, path: &[&str]) -> Option<&Value> {
-        if path.is_empty() {
-            return None;
-        }
+#[allow(dead_code)]
+#[derive(Debug, Clone, Deserialize)]
+struct WechatCdnMedia {
+    #[serde(default)]
+    encrypt_query_param: String,
+    #[serde(default)]
+    aes_key: Option<String>,
+    #[serde(default)]
+    encrypt_type: Option<u8>,
+    #[serde(default, alias = "filekey", alias = "file_key")]
+    file_key: Option<String>,
+}
 
-        self.path_from_value(self.body.as_ref(), path)
-            .or_else(|| self.path_from_map(&self.extra, path))
-    }
-
-    fn path_from_value<'a>(&'a self, value: Option<&'a Value>, path: &[&str]) -> Option<&'a Value> {
-        let mut current = value?;
-        for segment in path {
-            current = current.as_object()?.get(*segment)?;
-        }
-        Some(current)
-    }
-
-    fn path_from_map<'a>(
-        &'a self,
-        map: &'a HashMap<String, Value>,
-        path: &[&str],
-    ) -> Option<&'a Value> {
-        let (first, rest) = path.split_first()?;
-        let mut current = map.get(*first)?;
-        for segment in rest {
-            current = current.as_object()?.get(*segment)?;
-        }
-        Some(current)
-    }
-
-    fn debug_field_paths(&self) -> Vec<String> {
-        let mut paths = Vec::new();
-        if let Some(body) = &self.body {
-            collect_value_paths("body", body, &mut paths);
-        }
-        for (key, value) in &self.extra {
-            collect_value_paths(key, value, &mut paths);
-        }
-        paths.sort();
-        paths.dedup();
-        paths
+impl WechatCdnMedia {
+    fn file_key(&self) -> Option<String> {
+        self.file_key
+            .as_deref()
+            .and_then(non_empty)
+            .map(ToString::to_string)
     }
 }
 
-fn parse_items(raw_items: Vec<RawWechatItem>) -> Vec<WechatMessageItem> {
+fn parse_protocol_items(raw_items: Vec<WechatProtocolItem>) -> Vec<WechatMessageItem> {
     let mut items = Vec::new();
 
     for raw in raw_items {
-        match raw.item_type {
-            0 => {
-                if let Some(text) = extract_text_item(&raw) {
-                    items.push(WechatMessageItem::Text(text));
+        if let Some(quote) = raw
+            .ref_msg
+            .as_ref()
+            .and_then(parse_ref_message)
+            .filter(|quoted| !quoted.is_empty())
+        {
+            items.push(WechatMessageItem::Quote(quote));
+        }
+
+        match raw.item_type() {
+            WechatProtocolItemType::Text => {
+                if let Some(text) = raw
+                    .text_item
+                    .as_ref()
+                    .and_then(|text_item| non_empty(text_item.text.as_str()))
+                {
+                    items.push(WechatMessageItem::Text(text.to_string()));
                 }
             }
-            1 => {
-                if let Some(attachment) = raw.attachment(WechatAttachmentKind::Image) {
-                    items.push(WechatMessageItem::Attachment(attachment));
-                } else if let Some(text) = extract_text_item(&raw) {
-                    items.push(WechatMessageItem::Text(text));
-                } else {
-                    warn!(
-                        "Unhandled Wechat item type=1; field_paths={}",
-                        raw.debug_field_paths().join(",")
-                    );
-                }
-            }
-            2 => {
-                if let Some(attachment) = raw.attachment(WechatAttachmentKind::Image) {
-                    items.push(WechatMessageItem::Attachment(attachment));
-                } else if let Some(attachment) = raw.attachment(WechatAttachmentKind::Video) {
-                    items.push(WechatMessageItem::Attachment(attachment));
-                } else {
-                    warn!(
-                        "Unhandled Wechat item type=2; field_paths={}",
-                        raw.debug_field_paths().join(",")
-                    );
-                }
-            }
-            3 => {
-                if let Some(attachment) = raw.attachment(WechatAttachmentKind::File) {
+            WechatProtocolItemType::Image => {
+                if let Some(attachment) = raw
+                    .image_item
+                    .as_ref()
+                    .and_then(WechatAttachment::from_image)
+                {
                     items.push(WechatMessageItem::Attachment(attachment));
                 } else {
-                    warn!(
-                        "Unhandled Wechat item type=3; field_paths={}",
-                        raw.debug_field_paths().join(",")
-                    );
+                    warn!("Unhandled Wechat image item: {:?}", raw);
                 }
             }
-            4 | 5 | 6 => {
+            WechatProtocolItemType::Voice => {
                 let mut handled = false;
-                if let Some(attachment) = raw.attachment(WechatAttachmentKind::Audio) {
+                if let Some(attachment) = raw
+                    .voice_item
+                    .as_ref()
+                    .and_then(WechatAttachment::from_voice)
+                {
                     items.push(WechatMessageItem::Attachment(attachment));
                     handled = true;
                 }
-                if let Some(ref transcription) = raw.voice_transcription_body {
-                    let transcription = transcription.trim();
-                    if !transcription.is_empty() {
-                        items.push(WechatMessageItem::VoiceTranscription(
-                            transcription.to_string(),
-                        ));
-                        handled = true;
-                    }
+                if let Some(text) = raw
+                    .voice_item
+                    .as_ref()
+                    .and_then(|voice_item| voice_item.text.as_deref())
+                    .and_then(non_empty)
+                {
+                    items.push(WechatMessageItem::VoiceTranscription(text.to_string()));
+                    handled = true;
                 }
                 if !handled {
-                    warn!(
-                        "Unhandled Wechat item type={}; field_paths={}",
-                        raw.item_type,
-                        raw.debug_field_paths().join(",")
-                    );
+                    warn!("Unhandled Wechat voice item: {:?}", raw);
                 }
             }
-            7 => {
-                let quoted = parse_items(raw.ref_item_list);
-                if !quoted.is_empty() {
-                    items.push(WechatMessageItem::Quote(quoted));
+            WechatProtocolItemType::File => {
+                if let Some(attachment) =
+                    raw.file_item.as_ref().and_then(WechatAttachment::from_file)
+                {
+                    items.push(WechatMessageItem::Attachment(attachment));
+                } else {
+                    warn!("Unhandled Wechat file item: {:?}", raw);
                 }
             }
-            _ => {
-                warn!(
-                    "Unhandled Wechat item type={}; field_paths={}",
-                    raw.item_type,
-                    raw.debug_field_paths().join(",")
-                );
+            WechatProtocolItemType::Video => {
+                if let Some(attachment) = raw
+                    .video_item
+                    .as_ref()
+                    .and_then(WechatAttachment::from_video)
+                {
+                    items.push(WechatMessageItem::Attachment(attachment));
+                } else {
+                    warn!("Unhandled Wechat video item: {:?}", raw);
+                }
+            }
+            WechatProtocolItemType::Unknown(item_type) => {
+                warn!("Unhandled Wechat item type={item_type}: {:?}", raw);
             }
         }
     }
@@ -976,22 +1070,15 @@ fn parse_items(raw_items: Vec<RawWechatItem>) -> Vec<WechatMessageItem> {
     items
 }
 
-fn extract_text_item(item: &RawWechatItem) -> Option<String> {
-    if let Some(text) = item
-        .text_item
-        .as_ref()
-        .map(|text_item| text_item.text.trim())
-        .filter(|text| !text.is_empty())
-    {
-        return Some(text.to_string());
+fn parse_ref_message(ref_msg: &WechatRefMessage) -> Option<Vec<WechatMessageItem>> {
+    let mut items = Vec::new();
+    if let Some(title) = ref_msg.title.as_deref().and_then(non_empty) {
+        items.push(WechatMessageItem::Text(title.to_string()));
     }
-
-    item.body
-        .as_ref()
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|text| !text.is_empty())
-        .map(ToString::to_string)
+    if let Some(message_item) = ref_msg.message_item.clone() {
+        items.extend(parse_protocol_items(vec![*message_item]));
+    }
+    (!items.is_empty()).then_some(items)
 }
 
 fn body_from_items(items: &[WechatMessageItem]) -> String {
@@ -1028,6 +1115,40 @@ fn top_level_attachments(items: &[WechatMessageItem]) -> Vec<&WechatAttachment> 
             | WechatMessageItem::Quote(_) => None,
         })
         .collect()
+}
+
+fn non_empty(value: &str) -> Option<&str> {
+    let value = value.trim();
+    (!value.is_empty()).then_some(value)
+}
+
+fn parse_u64_str(value: &str) -> Option<u64> {
+    non_empty(value)?.parse::<u64>().ok()
+}
+
+fn infer_mime_type_from_name(name: &str) -> Option<String> {
+    let name = non_empty(name)?;
+    Some(
+        mime_guess::from_path(name)
+            .first_or_octet_stream()
+            .to_string(),
+    )
+}
+
+fn infer_mime_type_from_url(url: Option<&str>) -> Option<String> {
+    let url = url.and_then(non_empty)?;
+    let parsed = Url::parse(url).ok()?;
+    infer_mime_type_from_name(parsed.path())
+}
+
+fn push_aes_key_candidate(values: &mut Vec<String>, value: Option<&str>) {
+    let Some(value) = value.and_then(non_empty) else {
+        return;
+    };
+    push_unique(values, value.to_string());
+    if let Some(decoded) = decode_base64_hex_key(value) {
+        push_unique(values, decoded);
+    }
 }
 
 fn attachment_info_text(
@@ -1079,17 +1200,20 @@ fn attachment_info_text(
 }
 
 fn check_api_error(response: &Value) -> BabataResult<()> {
-    if let Some(code) = response.get("errcode").and_then(Value::as_i64)
-        && code != 0
-    {
-        let message = response
-            .get("errmsg")
-            .and_then(Value::as_str)
-            .unwrap_or("unknown error");
-        return Err(BabataError::channel(format!(
-            "Wechat API error {}: {}",
-            code, message
-        )));
+    for code_field in ["ret", "errcode"] {
+        if let Some(code) = response.get(code_field).and_then(Value::as_i64)
+            && code != 0
+        {
+            let message = response
+                .get("errmsg")
+                .or_else(|| response.get("message"))
+                .and_then(Value::as_str)
+                .unwrap_or("unknown error");
+            return Err(BabataError::channel(format!(
+                "Wechat API error {}: {}",
+                code, message
+            )));
+        }
     }
 
     Ok(())
@@ -1217,127 +1341,31 @@ fn push_unique(values: &mut Vec<String>, value: String) {
     }
 }
 
-fn collect_value_paths(prefix: &str, value: &Value, out: &mut Vec<String>) {
-    out.push(prefix.to_string());
-    if let Some(object) = value.as_object() {
-        for (key, nested) in object {
-            collect_value_paths(&format!("{prefix}.{key}"), nested, out);
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn parse_items_extracts_typed_text_quote_and_attachments() {
-        let raw: RawWechatIncomingMessage = serde_json::from_value(serde_json::json!({
+    fn incoming_message_parses_protocol_items() {
+        let hex_b64 = STANDARD.encode(b"00112233445566778899aabbccddeeff");
+        let raw: WechatProtocolMessage = serde_json::from_value(serde_json::json!({
             "from_user_id": "wxid_user",
-            "to_user_id": "wxid_user",
+            "to_user_id": "wxid_bot",
+            "message_type": 1,
+            "message_state": 2,
             "context_token": "ctx_1",
             "item_list": [
-                { "type": 0, "body": "hello" },
                 {
                     "type": 1,
-                    "body": {
-                        "filekey": "image-key",
-                        "aes_key": "00112233445566778899aabbccddeeff",
-                        "file_name": "cat.png",
-                        "file_size": 42,
-                        "mime_type": "image/png"
-                    }
-                },
-                {
-                    "type": 3,
-                    "body": {
-                        "filekey": "file-key",
-                        "aes_key": "00112233445566778899aabbccddeeff",
-                        "file_name": "report.pdf",
-                        "file_size": 512
-                    }
-                },
-                {
-                    "type": 7,
-                    "ref_item_list": [
-                        { "type": 0, "body": "quoted" }
-                    ]
-                }
-            ]
-        }))
-        .expect("parse raw message");
-
-        let message = WechatIncomingMessage::from(raw);
-
-        assert_eq!(message.conversation.user_id, "wxid_user");
-        assert_eq!(message.conversation.context_token, "ctx_1");
-        assert_eq!(message.items.len(), 4);
-        assert!(matches!(&message.items[0], WechatMessageItem::Text(text) if text == "hello"));
-        assert!(matches!(
-            &message.items[1],
-            WechatMessageItem::Attachment(WechatAttachment {
-                kind: WechatAttachmentKind::Image,
-                ..
-            })
-        ));
-        assert!(matches!(
-            &message.items[2],
-            WechatMessageItem::Attachment(WechatAttachment {
-                kind: WechatAttachmentKind::File,
-                ..
-            })
-        ));
-        assert!(matches!(&message.items[3], WechatMessageItem::Quote(items) if items.len() == 1));
-    }
-
-    #[test]
-    fn parse_items_extracts_nested_image_item_media() {
-        let raw: RawWechatIncomingMessage = serde_json::from_value(serde_json::json!({
-            "from_user_id": "wxid_user",
-            "to_user_id": "wxid_user",
-            "context_token": "ctx_nested",
-            "item_list": [
-                {
-                    "type": 1,
-                    "body": {
-                        "image_item": {
-                            "file_name": "nested.png",
-                            "mid_size": 64,
-                            "media": {
-                                "filekey": "nested-image-key",
-                                "aes_key": "00112233445566778899aabbccddeeff"
-                            }
+                    "text_item": { "text": "reply" },
+                    "ref_msg": {
+                        "title": "summary",
+                        "message_item": {
+                            "type": 1,
+                            "text_item": { "text": "original" }
                         }
                     }
-                }
-            ]
-        }))
-        .expect("parse raw nested image message");
-
-        let message = WechatIncomingMessage::from(raw);
-
-        assert_eq!(message.items.len(), 1);
-        assert!(matches!(
-            &message.items[0],
-            WechatMessageItem::Attachment(WechatAttachment {
-                kind: WechatAttachmentKind::Image,
-                file_key,
-                file_name,
-                file_size,
-                ..
-            }) if file_key == "nested-image-key"
-                && file_name.as_deref() == Some("nested.png")
-                && *file_size == Some(64)
-        ));
-    }
-
-    #[test]
-    fn parse_items_extracts_type_two_image_item_shape() {
-        let raw: RawWechatIncomingMessage = serde_json::from_value(serde_json::json!({
-            "from_user_id": "wxid_user",
-            "to_user_id": "wxid_user",
-            "context_token": "ctx_type_2",
-            "item_list": [
+                },
                 {
                     "type": 2,
                     "image_item": {
@@ -1345,31 +1373,135 @@ mod tests {
                         "mid_size": 128,
                         "aeskey": "00112233445566778899aabbccddeeff",
                         "media": {
-                            "aes_key": "00112233445566778899aabbccddeeff",
-                            "encrypt_query_param": "encrypted-param"
+                            "encrypt_query_param": "image-param",
+                            "aes_key": "ABEiM0RVZneImaq7zN3u/w=="
+                        }
+                    }
+                },
+                {
+                    "type": 3,
+                    "voice_item": {
+                        "text": "voice text",
+                        "media": {
+                            "encrypt_query_param": "voice-param",
+                            "aes_key": hex_b64
+                        }
+                    }
+                },
+                {
+                    "type": 4,
+                    "file_item": {
+                        "file_name": "report.pdf",
+                        "len": "512",
+                        "media": {
+                            "encrypt_query_param": "file-param",
+                            "aes_key": hex_b64
+                        }
+                    }
+                },
+                {
+                    "type": 5,
+                    "video_item": {
+                        "video_size": 2048,
+                        "media": {
+                            "encrypt_query_param": "video-param",
+                            "aes_key": hex_b64
                         }
                     }
                 }
             ]
         }))
-        .expect("parse raw type 2 image message");
+        .expect("parse protocol message");
 
         let message = WechatIncomingMessage::from(raw);
 
+        assert_eq!(message.conversation.user_id, "wxid_user");
+        assert_eq!(message.conversation.context_token, "ctx_1");
+        assert_eq!(message.message_type, WechatProtocolMessageType::User);
+        assert_eq!(message.message_state, WechatProtocolMessageState::Finish);
+        assert_eq!(message.items.len(), 7);
+        assert!(matches!(&message.items[0], WechatMessageItem::Quote(items) if items.len() == 2));
         assert!(matches!(
-            &message.items[0],
+            &message.items[1],
+            WechatMessageItem::Text(text) if text == "reply"
+        ));
+        assert!(matches!(
+            &message.items[2],
+            WechatMessageItem::Attachment(WechatAttachment {
+                kind: WechatAttachmentKind::Image,
+                encrypted_query_param,
+                aes_key,
+                file_size,
+                ..
+            }) if encrypted_query_param.as_deref() == Some("image-param")
+                && aes_key.as_deref() == Some("00112233445566778899aabbccddeeff")
+                && *file_size == Some(128)
+        ));
+        assert!(matches!(
+            &message.items[3],
+            WechatMessageItem::Attachment(WechatAttachment {
+                kind: WechatAttachmentKind::Audio,
+                ..
+            })
+        ));
+        assert!(matches!(
+            &message.items[4],
+            WechatMessageItem::VoiceTranscription(text) if text == "voice text"
+        ));
+        assert!(matches!(
+            &message.items[5],
+            WechatMessageItem::Attachment(WechatAttachment {
+                kind: WechatAttachmentKind::File,
+                file_name,
+                file_size,
+                ..
+            }) if file_name.as_deref() == Some("report.pdf") && *file_size == Some(512)
+        ));
+        assert!(matches!(
+            &message.items[6],
+            WechatMessageItem::Attachment(WechatAttachment {
+                kind: WechatAttachmentKind::Video,
+                file_size,
+                ..
+            }) if *file_size == Some(2048)
+        ));
+    }
+
+    #[test]
+    fn image_attachment_supports_protocol_key_shapes() {
+        let item: WechatProtocolItem = serde_json::from_value(serde_json::json!({
+            "type": 2,
+            "image_item": {
+                "url": "https://example.com/path/image.png",
+                "mid_size": 128,
+                "aeskey": "00112233445566778899aabbccddeeff",
+                "media": {
+                    "encrypt_query_param": "encrypted-param",
+                    "aes_key": "ABEiM0RVZneImaq7zN3u/w=="
+                }
+            }
+        }))
+        .expect("parse image item");
+
+        let items = parse_protocol_items(vec![item]);
+
+        assert!(matches!(
+            &items[0],
             WechatMessageItem::Attachment(WechatAttachment {
                 kind: WechatAttachmentKind::Image,
                 download_url,
                 encrypted_query_param,
                 file_size,
+                mime_type,
                 aes_key,
                 aes_key_candidates,
                 ..
-            }) if download_url.as_deref() == Some("https://example.com/image.png")
+            }) if download_url.as_deref() == Some("https://example.com/path/image.png")
                 && encrypted_query_param.as_deref() == Some("encrypted-param")
                 && *file_size == Some(128)
+                && mime_type.as_deref() == Some("image/png")
                 && aes_key.as_deref() == Some("00112233445566778899aabbccddeeff")
+                && aes_key_candidates.iter().any(|candidate| candidate == "ABEiM0RVZneImaq7zN3u/w==")
                 && aes_key_candidates.iter().any(|candidate| candidate == "00112233445566778899aabbccddeeff")
         ));
     }
@@ -1453,6 +1585,14 @@ mod tests {
     }
 
     #[test]
+    fn infer_mime_type_from_url_reads_path_suffix() {
+        assert_eq!(
+            infer_mime_type_from_url(Some("https://example.com/assets/demo.webp")).as_deref(),
+            Some("image/webp")
+        );
+    }
+
+    #[test]
     fn parse_wechat_aes_key_supports_raw_hex_and_base64_variants() {
         let raw_key = [
             0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
@@ -1491,13 +1631,13 @@ mod tests {
 
     #[test]
     fn incoming_message_prefers_from_user_id_for_sender() {
-        let raw: RawWechatIncomingMessage = serde_json::from_value(serde_json::json!({
+        let raw: WechatProtocolMessage = serde_json::from_value(serde_json::json!({
             "from_user_id": "wxid_sender",
             "to_user_id": "wxid_bot",
             "context_token": "ctx_2",
             "item_list": []
         }))
-        .expect("parse raw message");
+        .expect("parse protocol message");
 
         let message = WechatIncomingMessage::from(raw);
 
@@ -1526,5 +1666,17 @@ mod tests {
         assert_eq!(payload.msg_list.len(), 0);
         assert_eq!(payload.msgs.len(), 1);
         assert_eq!(payload.msgs[0].from_user_id, "wxid_sender");
+    }
+
+    #[test]
+    fn check_api_error_handles_ret_field() {
+        let err = check_api_error(&serde_json::json!({
+            "ret": -14,
+            "errmsg": "session expired"
+        }))
+        .expect_err("ret should fail");
+
+        assert!(err.to_string().contains("-14"));
+        assert!(err.to_string().contains("session expired"));
     }
 }
