@@ -48,7 +48,6 @@ teloxide = "0.13"
 tokio = { version = "1", features = ["full"] }
 uuid = { version = "1.20", features = ["v4", "serde"] }
 rand = "0.8"
-wechat-agent-rs = "0.1.0"
 
 [target.'cfg(windows)'.dependencies]
 windows-service = "0.8"
