@@ -128,6 +128,40 @@ async fn dashboard_tasks_route_serves_html_shell_without_limit_for_html_requests
 }
 
 #[tokio::test]
+async fn dashboard_create_and_system_routes_serve_html_shell() {
+    let app = babata::http::router_for_test();
+
+    for route in ["/create", "/system"] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(route)
+                    .header(header::ACCEPT, "text/html")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "route {route} should serve the shell"
+        );
+
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = String::from_utf8(body.to_vec()).unwrap();
+
+        assert!(
+            body.contains("Babata Dashboard"),
+            "route {route} should return the dashboard shell"
+        );
+    }
+}
+
+#[tokio::test]
 async fn dashboard_tasks_route_prefers_json_when_json_is_ranked_higher() {
     let app = babata::http::router_for_test();
 

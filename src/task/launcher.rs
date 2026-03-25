@@ -5,7 +5,7 @@ use tokio::sync::mpsc;
 
 use crate::{
     BabataResult,
-    agent::{Agent, AgentTask, babata::BabataAgent, build_agents},
+    agent::{Agent, AgentTask, babata::BabataAgent, build_agents, codex::CodexAgent},
     channel::Channel,
     config::Config,
     error::BabataError,
@@ -59,7 +59,7 @@ impl TaskLauncher {
         }
         let agent_name = match task.agent.as_deref() {
             Some(agent_name) => agent_name,
-            None => BabataAgent::name(),
+            None => self.default_agent_name()?,
         };
 
         let agent = self
@@ -86,6 +86,18 @@ impl TaskLauncher {
         });
 
         Ok(RunningTask { task_id, handle })
+    }
+
+    fn default_agent_name(&self) -> BabataResult<&str> {
+        if self.agents.contains_key(BabataAgent::name()) {
+            return Ok(BabataAgent::name());
+        }
+
+        if self.agents.contains_key(CodexAgent::name()) {
+            return Ok(CodexAgent::name());
+        }
+
+        Err(BabataError::config("No agents are configured"))
     }
 }
 

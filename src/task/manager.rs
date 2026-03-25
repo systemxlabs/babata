@@ -77,11 +77,27 @@ impl TaskManager {
                 "Task {} is being relaunched to continue running when server started.",
                 task.task_id
             );
-            let running_task = self
-                .launcher
-                .relaunch(&task, self.exit_tx.clone(), &reason)?;
-            self.running_tasks.lock().insert(task.task_id, running_task);
-            info!("Recovered running task {}", task.task_id);
+            match self.launcher.relaunch(&task, self.exit_tx.clone(), &reason) {
+                Ok(running_task) => {
+                    self.running_tasks.lock().insert(task.task_id, running_task);
+                    info!("Recovered running task {}", task.task_id);
+                }
+                Err(err) => {
+                    warn!(
+                        "Failed to recover running task {}: {}. Marking task as canceled.",
+                        task.task_id, err
+                    );
+                    if let Err(store_err) = self
+                        .store
+                        .update_task_status(task.task_id, TaskStatus::Canceled)
+                    {
+                        error!(
+                            "Failed to mark unrecoverable task {} as canceled: {}",
+                            task.task_id, store_err
+                        );
+                    }
+                }
+            }
         }
 
         Ok(())
@@ -693,6 +709,28 @@ mod tests {
 
         cleanup_task_artifacts(&manager, task.task_id);
         remove_task_dir(subtask.task_id);
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[tokio::test]
+    async fn recover_running_tasks_cancels_tasks_with_missing_files() {
+        let temp_root = temp_test_root("manager-recover-missing-files");
+        fs::create_dir_all(&temp_root).expect("create temp root");
+        let manager = Arc::new(build_test_manager(&temp_root));
+        let task = task_record(false);
+        manager
+            .store
+            .insert_task(task.clone())
+            .expect("insert running task record");
+
+        remove_task_dir(task.task_id);
+
+        manager.start().expect("start manager should succeed");
+
+        let stored_task = manager.store.get_task(task.task_id).expect("load task");
+        assert_eq!(stored_task.status, TaskStatus::Canceled);
+        assert!(!manager.running_tasks.lock().contains_key(&task.task_id));
+
         let _ = fs::remove_dir_all(&temp_root);
     }
 }

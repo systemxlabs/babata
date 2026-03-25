@@ -1,12 +1,14 @@
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 
 use babata::{
     cli::{
         Command,
         dashboard::{
             attempt_open_dashboard, dashboard_url, ensure_dashboard_running, run_dashboard_impl,
+            run_dashboard_impl_with_announce, start_dashboard_service_with_fallback,
         },
     },
+    error::BabataError,
     http::DEFAULT_HTTP_BASE_URL,
 };
 use clap::Parser;
@@ -101,6 +103,66 @@ fn dashboard_skips_browser_with_no_open() {
     .unwrap();
 
     assert!(!opened.get());
+}
+
+#[test]
+fn dashboard_no_open_still_announces_url() {
+    let opened = Cell::new(false);
+    let announced = RefCell::new(String::new());
+
+    run_dashboard_impl_with_announce(
+        true,
+        || Ok(true),
+        || Ok(()),
+        |_| {
+            opened.set(true);
+            Ok(())
+        },
+        |url| {
+            announced.replace(url.to_string());
+            Ok(())
+        },
+    )
+    .unwrap();
+
+    assert_eq!(announced.into_inner(), dashboard_url());
+    assert!(!opened.get());
+}
+
+#[test]
+fn dashboard_falls_back_to_detached_server_when_onboard_service_is_missing() {
+    let detached_started = Cell::new(false);
+
+    start_dashboard_service_with_fallback(
+        || {
+            Err(BabataError::config(
+                "systemd service file not found; run \"babata onboard\" first",
+            ))
+        },
+        || {
+            detached_started.set(true);
+            Ok(())
+        },
+    )
+    .unwrap();
+
+    assert!(detached_started.get());
+}
+
+#[test]
+fn dashboard_start_propagates_non_service_config_errors() {
+    let result = start_dashboard_service_with_fallback(
+        || Err(BabataError::config("missing provider config")),
+        || Ok(()),
+    );
+
+    assert!(result.is_err());
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("missing provider config")
+    );
 }
 
 #[test]
