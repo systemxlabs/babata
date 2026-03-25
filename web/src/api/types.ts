@@ -39,6 +39,11 @@ export interface SystemResponse {
   http_addr: string;
 }
 
+export interface CreateTaskResponse {
+  task_id: string;
+  status: TaskStatus;
+}
+
 export interface TaskContentResponse {
   task_id: string;
   task_markdown: string;

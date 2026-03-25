@@ -5,6 +5,9 @@ import { Panel } from './components/Panel';
 import { StatusBadge } from './components/StatusBadge';
 import { Toolbar } from './components/Toolbar';
 import { usePolling } from './hooks/usePolling';
+import { CreatePage } from './pages/CreatePage';
+import { OverviewPage } from './pages/OverviewPage';
+import { SystemPage } from './pages/SystemPage';
 
 const navigationItems = [
   { href: '/', label: 'Overview' },
@@ -59,13 +62,7 @@ function DashboardShell() {
       <Routes>
         <Route
           path="/"
-          element={
-            <ShellPlaceholder
-              eyebrow="Overview"
-              lead="This landing zone will become the live runtime summary: status counts, active attention, and recent task movement."
-              title="Runtime sightline"
-            />
-          }
+          element={<OverviewPage />}
         />
         <Route
           path="/tasks"
@@ -78,24 +75,22 @@ function DashboardShell() {
           }
         />
         <Route
-          path="/create"
+          path="/tasks/:taskId"
           element={
             <ShellPlaceholder
-              eyebrow="Create"
-              lead="This forge bay will host the explicit task creation form with prompt, agent, parent task, and never-ends controls."
-              title="Launch forge"
+              eyebrow="Task detail"
+              lead="Create now lands on the correct detail route. The full task detail surface arrives in the next task with semantic state, tree data, logs, and artifacts."
+              title="Detail staging panel"
             />
           }
         />
         <Route
+          path="/create"
+          element={<CreatePage />}
+        />
+        <Route
           path="/system"
-          element={
-            <ShellPlaceholder
-              eyebrow="System"
-              lead="System telemetry lands here next: health, listen address, version signals, and local runtime context."
-              title="Service ledger"
-            />
-          }
+          element={<SystemPage />}
         />
         <Route path="*" element={<Navigate replace to="/" />} />
       </Routes>
