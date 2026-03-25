@@ -556,6 +556,54 @@ a {
   text-align: right;
 }
 
+.filters-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.task-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.task-actions--stack {
+  margin-top: 0;
+}
+
+.task-actions__button {
+  border: 1px solid rgba(255, 191, 102, 0.24);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ink-strong);
+  padding: 10px 14px;
+  cursor: pointer;
+}
+
+.task-actions__button--danger {
+  border-color: rgba(243, 140, 140, 0.28);
+  color: #ffb3b3;
+}
+
+.runtime-note {
+  margin: 14px 0 0;
+  color: var(--accent-steel);
+}
+
+.markdown-frame {
+  margin: 0;
+  white-space: pre-wrap;
+  border-radius: 18px;
+  padding: 18px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+  font-size: 0.94rem;
+}
+
 .status-badge {
   display: inline-flex;
   align-items: center;
@@ -600,7 +648,8 @@ a {
   .placeholder-grid,
   .page-grid--two-up,
   .form-grid,
-  .metric-grid {
+  .metric-grid,
+  .filters-grid {
     grid-template-columns: 1fr;
   }
 

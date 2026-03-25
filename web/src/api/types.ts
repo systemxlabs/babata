@@ -44,6 +44,12 @@ export interface CreateTaskResponse {
   status: TaskStatus;
 }
 
+export interface TaskActionResponse {
+  ok: boolean;
+  task_id: string;
+  action: 'pause' | 'resume' | 'cancel' | 'relaunch';
+}
+
 export interface TaskContentResponse {
   task_id: string;
   task_markdown: string;

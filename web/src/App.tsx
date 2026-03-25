@@ -8,6 +8,8 @@ import { usePolling } from './hooks/usePolling';
 import { CreatePage } from './pages/CreatePage';
 import { OverviewPage } from './pages/OverviewPage';
 import { SystemPage } from './pages/SystemPage';
+import { TaskDetailPage } from './pages/TaskDetailPage';
+import { TasksPage } from './pages/TasksPage';
 
 const navigationItems = [
   { href: '/', label: 'Overview' },
@@ -66,23 +68,11 @@ function DashboardShell() {
         />
         <Route
           path="/tasks"
-          element={
-            <ShellPlaceholder
-              eyebrow="Tasks"
-              lead="The task explorer surface is reserved for filtered lists, direct controls, and drill-down into tree-aware detail views."
-              title="Explorer rail"
-            />
-          }
+          element={<TasksPage />}
         />
         <Route
           path="/tasks/:taskId"
-          element={
-            <ShellPlaceholder
-              eyebrow="Task detail"
-              lead="Create now lands on the correct detail route. The full task detail surface arrives in the next task with semantic state, tree data, logs, and artifacts."
-              title="Detail staging panel"
-            />
-          }
+          element={<TaskDetailPage />}
         />
         <Route
           path="/create"
