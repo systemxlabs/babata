@@ -336,6 +336,7 @@ dependencies = [
  "telegram-markdown-v2",
  "teloxide",
  "tokio",
+ "tower",
  "uuid",
  "webbrowser",
  "windows-service",

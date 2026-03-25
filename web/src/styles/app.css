@@ -1,0 +1,155 @@
+:root {
+  color-scheme: light;
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  background:
+    radial-gradient(circle at top left, rgba(255, 201, 107, 0.42), transparent 28%),
+    radial-gradient(circle at 80% 10%, rgba(217, 90, 45, 0.18), transparent 24%),
+    linear-gradient(180deg, #f4ecdc 0%, #efe4d1 100%);
+  color: #1f1a16;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.app-shell {
+  position: relative;
+  overflow: hidden;
+  min-height: 100vh;
+  padding: 48px 20px 56px;
+}
+
+.app-shell__glow {
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(12px);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.app-shell__glow--left {
+  top: -40px;
+  left: -60px;
+  width: 240px;
+  height: 240px;
+  background: rgba(196, 93, 36, 0.22);
+}
+
+.app-shell__glow--right {
+  right: -70px;
+  bottom: 24px;
+  width: 220px;
+  height: 220px;
+  background: rgba(92, 131, 116, 0.22);
+}
+
+.hero-panel,
+.dashboard-card {
+  position: relative;
+  margin: 0 auto;
+  max-width: 1100px;
+  border: 1px solid rgba(78, 56, 37, 0.12);
+  border-radius: 24px;
+  background: rgba(255, 250, 242, 0.82);
+  box-shadow: 0 18px 48px rgba(63, 42, 25, 0.12);
+  backdrop-filter: blur(14px);
+}
+
+.hero-panel {
+  padding: 32px;
+}
+
+.hero-panel h1,
+.dashboard-card h2,
+.dashboard-card__label,
+.hero-panel__eyebrow,
+.nav-list__item span {
+  margin: 0;
+}
+
+.hero-panel h1 {
+  font-family: "IBM Plex Serif", Georgia, serif;
+  font-size: clamp(2.2rem, 4vw, 4.5rem);
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+}
+
+.hero-panel__eyebrow,
+.dashboard-card__label {
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 0.8rem;
+  color: #8c5330;
+}
+
+.hero-panel__copy,
+.dashboard-card p {
+  max-width: 42rem;
+  color: #56463a;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: 20px;
+  max-width: 1100px;
+  margin: 22px auto 0;
+}
+
+.dashboard-card {
+  padding: 28px;
+}
+
+.dashboard-card--status {
+  background:
+    linear-gradient(180deg, rgba(255, 250, 242, 0.88), rgba(246, 234, 221, 0.94)),
+    rgba(255, 250, 242, 0.9);
+}
+
+.nav-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  list-style: none;
+  padding: 18px 0 0;
+  margin: 0;
+}
+
+.nav-list__item {
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(105, 72, 42, 0.12);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.82), rgba(249, 236, 216, 0.96));
+}
+
+.nav-list__item span {
+  display: block;
+  font-size: 1.05rem;
+}
+
+@media (max-width: 800px) {
+  .app-shell {
+    padding: 24px 16px 36px;
+  }
+
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-panel,
+  .dashboard-card {
+    border-radius: 20px;
+  }
+}
