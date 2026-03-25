@@ -6,7 +6,7 @@ mod error;
 mod get_task;
 mod list_tasks;
 
-use std::sync::Arc;
+use std::{collections::HashMap, fs, sync::Arc};
 
 use axum::{
     Json, Router,
@@ -17,7 +17,12 @@ use axum::{
 };
 use serde_json::json;
 
-use crate::{BabataResult, error::BabataError, task::TaskManager};
+use crate::{
+    BabataResult,
+    config::{AgentConfig, CodexAgentConfig, Config},
+    error::BabataError,
+    task::{TaskLauncher, TaskManager, TaskStore},
+};
 
 pub(crate) use control_task::RelaunchTaskRequest;
 pub(crate) use count_tasks::CountTasksResponse;
@@ -74,12 +79,7 @@ fn router(task_manager: Arc<TaskManager>) -> Router {
 }
 
 pub fn router_for_test() -> Router {
-    Router::new()
-        .route("/", get(assets::spa_shell))
-        .route("/tasks", get(assets::spa_shell))
-        .route("/create", get(assets::spa_shell))
-        .route("/system", get(assets::spa_shell))
-        .route("/assets/{*path}", get(assets::static_asset))
+    router(Arc::new(build_test_task_manager()))
 }
 
 async fn health() -> impl IntoResponse {
@@ -91,7 +91,7 @@ async fn list_tasks_or_shell(
     headers: HeaderMap,
     uri: Uri,
 ) -> impl IntoResponse {
-    if assets::accepts_html(&headers) {
+    if assets::prefers_html(&headers) {
         return assets::shell_response();
     }
 
@@ -108,9 +108,41 @@ async fn get_task_or_shell(
     headers: HeaderMap,
     path: Path<String>,
 ) -> impl IntoResponse {
-    if assets::accepts_html(&headers) {
+    if assets::prefers_html(&headers) {
         return assets::shell_response();
     }
 
     get_task::handle(State(state), path).await
+}
+
+fn build_test_task_manager() -> TaskManager {
+    let test_root =
+        std::env::temp_dir().join(format!("babata-http-router-test-{}", uuid::Uuid::new_v4()));
+    let workspace = test_root.join("workspace");
+    fs::create_dir_all(&workspace).expect("create HTTP test workspace");
+
+    let config = Config {
+        providers: Vec::new(),
+        agents: vec![AgentConfig::Codex(CodexAgentConfig {
+            command: test_agent_command(),
+            workspace: workspace.display().to_string(),
+            model: None,
+        })],
+        channels: Vec::new(),
+        memory: Vec::new(),
+    };
+
+    let store = TaskStore::open(test_root.join("task.db")).expect("open HTTP test task store");
+    let launcher =
+        TaskLauncher::new(&config, HashMap::new()).expect("build HTTP test task launcher");
+
+    TaskManager::new(store, launcher).expect("build HTTP test task manager")
+}
+
+fn test_agent_command() -> String {
+    if cfg!(windows) {
+        "cmd".to_string()
+    } else {
+        "true".to_string()
+    }
 }
