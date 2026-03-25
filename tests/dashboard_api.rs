@@ -2,7 +2,13 @@ use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode, header},
 };
+use serde_json::{Value, json};
 use tower::ServiceExt;
+
+async fn read_json(response: axum::response::Response) -> Value {
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    serde_json::from_slice(&body).expect("response should be valid JSON")
+}
 
 #[tokio::test]
 async fn dashboard_root_serves_html_shell() {
@@ -204,5 +210,137 @@ async fn dashboard_task_route_preserves_json_errors_when_json_is_preferred() {
     assert!(
         content_type.starts_with("application/json"),
         "expected JSON response; got content-type={content_type:?}"
+    );
+}
+
+#[tokio::test]
+async fn overview_returns_status_counts_and_recent_tasks() {
+    let app = babata::http::router_for_test();
+
+    let create_task = |prompt_text: &str| {
+        let app = app.clone();
+        let prompt_text = prompt_text.to_string();
+        async move {
+            app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/tasks")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        json!({
+                            "prompt": [{ "type": "text", "text": prompt_text }],
+                            "agent": "codex",
+                            "never_ends": false
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+        }
+    };
+
+    let response = create_task("task-a").await;
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let created_a = read_json(response).await;
+    let task_a = created_a
+        .get("task_id")
+        .and_then(Value::as_str)
+        .expect("create response should include task_id")
+        .to_string();
+
+    tokio::time::sleep(std::time::Duration::from_millis(2)).await;
+
+    let response = create_task("task-b").await;
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let created_b = read_json(response).await;
+    let task_b = created_b
+        .get("task_id")
+        .and_then(Value::as_str)
+        .expect("create response should include task_id")
+        .to_string();
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/tasks/{task_a}/pause"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/overview")
+                .header(header::ACCEPT, "application/json")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let overview = read_json(response).await;
+
+    let counts = overview
+        .get("status_counts")
+        .expect("overview should include status_counts");
+    assert_eq!(counts.get("running").and_then(Value::as_u64), Some(1));
+    assert_eq!(counts.get("paused").and_then(Value::as_u64), Some(1));
+    assert_eq!(counts.get("canceled").and_then(Value::as_u64), Some(0));
+    assert_eq!(counts.get("done").and_then(Value::as_u64), Some(0));
+    assert_eq!(counts.get("total").and_then(Value::as_u64), Some(2));
+
+    let recent = overview
+        .get("recent_tasks")
+        .and_then(Value::as_array)
+        .expect("overview should include recent_tasks array");
+    assert!(!recent.is_empty(), "recent_tasks should not be empty");
+
+    assert_eq!(
+        recent[0].get("task_id").and_then(Value::as_str),
+        Some(task_b.as_str())
+    );
+    assert!(
+        recent[0].get("actions").and_then(Value::as_object).is_some(),
+        "task should include dashboard action availability"
+    );
+}
+
+#[tokio::test]
+async fn system_endpoint_returns_runtime_metadata() {
+    let app = babata::http::router_for_test();
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/system")
+                .header(header::ACCEPT, "application/json")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let system = read_json(response).await;
+
+    assert_eq!(
+        system.get("version").and_then(Value::as_str),
+        Some(env!("CARGO_PKG_VERSION"))
+    );
+    assert_eq!(
+        system.get("http_addr").and_then(Value::as_str),
+        Some(babata::http::DEFAULT_HTTP_ADDR)
     );
 }

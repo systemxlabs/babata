@@ -367,6 +367,7 @@ fn format_timestamp(timestamp_millis: i64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn format_tasks_table_renders_headers_and_rows() {
@@ -375,6 +376,13 @@ mod tests {
             description: "run a very long task prompt here".to_string(),
             agent: Some("babata".to_string()),
             status: "running".to_string(),
+            actions: serde_json::from_value(json!({
+                "pause": true,
+                "resume": false,
+                "cancel": true,
+                "relaunch": true,
+            }))
+            .expect("actions"),
             parent_task_id: None,
             root_task_id: "12345678-1234-1234-1234-123456789abc".to_string(),
             created_at: 1_773_994_800_000,
@@ -401,6 +409,13 @@ mod tests {
                 description: "first".to_string(),
                 agent: Some("babata".to_string()),
                 status: "running".to_string(),
+                actions: serde_json::from_value(json!({
+                    "pause": true,
+                    "resume": false,
+                    "cancel": true,
+                    "relaunch": true,
+                }))
+                .expect("actions"),
                 parent_task_id: None,
                 root_task_id: "12345678-1234-1234-1234-123456789abc".to_string(),
                 created_at: 1_773_994_800_000,
@@ -411,6 +426,13 @@ mod tests {
                 description: "second".to_string(),
                 agent: None,
                 status: "done".to_string(),
+                actions: serde_json::from_value(json!({
+                    "pause": false,
+                    "resume": false,
+                    "cancel": false,
+                    "relaunch": false,
+                }))
+                .expect("actions"),
                 parent_task_id: None,
                 root_task_id: "abcdefab-cdef-cdef-cdef-abcdefabcdef".to_string(),
                 created_at: 1_773_994_800_001,

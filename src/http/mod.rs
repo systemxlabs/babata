@@ -3,6 +3,8 @@ mod control_task;
 mod count_tasks;
 mod create_task;
 mod error;
+mod get_overview;
+mod get_system;
 mod get_task;
 mod list_tasks;
 
@@ -62,6 +64,19 @@ impl HttpApp {
 }
 
 fn router(task_manager: Arc<TaskManager>) -> Router {
+    let api = Router::new()
+        .route("/overview", get(get_overview::handle))
+        .route("/system", get(get_system::handle))
+        .route(
+            "/tasks",
+            get(list_tasks::handle_api).post(create_task::handle),
+        )
+        .route("/tasks/{task_id}", get(get_task::handle))
+        .route("/tasks/{task_id}/pause", post(control_task::pause))
+        .route("/tasks/{task_id}/resume", post(control_task::resume))
+        .route("/tasks/{task_id}/cancel", post(control_task::cancel))
+        .route("/tasks/{task_id}/relaunch", post(control_task::relaunch));
+
     Router::new()
         .route("/", get(assets::spa_shell))
         .route("/health", get(health))
@@ -72,6 +87,7 @@ fn router(task_manager: Arc<TaskManager>) -> Router {
         .route("/tasks/{task_id}/resume", post(control_task::resume))
         .route("/tasks/{task_id}/cancel", post(control_task::cancel))
         .route("/tasks/{task_id}/relaunch", post(control_task::relaunch))
+        .nest("/api", api)
         .route("/create", get(assets::spa_shell))
         .route("/system", get(assets::spa_shell))
         .route("/assets/{*path}", get(assets::static_asset))

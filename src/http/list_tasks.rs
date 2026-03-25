@@ -9,6 +9,27 @@ use crate::task::{TaskRecord, TaskStatus};
 
 use super::{ApiError, HttpApp, get_task::TaskResponse};
 
+pub(super) async fn handle_api(
+    State(state): State<HttpApp>,
+    Query(query): Query<ApiListTasksQuery>,
+) -> Response {
+    let status = match query.status {
+        Some(status) => match status.parse::<TaskStatus>() {
+            Ok(status) => Some(status),
+            Err(err) => return ApiError::bad_request(err).into_response(),
+        },
+        None => None,
+    };
+
+    match state
+        .task_manager
+        .list_tasks(status, query.limit, query.offset)
+    {
+        Ok(tasks) => Json(ListTasksResponse::from_records(tasks)).into_response(),
+        Err(err) => ApiError::from_babata_error(err).into_response(),
+    }
+}
+
 pub(super) async fn handle(
     State(state): State<HttpApp>,
     Query(query): Query<ListTasksQuery>,
@@ -37,6 +58,20 @@ pub(super) struct ListTasksQuery {
     limit: usize,
     #[serde(default)]
     offset: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(super) struct ApiListTasksQuery {
+    #[serde(default)]
+    status: Option<String>,
+    #[serde(default = "default_limit")]
+    limit: usize,
+    #[serde(default)]
+    offset: Option<usize>,
+}
+
+fn default_limit() -> usize {
+    100
 }
 
 #[derive(Debug, Serialize, Deserialize)]

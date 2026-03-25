@@ -6,7 +6,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::task::TaskRecord;
+use crate::task::{TaskRecord, TaskStatus};
 
 use super::{ApiError, HttpApp};
 
@@ -31,6 +31,7 @@ pub(crate) struct TaskResponse {
     pub(crate) description: String,
     pub(crate) agent: Option<String>,
     pub(crate) status: String,
+    pub(crate) actions: TaskActions,
     pub(crate) parent_task_id: Option<String>,
     pub(crate) root_task_id: String,
     pub(crate) created_at: i64,
@@ -39,15 +40,36 @@ pub(crate) struct TaskResponse {
 
 impl TaskResponse {
     pub(crate) fn from_record(record: TaskRecord) -> Self {
+        let actions = TaskActions::for_status(record.status);
         Self {
             task_id: record.task_id.to_string(),
             description: record.description,
             agent: record.agent,
             status: record.status.as_str().to_string(),
+            actions,
             parent_task_id: record.parent_task_id.map(|task_id| task_id.to_string()),
             root_task_id: record.root_task_id.to_string(),
             created_at: record.created_at,
             never_ends: record.never_ends,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub(crate) struct TaskActions {
+    pub(crate) pause: bool,
+    pub(crate) resume: bool,
+    pub(crate) cancel: bool,
+    pub(crate) relaunch: bool,
+}
+
+impl TaskActions {
+    fn for_status(status: TaskStatus) -> Self {
+        Self {
+            pause: status == TaskStatus::Running,
+            resume: status == TaskStatus::Paused,
+            cancel: !matches!(status, TaskStatus::Done | TaskStatus::Canceled),
+            relaunch: status == TaskStatus::Running,
         }
     }
 }
@@ -64,6 +86,7 @@ mod tests {
             "description": "demo",
             "agent": "codex",
             "status": "running",
+            "actions": { "pause": true, "resume": false, "cancel": true, "relaunch": true },
             "parent_task_id": null,
             "root_task_id": "12345678-1234-1234-1234-123456789abc",
             "created_at": 123,
