@@ -221,8 +221,7 @@ async fn overview_returns_status_counts_and_recent_tasks() {
         let app = app.clone();
         let prompt_text = prompt_text.to_string();
         async move {
-            app
-            .oneshot(
+            app.oneshot(
                 Request::builder()
                     .method("POST")
                     .uri("/api/tasks")
@@ -311,7 +310,10 @@ async fn overview_returns_status_counts_and_recent_tasks() {
         Some(task_b.as_str())
     );
     assert!(
-        recent[0].get("actions").and_then(Value::as_object).is_some(),
+        recent[0]
+            .get("actions")
+            .and_then(Value::as_object)
+            .is_some(),
         "task should include dashboard action availability"
     );
 }
@@ -343,4 +345,184 @@ async fn system_endpoint_returns_runtime_metadata() {
         system.get("http_addr").and_then(Value::as_str),
         Some(babata::http::DEFAULT_HTTP_ADDR)
     );
+}
+
+#[tokio::test]
+async fn api_tasks_supports_root_only_filter() {
+    let app = babata::http::router_for_test();
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/tasks")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({
+                        "prompt": [{ "type": "text", "text": "root task" }],
+                        "agent": "codex",
+                        "never_ends": false
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let created_root = read_json(response).await;
+    let root_task_id = created_root
+        .get("task_id")
+        .and_then(Value::as_str)
+        .expect("create response should include task_id")
+        .to_string();
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/tasks")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({
+                        "prompt": [{ "type": "text", "text": "child task" }],
+                        "agent": "codex",
+                        "parent_task_id": root_task_id,
+                        "never_ends": false
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/tasks?root_only=true")
+                .header(header::ACCEPT, "application/json")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let list = read_json(response).await;
+    let tasks = list
+        .get("tasks")
+        .and_then(Value::as_array)
+        .expect("response should include tasks");
+
+    assert_eq!(tasks.len(), 1);
+    assert_eq!(
+        tasks[0].get("task_id").and_then(Value::as_str),
+        Some(root_task_id.as_str())
+    );
+    assert!(tasks[0].get("parent_task_id").is_some());
+    assert!(tasks[0].get("actions").and_then(Value::as_object).is_some());
+}
+
+#[tokio::test]
+async fn api_tasks_supports_root_task_id_filter() {
+    let app = babata::http::router_for_test();
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/tasks")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({
+                        "prompt": [{ "type": "text", "text": "root task" }],
+                        "agent": "codex",
+                        "never_ends": false
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let created_root = read_json(response).await;
+    let root_task_id = created_root
+        .get("task_id")
+        .and_then(Value::as_str)
+        .expect("create response should include task_id")
+        .to_string();
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/tasks")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({
+                        "prompt": [{ "type": "text", "text": "child task" }],
+                        "agent": "codex",
+                        "parent_task_id": root_task_id,
+                        "never_ends": false
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/tasks")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({
+                        "prompt": [{ "type": "text", "text": "other root" }],
+                        "agent": "codex",
+                        "never_ends": false
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/api/tasks?root_task_id={root_task_id}"))
+                .header(header::ACCEPT, "application/json")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let list = read_json(response).await;
+    let tasks = list
+        .get("tasks")
+        .and_then(Value::as_array)
+        .expect("response should include tasks");
+
+    assert_eq!(tasks.len(), 2);
+    assert!(tasks.iter().all(|task| {
+        task.get("root_task_id").and_then(Value::as_str) == Some(root_task_id.as_str())
+    }));
 }

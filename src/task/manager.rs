@@ -222,6 +222,13 @@ impl TaskManager {
         self.store.get_task(task_id)
     }
 
+    pub fn list_tasks_filtered(
+        &self,
+        query: &crate::task::TaskListQuery,
+    ) -> BabataResult<Vec<TaskRecord>> {
+        self.store.list_tasks_filtered(query)
+    }
+
     pub fn count_tasks(&self, status: Option<TaskStatus>) -> BabataResult<usize> {
         self.store.count_tasks(status)
     }

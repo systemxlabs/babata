@@ -19,4 +19,3 @@ struct SystemResponse {
     version: String,
     http_addr: String,
 }
-
