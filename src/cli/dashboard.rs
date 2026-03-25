@@ -6,6 +6,9 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
+
 use reqwest::blocking::get;
 
 use crate::{BabataResult, cli::server, error::BabataError, http::DEFAULT_HTTP_BASE_URL};
@@ -164,6 +167,9 @@ fn start_detached_server_process() -> BabataResult<()> {
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
+
+    #[cfg(unix)]
+    command.process_group(0);
 
     command.spawn().map_err(|err| {
         BabataError::internal(format!("Failed to spawn detached dashboard server: {err}"))
