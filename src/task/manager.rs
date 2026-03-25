@@ -206,9 +206,6 @@ impl TaskManager {
         }
 
         self.cancel_task_recursive(task_id)?;
-        if task.task_id == task.root_task_id {
-            self.remove_task_dir_recursive(task_id);
-        }
         Ok(())
     }
 
@@ -283,9 +280,6 @@ impl TaskManager {
             );
             return;
         }
-        if task.task_id == task.root_task_id {
-            self.remove_task_dir_recursive(task_id);
-        }
     }
 
     fn relaunch_after_completion(&self, task: &TaskRecord, reason: &str, failure_context: &str) {
@@ -338,25 +332,6 @@ impl TaskManager {
                 error!("Failed to relaunch task {} after failure: {}", task_id, err);
             }
         }
-    }
-
-    fn remove_task_dir_recursive(&self, task_id: Uuid) {
-        let subtasks = match self.store.list_subtasks(task_id) {
-            Ok(subtasks) => subtasks,
-            Err(err) => {
-                error!(
-                    "Failed to load subtasks for task {} while cleaning task tree directories: {}",
-                    task_id, err
-                );
-                return;
-            }
-        };
-
-        for subtask in subtasks {
-            self.remove_task_dir_recursive(subtask.task_id);
-        }
-
-        remove_task_dir(task_id);
     }
 
     fn has_unfinished_subtasks(&self, task_id: Uuid) -> bool {
@@ -634,7 +609,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn handle_task_completed_marks_root_task_done_and_cleans_directory() {
+    async fn completed_root_task_directory_is_retained() {
         let temp_root = temp_test_root("manager-complete-root");
         fs::create_dir_all(&temp_root).expect("create temp root");
         let manager = build_test_manager(&temp_root);
@@ -655,8 +630,9 @@ mod tests {
 
         let stored_task = manager.store.get_task(task.task_id).expect("load task");
         assert_eq!(stored_task.status, TaskStatus::Done);
-        assert!(!task_dir(task.task_id).expect("resolve task dir").exists());
+        assert!(task_dir(task.task_id).expect("resolve task dir").exists());
 
+        cleanup_task_artifacts(&manager, task.task_id);
         let _ = fs::remove_dir_all(&temp_root);
     }
 
