@@ -229,6 +229,10 @@ impl TaskManager {
         self.store.list_tasks_filtered(query)
     }
 
+    pub fn list_root_tree(&self, root_task_id: Uuid) -> BabataResult<Vec<TaskRecord>> {
+        self.store.list_root_tree(root_task_id)
+    }
+
     pub fn count_tasks(&self, status: Option<TaskStatus>) -> BabataResult<usize> {
         self.store.count_tasks(status)
     }

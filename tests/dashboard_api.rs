@@ -4,10 +4,68 @@ use axum::{
 };
 use serde_json::{Value, json};
 use tower::ServiceExt;
+use uuid::Uuid;
 
 async fn read_json(response: axum::response::Response) -> Value {
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     serde_json::from_slice(&body).expect("response should be valid JSON")
+}
+
+async fn create_task(
+    app: axum::Router,
+    prompt: &str,
+    agent: Option<&str>,
+    parent_task_id: Option<&str>,
+) -> String {
+    let mut payload = json!({
+        "prompt": [{ "type": "text", "text": prompt }],
+        "never_ends": false,
+    });
+
+    if let Some(agent) = agent {
+        payload["agent"] = Value::String(agent.to_string());
+    }
+
+    if let Some(parent_task_id) = parent_task_id {
+        payload["parent_task_id"] = Value::String(parent_task_id.to_string());
+    }
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/tasks")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::CREATED);
+    read_json(response)
+        .await
+        .get("task_id")
+        .and_then(Value::as_str)
+        .expect("create response should include task_id")
+        .to_string()
+}
+
+fn write_task_file(task_id: &str, relative_path: &str, contents: &str) {
+    let task_id = Uuid::parse_str(task_id).expect("task id should be valid UUID");
+    let path = babata::task::task_dir(task_id)
+        .expect("resolve task dir")
+        .join(relative_path);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).expect("create task subdirectory");
+    }
+    std::fs::write(path, contents).expect("write task file");
+}
+
+fn cleanup_task_dir(task_id: &str) {
+    let task_id = Uuid::parse_str(task_id).expect("task id should be valid UUID");
+    let path = babata::task::task_dir(task_id).expect("resolve task dir");
+    let _ = std::fs::remove_dir_all(path);
 }
 
 #[tokio::test]
@@ -525,4 +583,187 @@ async fn api_tasks_supports_root_task_id_filter() {
     assert!(tasks.iter().all(|task| {
         task.get("root_task_id").and_then(Value::as_str) == Some(root_task_id.as_str())
     }));
+}
+
+#[tokio::test]
+async fn task_content_returns_task_and_progress_markdown() {
+    let app = babata::http::router_for_test();
+    let task_id = create_task(app.clone(), "content task", Some("codex"), None).await;
+
+    write_task_file(&task_id, "task.md", "# Task\n\ncustom task body\n");
+    write_task_file(
+        &task_id,
+        "progress.md",
+        "# Progress\n\ncustom progress body\n",
+    );
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/api/tasks/{task_id}/content"))
+                .header(header::ACCEPT, "application/json")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = read_json(response).await;
+
+    assert_eq!(
+        body.get("task_id").and_then(Value::as_str),
+        Some(task_id.as_str())
+    );
+    assert_eq!(
+        body.get("task_markdown").and_then(Value::as_str),
+        Some("# Task\n\ncustom task body\n")
+    );
+    assert_eq!(
+        body.get("progress_markdown").and_then(Value::as_str),
+        Some("# Progress\n\ncustom progress body\n")
+    );
+
+    cleanup_task_dir(&task_id);
+}
+
+#[tokio::test]
+async fn task_tree_returns_parent_current_and_children() {
+    let app = babata::http::router_for_test();
+    let root_task_id = create_task(app.clone(), "root task", Some("codex"), None).await;
+    let child_task_id = create_task(
+        app.clone(),
+        "child task",
+        Some("codex"),
+        Some(&root_task_id),
+    )
+    .await;
+    let grandchild_task_id = create_task(
+        app.clone(),
+        "grandchild task",
+        Some("codex"),
+        Some(&child_task_id),
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/api/tasks/{child_task_id}/tree"))
+                .header(header::ACCEPT, "application/json")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = read_json(response).await;
+
+    assert_eq!(
+        body.get("root_task_id").and_then(Value::as_str),
+        Some(root_task_id.as_str())
+    );
+    assert_eq!(
+        body.get("parent")
+            .and_then(|value| value.get("task_id"))
+            .and_then(Value::as_str),
+        Some(root_task_id.as_str())
+    );
+    assert_eq!(
+        body.get("current")
+            .and_then(|value| value.get("task_id"))
+            .and_then(Value::as_str),
+        Some(child_task_id.as_str())
+    );
+    let children = body
+        .get("children")
+        .and_then(Value::as_array)
+        .expect("tree response should include children");
+    assert_eq!(children.len(), 1);
+    assert_eq!(
+        children[0].get("task_id").and_then(Value::as_str),
+        Some(grandchild_task_id.as_str())
+    );
+
+    cleanup_task_dir(&grandchild_task_id);
+    cleanup_task_dir(&child_task_id);
+    cleanup_task_dir(&root_task_id);
+}
+
+#[tokio::test]
+async fn task_artifacts_returns_file_list() {
+    let app = babata::http::router_for_test();
+    let task_id = create_task(app.clone(), "artifact task", Some("codex"), None).await;
+
+    write_task_file(&task_id, "artifacts/summary.txt", "artifact body");
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/api/tasks/{task_id}/artifacts"))
+                .header(header::ACCEPT, "application/json")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = read_json(response).await;
+    let artifacts = body
+        .get("artifacts")
+        .and_then(Value::as_array)
+        .expect("artifact response should include artifacts");
+
+    assert_eq!(artifacts.len(), 1);
+    assert_eq!(
+        artifacts[0].get("path").and_then(Value::as_str),
+        Some("summary.txt")
+    );
+    assert_eq!(
+        artifacts[0].get("text_preview").and_then(Value::as_str),
+        Some("artifact body")
+    );
+
+    cleanup_task_dir(&task_id);
+}
+
+#[tokio::test]
+async fn task_logs_returns_unsupported_state_when_no_files_exist() {
+    let app = babata::http::router_for_test();
+    let task_id = create_task(app.clone(), "logless task", Some("codex"), None).await;
+    let task_uuid = Uuid::parse_str(&task_id).expect("task id should be valid UUID");
+    let task_dir = babata::task::task_dir(task_uuid).expect("resolve task dir");
+    let _ = std::fs::remove_file(task_dir.join("codex-last-message.md"));
+    let _ = std::fs::remove_file(task_dir.join("codex-stdout.log"));
+    let _ = std::fs::remove_file(task_dir.join("codex-stderr.log"));
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/api/tasks/{task_id}/logs"))
+                .header(header::ACCEPT, "application/json")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = read_json(response).await;
+
+    assert_eq!(body.get("supported").and_then(Value::as_bool), Some(false));
+    assert!(
+        body.get("reason")
+            .and_then(Value::as_str)
+            .expect("logs response should include reason")
+            .contains("No known log files")
+    );
+
+    cleanup_task_dir(&task_id);
 }

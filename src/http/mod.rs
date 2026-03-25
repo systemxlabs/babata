@@ -6,6 +6,10 @@ mod error;
 mod get_overview;
 mod get_system;
 mod get_task;
+mod get_task_content;
+mod get_task_logs;
+mod get_task_tree;
+mod list_task_artifacts;
 mod list_tasks;
 
 use std::{collections::HashMap, fs, sync::Arc};
@@ -71,6 +75,13 @@ fn router(task_manager: Arc<TaskManager>) -> Router {
             "/tasks",
             get(list_tasks::handle_api).post(create_task::handle),
         )
+        .route("/tasks/{task_id}/content", get(get_task_content::handle))
+        .route("/tasks/{task_id}/tree", get(get_task_tree::handle))
+        .route(
+            "/tasks/{task_id}/artifacts",
+            get(list_task_artifacts::handle),
+        )
+        .route("/tasks/{task_id}/logs", get(get_task_logs::handle))
         .route("/tasks/{task_id}", get(get_task::handle))
         .route("/tasks/{task_id}/pause", post(control_task::pause))
         .route("/tasks/{task_id}/resume", post(control_task::resume))
