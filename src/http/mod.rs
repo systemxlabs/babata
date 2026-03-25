@@ -11,7 +11,7 @@ use std::sync::Arc;
 use axum::{
     Json, Router,
     extract::{Path, Query, State},
-    http::HeaderMap,
+    http::{HeaderMap, Uri},
     response::IntoResponse,
     routing::{get, post},
 };
@@ -76,6 +76,7 @@ fn router(task_manager: Arc<TaskManager>) -> Router {
 pub fn router_for_test() -> Router {
     Router::new()
         .route("/", get(assets::spa_shell))
+        .route("/tasks", get(assets::spa_shell))
         .route("/create", get(assets::spa_shell))
         .route("/system", get(assets::spa_shell))
         .route("/assets/{*path}", get(assets::static_asset))
@@ -88,11 +89,16 @@ async fn health() -> impl IntoResponse {
 async fn list_tasks_or_shell(
     State(state): State<HttpApp>,
     headers: HeaderMap,
-    query: Query<list_tasks::ListTasksQuery>,
+    uri: Uri,
 ) -> impl IntoResponse {
     if assets::accepts_html(&headers) {
         return assets::shell_response();
     }
+
+    let query = match Query::<list_tasks::ListTasksQuery>::try_from_uri(&uri) {
+        Ok(query) => query,
+        Err(err) => return ApiError::bad_request(err.to_string()).into_response(),
+    };
 
     list_tasks::handle(State(state), query).await
 }

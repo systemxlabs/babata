@@ -6,6 +6,7 @@ test('renders the dashboard shell navigation', () => {
   render(<App />);
 
   expect(screen.getByRole('heading', { name: 'Local task control plane' })).toBeInTheDocument();
+  expect(screen.getByText('Navigation')).toBeInTheDocument();
   expect(screen.getByText('Overview')).toBeInTheDocument();
   expect(screen.getByText('Tasks')).toBeInTheDocument();
   expect(screen.getByText('Create')).toBeInTheDocument();
