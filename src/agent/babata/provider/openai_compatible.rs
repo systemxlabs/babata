@@ -19,6 +19,7 @@ pub struct OpenAICompatibleProvider {
     api_key: String,
     base_url: String,
     user_agent: Option<String>,
+    combine_system_prompt: bool,
 }
 
 impl OpenAICompatibleProvider {
@@ -28,11 +29,17 @@ impl OpenAICompatibleProvider {
             api_key: api_key.to_string(),
             base_url: base_url.to_string(),
             user_agent: None,
+            combine_system_prompt: false,
         }
     }
 
     pub fn with_user_agent(mut self, user_agent: Option<String>) -> Self {
         self.user_agent = user_agent;
+        self
+    }
+
+    pub fn with_combined_system_prompt(mut self, combine_system_prompt: bool) -> Self {
+        self.combine_system_prompt = combine_system_prompt;
         self
     }
 
@@ -58,21 +65,27 @@ impl OpenAICompatibleProvider {
     ) -> BabataResult<Vec<ChatCompletionMessageParam>> {
         let mut request_messages = Vec::with_capacity(prompts.len() + system_prompts.len() + 1);
 
-        for system_prompt in system_prompts {
-            let system_prompt = system_prompt.trim();
-            if system_prompt.is_empty() {
-                continue;
+        if self.combine_system_prompt {
+            if let Some(content) = build_combined_system_prompt(system_prompts, context) {
+                request_messages.push(ChatCompletionMessageParam::System { content });
             }
-            request_messages.push(ChatCompletionMessageParam::System {
-                content: system_prompt.to_string(),
-            });
-        }
+        } else {
+            for system_prompt in system_prompts {
+                let system_prompt = system_prompt.trim();
+                if system_prompt.is_empty() {
+                    continue;
+                }
+                request_messages.push(ChatCompletionMessageParam::System {
+                    content: system_prompt.to_string(),
+                });
+            }
 
-        let context = context.trim();
-        if !context.is_empty() {
-            request_messages.push(ChatCompletionMessageParam::System {
-                content: format!("Context:\n{context}"),
-            });
+            let context = context.trim();
+            if !context.is_empty() {
+                request_messages.push(ChatCompletionMessageParam::System {
+                    content: format!("Context:\n{context}"),
+                });
+            }
         }
 
         for message in prompts {
@@ -280,6 +293,22 @@ fn audio_format_from_media_type(media_type: &MediaType) -> String {
         return format.to_string();
     }
     media_type.as_mime_str()
+}
+
+fn build_combined_system_prompt(system_prompts: &[String], context: &str) -> Option<String> {
+    let mut sections = system_prompts
+        .iter()
+        .map(|system_prompt| system_prompt.trim())
+        .filter(|system_prompt| !system_prompt.is_empty())
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>();
+
+    let context = context.trim();
+    if !context.is_empty() {
+        sections.push(format!("Context:\n{context}"));
+    }
+
+    (!sections.is_empty()).then(|| sections.join("\n\n"))
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -516,5 +545,29 @@ mod tests {
         assert_eq!(payload[2]["role"], json!("system"));
         assert_eq!(payload[2]["content"], json!("Context:\nprevious context"));
         assert_eq!(payload[3]["role"], json!("user"));
+    }
+
+    #[test]
+    fn format_messages_can_combine_system_prompts_and_context_into_one_message() {
+        let provider = OpenAICompatibleProvider::new("test-key", "https://example.com/v1")
+            .with_combined_system_prompt(true);
+        let system_prompts = vec!["first rules".to_string(), "second rules".to_string()];
+        let prompts = vec![Message::UserPrompt {
+            content: vec![Content::Text {
+                text: "latest prompt".to_string(),
+            }],
+        }];
+
+        let payload = provider
+            .format_messages(&system_prompts, "previous context", &prompts)
+            .expect("format messages");
+        let payload = serde_json::to_value(payload).expect("serialize formatted messages");
+
+        assert_eq!(payload[0]["role"], json!("system"));
+        assert_eq!(
+            payload[0]["content"],
+            json!("first rules\n\nsecond rules\n\nContext:\nprevious context")
+        );
+        assert_eq!(payload[1]["role"], json!("user"));
     }
 }

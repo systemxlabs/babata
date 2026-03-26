@@ -5,8 +5,8 @@ use crate::{
     agent::{
         Agent,
         babata::{
-            AnthropicProvider, BabataAgent, CustomProvider, DeepSeekProvider, KimiProvider, Model,
-            MoonshotProvider, OpenAIProvider, Provider,
+            AnthropicProvider, BabataAgent, CustomProvider, DeepSeekProvider, KimiProvider,
+            MiniMaxProvider, Model, MoonshotProvider, OpenAIProvider, Provider,
         },
         codex::CodexAgent,
     },
@@ -15,8 +15,8 @@ use crate::{
         AgentConfig, AnthropicProviderConfig, BabataAgentConfig, ChannelConfig, CodexAgentConfig,
         CompatibleApi, Config, CustomProviderConfig, DeepSeekProviderConfig, EmbeddingConfig,
         HybridMemoryConfig, KimiProviderConfig, LocalEmbeddingConfig, MemoryConfig,
-        MoonshotProviderConfig, OpenAIProviderConfig, ProviderConfig, RemoteEmbeddingConfig,
-        TelegramChannelConfig, WechatChannelConfig,
+        MiniMaxProviderConfig, MoonshotProviderConfig, OpenAIProviderConfig, ProviderConfig,
+        RemoteEmbeddingConfig, TelegramChannelConfig, WechatChannelConfig,
     },
     error::BabataError,
 };
@@ -214,6 +214,7 @@ fn available_provider_names() -> Vec<String> {
         KimiProvider::name().to_string(),
         MoonshotProvider::name().to_string(),
         DeepSeekProvider::name().to_string(),
+        MiniMaxProvider::name().to_string(),
         AnthropicProvider::name().to_string(),
         CustomProvider::name().to_string(),
     ]
@@ -435,6 +436,7 @@ fn supported_models_for_provider(provider_config: &ProviderConfig) -> &'static [
         ProviderConfig::Kimi(_) => KimiProvider::supported_models(),
         ProviderConfig::Moonshot(_) => MoonshotProvider::supported_models(),
         ProviderConfig::DeepSeek(_) => DeepSeekProvider::supported_models(),
+        ProviderConfig::MiniMax(_) => MiniMaxProvider::supported_models(),
         ProviderConfig::Anthropic(_) => AnthropicProvider::supported_models(),
         ProviderConfig::Custom(_) => CustomProvider::supported_models(),
     }
@@ -455,6 +457,10 @@ fn build_provider_config(provider_name: &str, api_key: String) -> BabataResult<P
 
     if provider_name.eq_ignore_ascii_case(DeepSeekProvider::name()) {
         return Ok(ProviderConfig::DeepSeek(DeepSeekProviderConfig { api_key }));
+    }
+
+    if provider_name.eq_ignore_ascii_case(MiniMaxProvider::name()) {
+        return Ok(ProviderConfig::MiniMax(MiniMaxProviderConfig { api_key }));
     }
 
     if provider_name.eq_ignore_ascii_case(AnthropicProvider::name()) {
