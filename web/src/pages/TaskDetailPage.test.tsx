@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 import { TaskDetailPage } from './TaskDetailPage';
@@ -142,17 +142,25 @@ test('cancel action requires confirmation', async () => {
   const fetchMock = buildFetchMock();
   vi.stubGlobal('fetch', fetchMock);
   const confirmMock = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  const consoleErrorMock = vi.spyOn(console, 'error').mockImplementation(() => {});
 
   renderDetailPage();
 
   await screen.findByText('No known log files for this agent');
   fireEvent.click(screen.getByRole('button', { name: 'Cancel task' }));
 
-  expect(confirmMock).toHaveBeenCalled();
+  await waitFor(() => {
+    expect(confirmMock).toHaveBeenCalled();
+  });
   expect(
     fetchMock.mock.calls.some(
       ([input, init]) =>
         input === `/api/tasks/${taskId}/cancel` && (init as RequestInit | undefined)?.method === 'POST',
+    ),
+  ).toBe(false);
+  expect(
+    consoleErrorMock.mock.calls.some(([message]) =>
+      typeof message === 'string' && message.includes('not wrapped in act'),
     ),
   ).toBe(false);
 });
@@ -161,6 +169,7 @@ test('relaunch action requires a reason', async () => {
   const fetchMock = buildFetchMock();
   vi.stubGlobal('fetch', fetchMock);
   vi.spyOn(window, 'prompt').mockReturnValue('   ');
+  const consoleErrorMock = vi.spyOn(console, 'error').mockImplementation(() => {});
 
   renderDetailPage();
 
@@ -174,5 +183,10 @@ test('relaunch action requires a reason', async () => {
         (init as RequestInit | undefined)?.method === 'POST',
     ),
   ).toBe(false);
-  expect(screen.getByText('Relaunch reason is required.')).toBeInTheDocument();
+  await screen.findByText('Relaunch reason is required.');
+  expect(
+    consoleErrorMock.mock.calls.some(([message]) =>
+      typeof message === 'string' && message.includes('not wrapped in act'),
+    ),
+  ).toBe(false);
 });

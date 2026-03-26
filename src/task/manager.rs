@@ -472,6 +472,7 @@ fn initialize_task_dir(task: &TaskRecord, prompt: &[Content]) -> BabataResult<()
     Ok(())
 }
 
+#[cfg(test)]
 fn remove_task_dir(task_id: Uuid) {
     let task_dir = match task_dir(task_id) {
         Ok(path) => path,
