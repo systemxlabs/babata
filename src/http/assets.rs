@@ -23,7 +23,8 @@ pub(super) async fn spa_shell(headers: HeaderMap) -> Response {
 }
 
 pub(super) async fn static_asset(Path(path): Path<String>) -> Response {
-    serve_embedded(&path)
+    let embedded_path = format!("assets/{path}");
+    serve_embedded(&embedded_path)
 }
 
 pub(super) fn prefers_html(headers: &HeaderMap) -> bool {

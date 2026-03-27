@@ -104,6 +104,66 @@ async fn dashboard_root_serves_html_shell() {
 }
 
 #[tokio::test]
+async fn dashboard_shell_assets_are_served_from_embedded_bundle() {
+    let app = babata::http::router_for_test();
+
+    let shell_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/")
+                .header(header::ACCEPT, "text/html")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(shell_response.status(), StatusCode::OK);
+
+    let shell_body = to_bytes(shell_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let shell_body = String::from_utf8(shell_body.to_vec()).unwrap();
+
+    let script_path = shell_body
+        .lines()
+        .find_map(|line| {
+            let marker = "src=\"";
+            let start = line.find(marker)? + marker.len();
+            let end = line[start..].find('"')?;
+            Some(line[start..start + end].to_string())
+        })
+        .expect("dashboard shell should reference a script asset");
+
+    let asset_response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(&script_path)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(asset_response.status(), StatusCode::OK);
+
+    let content_type = asset_response
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("");
+
+    assert!(
+        content_type.starts_with("text/javascript")
+            || content_type.starts_with("application/javascript"),
+        "expected JavaScript asset; got content-type={content_type:?}"
+    );
+}
+
+#[tokio::test]
 async fn dashboard_tasks_route_serves_html_shell_without_limit_for_html_requests() {
     let app = babata::http::router_for_test();
 
