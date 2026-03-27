@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 use crate::{
     BabataResult,
     agent::babata::{
-        AnthropicProvider, CustomProvider, DeepSeekProvider, KimiProvider, MoonshotProvider,
-        OpenAIProvider, Provider,
+        AnthropicProvider, CustomProvider, DeepSeekProvider, KimiProvider, MiniMaxProvider,
+        MoonshotProvider, OpenAIProvider, Provider,
     },
     error::BabataError,
 };
@@ -20,6 +20,8 @@ pub enum ProviderConfig {
     Moonshot(MoonshotProviderConfig),
     #[serde(rename = "deepseek")]
     DeepSeek(DeepSeekProviderConfig),
+    #[serde(rename = "minimax")]
+    MiniMax(MiniMaxProviderConfig),
     #[serde(rename = "anthropic")]
     Anthropic(AnthropicProviderConfig),
     #[serde(rename = "custom")]
@@ -43,6 +45,11 @@ pub struct KimiProviderConfig {
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct DeepSeekProviderConfig {
+    pub api_key: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+pub struct MiniMaxProviderConfig {
     pub api_key: String,
 }
 
@@ -92,6 +99,7 @@ impl ProviderConfig {
             ProviderConfig::Kimi(config) => &config.api_key,
             ProviderConfig::Moonshot(config) => &config.api_key,
             ProviderConfig::DeepSeek(config) => &config.api_key,
+            ProviderConfig::MiniMax(config) => &config.api_key,
             ProviderConfig::Anthropic(config) => &config.api_key,
             ProviderConfig::Custom(config) => &config.api_key,
         }
@@ -103,6 +111,7 @@ impl ProviderConfig {
             ProviderConfig::Kimi(_) => KimiProvider::name(),
             ProviderConfig::Moonshot(_) => MoonshotProvider::name(),
             ProviderConfig::DeepSeek(_) => DeepSeekProvider::name(),
+            ProviderConfig::MiniMax(_) => MiniMaxProvider::name(),
             ProviderConfig::Anthropic(_) => AnthropicProvider::name(),
             ProviderConfig::Custom(_) => CustomProvider::name(),
         }
@@ -148,6 +157,22 @@ mod tests {
                 assert_eq!(config.compatible_api, CompatibleApi::Openai);
             }
             _ => panic!("expected ProviderConfig::Custom"),
+        }
+    }
+
+    #[test]
+    fn parse_minimax_provider_config_from_json() {
+        let payload = r#"{
+            "name": "minimax",
+            "api_key": "test-key"
+        }"#;
+        let parsed: ProviderConfig = serde_json::from_str(payload).expect("parse provider json");
+
+        match parsed {
+            ProviderConfig::MiniMax(config) => {
+                assert_eq!(config.api_key, "test-key");
+            }
+            _ => panic!("expected ProviderConfig::MiniMax"),
         }
     }
 }
