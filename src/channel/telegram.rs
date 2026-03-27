@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf};
+﻿use std::{collections::HashMap, path::PathBuf};
 
 use log::warn;
 use reqwest::{Client, StatusCode};
@@ -61,7 +61,7 @@ impl TelegramChannel {
         }
 
         let updates = request.send().await.map_err(|err| {
-            BabataError::internal(format!("Failed to call Telegram getUpdates: {err}"))
+            BabataError::channel(format!("Failed to call Telegram getUpdates: {err}"))
         })?;
 
         // Keep only DM messages and return the max update_id for cursor advancing.
@@ -120,7 +120,7 @@ impl TelegramChannel {
         let path = Self::last_update_id_path()?;
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|err| {
-                BabataError::internal(format!(
+                BabataError::channel(format!(
                     "Failed to create Telegram channel state directory '{}': {}",
                     parent.display(),
                     err
@@ -128,7 +128,7 @@ impl TelegramChannel {
             })?;
         }
         std::fs::write(&path, last_update_id.to_string()).map_err(|err| {
-            BabataError::internal(format!(
+            BabataError::channel(format!(
                 "Failed to persist Telegram last_update_id to '{}': {}",
                 path.display(),
                 err
@@ -145,7 +145,7 @@ impl TelegramChannel {
         }
 
         let content = std::fs::read_to_string(&path).map_err(|err| {
-            BabataError::internal(format!(
+            BabataError::channel(format!(
                 "Failed to read Telegram last_update_id from '{}': {}",
                 path.display(),
                 err
@@ -157,14 +157,14 @@ impl TelegramChannel {
         }
 
         let last_update_id = content.parse::<i64>().map_err(|err| {
-            BabataError::internal(format!(
+            BabataError::channel(format!(
                 "Failed to parse Telegram last_update_id from '{}': {}",
                 path.display(),
                 err
             ))
         })?;
         if last_update_id < 0 {
-            return Err(BabataError::internal(format!(
+            return Err(BabataError::channel(format!(
                 "Telegram last_update_id in '{}' must be greater than or equal to 0",
                 path.display()
             )));
@@ -254,7 +254,7 @@ impl TelegramChannel {
             .send()
             .await
             .map_err(|err| {
-                BabataError::internal(format!(
+                BabataError::channel(format!(
                     "Failed to call Telegram getFile for '{}': {err}",
                     file_id
                 ))
@@ -272,7 +272,7 @@ impl TelegramChannel {
             .send()
             .await
             .map_err(|err| {
-                BabataError::internal(format!(
+                BabataError::channel(format!(
                     "Failed to download Telegram file '{}' ({media_type}): {err}",
                     file_id
                 ))
@@ -281,14 +281,14 @@ impl TelegramChannel {
         let status = response.status();
         if status != StatusCode::OK {
             let body = response.text().await.unwrap_or_default();
-            return Err(BabataError::internal(format!(
+            return Err(BabataError::channel(format!(
                 "Telegram file download failed for '{}' with status {}: {}",
                 file_id, status, body
             )));
         }
 
         let bytes = response.bytes().await.map_err(|err| {
-            BabataError::internal(format!(
+            BabataError::channel(format!(
                 "Failed to read Telegram file bytes for '{}': {err}",
                 file_id
             ))
@@ -318,7 +318,7 @@ impl super::Channel for TelegramChannel {
             .send()
             .await
             .map_err(|err| {
-                BabataError::internal(format!("Failed to send Telegram feedback message: {err}"))
+                BabataError::channel(format!("Failed to send Telegram feedback message: {err}"))
             })?;
 
         let (sender, receiver) = oneshot::channel();
@@ -328,7 +328,7 @@ impl super::Channel for TelegramChannel {
             .insert(sent_message.id.0, sender);
 
         receiver.await.map_err(|_| {
-            BabataError::internal("Telegram feedback waiter was dropped before reply arrived")
+            BabataError::channel("Telegram feedback waiter was dropped before reply arrived")
         })
     }
 }
@@ -470,7 +470,7 @@ fn render_feedback_text(content: &[Content]) -> BabataResult<String> {
         .map(|item| match item {
             Content::Text { text } => Ok(text.trim().to_string()),
             Content::ImageUrl { url } => Ok(url.clone()),
-            Content::ImageData { .. } | Content::AudioData { .. } => Err(BabataError::internal(
+            Content::ImageData { .. } | Content::AudioData { .. } => Err(BabataError::channel(
                 "Telegram feedback only supports text or image URLs for outbound prompts",
             )),
         })
@@ -481,7 +481,7 @@ fn render_feedback_text(content: &[Content]) -> BabataResult<String> {
         .join("\n\n");
 
     if text.is_empty() {
-        return Err(BabataError::internal(
+        return Err(BabataError::channel(
             "Telegram feedback requires non-empty outbound content",
         ));
     }
