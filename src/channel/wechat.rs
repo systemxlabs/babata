@@ -14,7 +14,7 @@ use reqwest::{
 };
 use serde::Deserialize;
 use serde_json::Value;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, oneshot};
 use uuid::Uuid;
 
 use crate::{
@@ -37,6 +37,8 @@ pub struct WechatChannel {
     bot_token: String,
     user_id: String,
     get_updates_buf: Mutex<Option<String>>,
+    // Waiter for feedback reply from user.
+    feedback_waiter: Mutex<Option<oneshot::Sender<Vec<Content>>>>,
 }
 
 impl WechatChannel {
@@ -48,6 +50,7 @@ impl WechatChannel {
             bot_token: config.bot_token,
             user_id: config.user_id,
             get_updates_buf: Mutex::new(get_updates_buf),
+            feedback_waiter: Mutex::new(None),
         })
     }
 
@@ -113,6 +116,13 @@ impl WechatChannel {
                 );
                 continue;
             };
+
+            // Check if this is a reply to a feedback message
+            if let Some(waiter) = self.feedback_waiter.lock().await.take() {
+                let _ = waiter.send(message_content);
+                continue;
+            }
+
             content.extend(message_content);
         }
 
@@ -203,6 +213,25 @@ impl WechatChannel {
             .join("channels")
             .join("wechat")
             .join("get_updates_buf"))
+    }
+
+    async fn send_text_message(&self, context_token: &str, text: &str) -> BabataResult<()> {
+        let body = serde_json::json!({
+            "context_token": context_token,
+            "item_list": [
+                {
+                    "type": 1,
+                    "text_item": {
+                        "text": text
+                    }
+                }
+            ]
+        });
+
+        self.send_request("ilink/bot/sendmsg", &body, Duration::from_secs(30))
+            .await?;
+
+        Ok(())
     }
 
     async fn incoming_message_to_content(
@@ -559,6 +588,57 @@ pub(crate) fn wechat_latest_context_token_path_in(babata_home: &Path) -> PathBuf
         .join("latest_context_token")
 }
 
+fn load_latest_context_token() -> BabataResult<String> {
+    let path = wechat_latest_context_token_path()?;
+    if !path.exists() {
+        return Err(BabataError::channel(
+            "Wechat context_token not found; no messages have been received yet".to_string(),
+        ));
+    }
+
+    let content = std::fs::read_to_string(&path).map_err(|err| {
+        BabataError::channel(format!(
+            "Failed to read Wechat context_token from '{}': {}",
+            path.display(),
+            err
+        ))
+    })?;
+
+    let content = content.trim();
+    if content.is_empty() {
+        return Err(BabataError::channel(
+            "Wechat context_token is empty".to_string(),
+        ));
+    }
+
+    Ok(content.to_string())
+}
+
+fn render_feedback_text(content: &[Content]) -> BabataResult<String> {
+    let text = content
+        .iter()
+        .map(|item| match item {
+            Content::Text { text } => Ok(text.trim().to_string()),
+            Content::ImageUrl { url } => Ok(url.clone()),
+            Content::ImageData { .. } | Content::AudioData { .. } => Err(BabataError::channel(
+                "Wechat feedback only supports text or image URLs for outbound prompts",
+            )),
+        })
+        .collect::<BabataResult<Vec<_>>>()?
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n\n");
+
+    if text.is_empty() {
+        return Err(BabataError::channel(
+            "Wechat feedback requires non-empty outbound content",
+        ));
+    }
+
+    Ok(text)
+}
+
 #[async_trait::async_trait]
 impl super::Channel for WechatChannel {
     fn name() -> &'static str {
@@ -571,8 +651,21 @@ impl super::Channel for WechatChannel {
     }
 
     async fn feedback(&self, content: Vec<Content>) -> BabataResult<Vec<Content>> {
-        let _ = content;
-        unimplemented!("Wechat feedback is not implemented yet")
+        let text = render_feedback_text(&content)?;
+
+        // Load the latest context_token
+        let context_token = load_latest_context_token()?;
+
+        // Send the feedback message
+        self.send_text_message(&context_token, &text).await?;
+
+        // Wait for user's reply
+        let (sender, receiver) = oneshot::channel();
+        *self.feedback_waiter.lock().await = Some(sender);
+
+        receiver.await.map_err(|_| {
+            BabataError::channel("Wechat feedback waiter was dropped before reply arrived")
+        })
     }
 }
 
