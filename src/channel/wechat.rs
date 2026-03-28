@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -37,8 +38,8 @@ pub struct WechatChannel {
     bot_token: String,
     user_id: String,
     get_updates_buf: Mutex<Option<String>>,
-    // Waiter for feedback reply from user.
-    feedback_waiter: Mutex<Option<oneshot::Sender<Vec<Content>>>>,
+    // Waiters for replies to outbound feedback prompts, keyed by content hash.
+    feedback_waiters: Mutex<HashMap<String, oneshot::Sender<Vec<Content>>>>,
 }
 
 impl WechatChannel {
@@ -50,7 +51,7 @@ impl WechatChannel {
             bot_token: config.bot_token,
             user_id: config.user_id,
             get_updates_buf: Mutex::new(get_updates_buf),
-            feedback_waiter: Mutex::new(None),
+            feedback_waiters: Mutex::new(HashMap::new()),
         })
     }
 
@@ -117,10 +118,14 @@ impl WechatChannel {
                 continue;
             };
 
-            // Check if this is a reply to a feedback message
-            if let Some(waiter) = self.feedback_waiter.lock().await.take() {
-                let _ = waiter.send(message_content);
-                continue;
+            // Check if this is a reply to a feedback message by looking at quote content
+            let quote_hash = extract_quote_hash(&message.items);
+            if let Some(hash) = quote_hash {
+                let waiter = self.feedback_waiters.lock().await.remove(&hash);
+                if let Some(waiter) = waiter {
+                    let _ = waiter.send(message_content);
+                    continue;
+                }
             }
 
             content.extend(message_content);
@@ -215,7 +220,12 @@ impl WechatChannel {
             .join("get_updates_buf"))
     }
 
-    async fn send_text_message(&self, context_token: &str, text: &str) -> BabataResult<()> {
+    async fn send_text_message_with_quote(
+        &self,
+        context_token: &str,
+        text: &str,
+        quote_text: &str,
+    ) -> BabataResult<()> {
         let body = serde_json::json!({
             "context_token": context_token,
             "item_list": [
@@ -223,6 +233,15 @@ impl WechatChannel {
                     "type": 1,
                     "text_item": {
                         "text": text
+                    },
+                    "ref_msg": {
+                        "title": quote_text,
+                        "message_item": {
+                            "type": 1,
+                            "text_item": {
+                                "text": quote_text
+                            }
+                        }
                     }
                 }
             ]
@@ -656,12 +675,13 @@ impl super::Channel for WechatChannel {
         // Load the latest context_token
         let context_token = load_latest_context_token()?;
 
-        // Send the feedback message
-        self.send_text_message(&context_token, &text).await?;
+        // Send the feedback message (as a quote/reply to make it replyable)
+        self.send_text_message_with_quote(&context_token, &text, &text).await?;
 
         // Wait for user's reply
         let (sender, receiver) = oneshot::channel();
-        *self.feedback_waiter.lock().await = Some(sender);
+        let key = hash_feedback_key(&text);
+        self.feedback_waiters.lock().await.insert(key, sender);
 
         receiver.await.map_err(|_| {
             BabataError::channel("Wechat feedback waiter was dropped before reply arrived")
@@ -1172,6 +1192,30 @@ fn parse_ref_message(ref_msg: &WechatRefMessage) -> Option<Vec<WechatMessageItem
         items.extend(parse_protocol_items(vec![*message_item]));
     }
     (!items.is_empty()).then_some(items)
+}
+
+/// Extract a hash from quoted content to match against feedback prompts.
+/// Returns the hash of the quoted text content if a Quote item is found.
+fn extract_quote_hash(items: &[WechatMessageItem]) -> Option<String> {
+    for item in items {
+        if let WechatMessageItem::Quote(quoted) = item {
+            let text = body_from_items(quoted);
+            if !text.is_empty() {
+                return Some(hash_feedback_key(&text));
+            }
+        }
+    }
+    None
+}
+
+/// Hash feedback content to use as a key in the feedback_waiters map.
+fn hash_feedback_key(content: &str) -> String {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    let mut hasher = DefaultHasher::new();
+    content.hash(&mut hasher);
+    format!("{:016x}", hasher.finish())
 }
 
 fn body_from_items(items: &[WechatMessageItem]) -> String {
