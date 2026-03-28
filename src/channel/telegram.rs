@@ -1,4 +1,4 @@
-﻿use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf};
 
 use log::warn;
 use reqwest::{Client, StatusCode};
@@ -82,9 +82,19 @@ impl TelegramChannel {
                 continue;
             }
 
-            let Some(message_content) = self.incoming_message_to_content(&message).await else {
+            let Some(mut message_content) = self.incoming_message_to_content(&message).await else {
                 continue;
             };
+
+            // If this is a reply, prepend the quoted content
+            if let Some(ref quoted_content) = message.reply_to_message_content {
+                let mut combined = quoted_content.clone();
+                combined.push(Content::Text {
+                    text: "---".to_string(),
+                });
+                combined.extend(message_content);
+                message_content = combined;
+            }
 
             if let Some(reply_to_message_id) = message.reply_to_message_id {
                 let waiter = self
@@ -337,6 +347,7 @@ impl super::Channel for TelegramChannel {
 struct IncomingPrivateMessage {
     chat_id: i64,
     reply_to_message_id: Option<i32>,
+    reply_to_message_content: Option<Vec<Content>>,
     text: Option<String>,
     image_file_id: Option<String>,
     image_media_type: Option<String>,
@@ -384,9 +395,26 @@ fn extract_private_messages(
             continue;
         }
 
+        // Extract quoted content from reply_to_message
+        let reply_to_message_content = message.reply_to_message().and_then(|reply| {
+            let reply_text = reply
+                .text()
+                .or_else(|| reply.caption())
+                .map(str::trim)
+                .filter(|text| !text.is_empty())
+                .map(ToString::to_string);
+
+            let (_reply_image, _) = extract_incoming_image(reply);
+            let (_reply_audio, _) = extract_incoming_audio(reply);
+
+            // For now, we only support text in quoted content
+            reply_text.map(|t| vec![Content::Text { text: t }])
+        });
+
         messages.push(IncomingPrivateMessage {
             chat_id,
             reply_to_message_id: message.reply_to_message().map(|reply| reply.id.0),
+            reply_to_message_content,
             text,
             image_file_id,
             image_media_type,
