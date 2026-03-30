@@ -39,7 +39,7 @@ pub struct WechatChannel {
     user_id: String,
     get_updates_buf: Mutex<Option<String>>,
     // Waiters for replies to outbound feedback prompts, keyed by client_msg_id.
-    feedback_waiters: Mutex<HashMap<String, oneshot::Sender<Vec<Content>>>>
+    feedback_waiters: Mutex<HashMap<String, oneshot::Sender<Vec<Content>>>>,
 }
 
 impl WechatChannel {
@@ -220,34 +220,21 @@ impl WechatChannel {
             .join("get_updates_buf"))
     }
 
-    async fn send_text_message_with_quote(
-        &self,
-        context_token: &str,
-        text: &str,
-        quote_text: &str,
-    ) -> BabataResult<()> {
+    async fn send_text_message(&self, context_token: &str, text: &str) -> BabataResult<()> {
         let body = serde_json::json!({
             "context_token": context_token,
+            "to_user_id": self.user_id,
             "item_list": [
                 {
                     "type": 1,
                     "text_item": {
                         "text": text
-                    },
-                    "ref_msg": {
-                        "title": quote_text,
-                        "message_item": {
-                            "type": 1,
-                            "text_item": {
-                                "text": quote_text
-                            }
-                        }
                     }
                 }
             ]
         });
 
-        self.send_request("ilink/bot/sendmsg", &body, Duration::from_secs(30))
+        self.send_request("ilink/bot/sendmessage", &body, Duration::from_secs(30))
             .await?;
 
         Ok(())
@@ -670,11 +657,13 @@ impl super::Channel for WechatChannel {
 
         // Load the latest context_token
         let context_token = load_wechat_latest_context_token()?.ok_or_else(|| {
-            BabataError::channel("Wechat context_token not found; no messages have been received yet".to_string())
+            BabataError::channel(
+                "Wechat context_token not found; no messages have been received yet".to_string(),
+            )
         })?;
 
         // Send the feedback message with quote (to make it replyable)
-        self.send_text_message_with_quote(&context_token, &text, &text).await?;
+        self.send_text_message(&context_token, &text).await?;
 
         // Wait for user's reply
         let (sender, receiver) = oneshot::channel();
@@ -698,7 +687,6 @@ struct WechatIncomingMessage {
     conversation: WechatConversation,
     message_type: WechatProtocolMessageType,
     message_state: WechatProtocolMessageState,
-    client_msg_id: Option<String>,
     items: Vec<WechatMessageItem>,
 }
 
@@ -717,7 +705,6 @@ impl From<WechatProtocolMessage> for WechatIncomingMessage {
             conversation,
             message_type: value.message_type.into(),
             message_state: value.message_state.into(),
-            client_msg_id: value.client_msg_id,
             items: parse_protocol_items(value.item_list),
         }
     }
@@ -973,8 +960,6 @@ struct WechatProtocolMessage {
     message_state: u8,
     #[serde(default)]
     context_token: String,
-    #[serde(default)]
-    client_msg_id: Option<String>,
     #[serde(default)]
     item_list: Vec<WechatProtocolItem>,
 }
