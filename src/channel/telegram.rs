@@ -86,6 +86,17 @@ impl TelegramChannel {
                 continue;
             };
 
+            if let Some(reply_to_message_id) = message.reply_to_message_id
+                && let Some(waiter) = self
+                    .feedback_waiters
+                    .lock()
+                    .await
+                    .remove(&reply_to_message_id)
+            {
+                let _ = waiter.send(message_content);
+                continue;
+            }
+
             // If this is a reply, prepend the quoted content
             if let Some(ref quoted_content) = message.reply_to_message_content {
                 let mut combined = quoted_content.clone();
@@ -94,18 +105,6 @@ impl TelegramChannel {
                 });
                 combined.extend(message_content);
                 message_content = combined;
-            }
-
-            if let Some(reply_to_message_id) = message.reply_to_message_id {
-                let waiter = self
-                    .feedback_waiters
-                    .lock()
-                    .await
-                    .remove(&reply_to_message_id);
-                if let Some(waiter) = waiter {
-                    let _ = waiter.send(message_content);
-                }
-                continue;
             }
 
             content.extend(message_content);
