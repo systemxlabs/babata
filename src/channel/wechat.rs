@@ -220,18 +220,39 @@ impl WechatChannel {
             .join("get_updates_buf"))
     }
 
-    async fn send_text_message(&self, context_token: &str, text: &str) -> BabataResult<()> {
+    async fn send_text_message_with_quote(
+        &self,
+        context_token: &str,
+        text: &str,
+        quote_text: &str,
+    ) -> BabataResult<()> {
         let body = serde_json::json!({
-            "context_token": context_token,
-            "to_user_id": self.user_id,
-            "item_list": [
-                {
-                    "type": 1,
-                    "text_item": {
-                        "text": text
+            "msg": {
+                "to_user_id": self.user_id,
+                "client_id": format!("babata-{}", Uuid::new_v4().simple()),
+                "message_type": 2,
+                "message_state": 2,
+                "context_token": context_token,
+                "item_list": [
+                    {
+                        "type": 1,
+                        "text_item": {
+                            "text": text
+                        },
+                        "ref_item_list": [
+                            {
+                                "type": 1,
+                                "text_item": {
+                                    "text": quote_text
+                                }
+                            }
+                        ]
                     }
-                }
-            ]
+                ]
+            },
+            "base_info": {
+                "channel_version": env!("CARGO_PKG_VERSION")
+            }
         });
 
         self.send_request("ilink/bot/sendmessage", &body, Duration::from_secs(30))
@@ -663,7 +684,8 @@ impl super::Channel for WechatChannel {
         })?;
 
         // Send the feedback message with quote (to make it replyable)
-        self.send_text_message(&context_token, &text).await?;
+        self.send_text_message_with_quote(&context_token, &text, &text)
+            .await?;
 
         // Wait for user's reply
         let (sender, receiver) = oneshot::channel();
@@ -979,7 +1001,7 @@ struct WechatProtocolItem {
     #[serde(default)]
     video_item: Option<WechatVideoItem>,
     #[serde(default)]
-    ref_msg: Option<WechatRefMessage>,
+    ref_item_list: Option<Vec<WechatProtocolItem>>,
 }
 
 impl WechatProtocolItem {
@@ -1054,14 +1076,6 @@ struct WechatVideoItem {
     thumb_media: Option<WechatCdnMedia>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-struct WechatRefMessage {
-    #[serde(default)]
-    title: Option<String>,
-    #[serde(default)]
-    message_item: Option<Box<WechatProtocolItem>>,
-}
-
 #[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 struct WechatCdnMedia {
@@ -1088,13 +1102,11 @@ fn parse_protocol_items(raw_items: Vec<WechatProtocolItem>) -> Vec<WechatMessage
     let mut items = Vec::new();
 
     for raw in raw_items {
-        if let Some(quote) = raw
-            .ref_msg
-            .as_ref()
-            .and_then(parse_ref_message)
-            .filter(|quoted| !quoted.is_empty())
-        {
-            items.push(WechatMessageItem::Quote(quote));
+        if let Some(ref_items) = raw.ref_item_list.as_ref() {
+            let quoted = parse_protocol_items(ref_items.clone());
+            if !quoted.is_empty() {
+                items.push(WechatMessageItem::Quote(quoted));
+            }
         }
 
         match raw.item_type() {
@@ -1168,17 +1180,6 @@ fn parse_protocol_items(raw_items: Vec<WechatProtocolItem>) -> Vec<WechatMessage
     }
 
     items
-}
-
-fn parse_ref_message(ref_msg: &WechatRefMessage) -> Option<Vec<WechatMessageItem>> {
-    let mut items = Vec::new();
-    if let Some(title) = ref_msg.title.as_deref().and_then(non_empty) {
-        items.push(WechatMessageItem::Text(title.to_string()));
-    }
-    if let Some(message_item) = ref_msg.message_item.clone() {
-        items.extend(parse_protocol_items(vec![*message_item]));
-    }
-    (!items.is_empty()).then_some(items)
 }
 
 /// Extract a hash from quoted content to match against feedback prompts.
@@ -1482,13 +1483,16 @@ mod tests {
                 {
                     "type": 1,
                     "text_item": { "text": "reply" },
-                    "ref_msg": {
-                        "title": "summary",
-                        "message_item": {
+                    "ref_item_list": [
+                        {
+                            "type": 1,
+                            "text_item": { "text": "summary" }
+                        },
+                        {
                             "type": 1,
                             "text_item": { "text": "original" }
                         }
-                    }
+                    ]
                 },
                 {
                     "type": 2,
