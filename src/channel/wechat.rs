@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -14,7 +15,7 @@ use reqwest::{
 };
 use serde::Deserialize;
 use serde_json::Value;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, oneshot};
 use uuid::Uuid;
 
 use crate::{
@@ -37,6 +38,8 @@ pub struct WechatChannel {
     bot_token: String,
     user_id: String,
     get_updates_buf: Mutex<Option<String>>,
+    // Waiters for replies to outbound feedback prompts, keyed by client_msg_id.
+    feedback_waiters: Mutex<HashMap<String, oneshot::Sender<Vec<Content>>>>,
 }
 
 impl WechatChannel {
@@ -48,6 +51,7 @@ impl WechatChannel {
             bot_token: config.bot_token,
             user_id: config.user_id,
             get_updates_buf: Mutex::new(get_updates_buf),
+            feedback_waiters: Mutex::new(HashMap::new()),
         })
     }
 
@@ -113,6 +117,17 @@ impl WechatChannel {
                 );
                 continue;
             };
+
+            // Check if this is a reply to a feedback message by quote content hash
+            let quote_hash = extract_quote_hash(&message.items);
+            if let Some(hash) = quote_hash {
+                let waiter = self.feedback_waiters.lock().await.remove(&hash);
+                if let Some(waiter) = waiter {
+                    let _ = waiter.send(message_content);
+                    continue;
+                }
+            }
+
             content.extend(message_content);
         }
 
@@ -203,6 +218,34 @@ impl WechatChannel {
             .join("channels")
             .join("wechat")
             .join("get_updates_buf"))
+    }
+
+    async fn send_text_message(&self, context_token: &str, text: &str) -> BabataResult<()> {
+        let body = serde_json::json!({
+            "msg": {
+                "to_user_id": self.user_id,
+                "client_id": format!("babata-{}", Uuid::new_v4().simple()),
+                "message_type": 2,
+                "message_state": 2,
+                "context_token": context_token,
+                "item_list": [
+                    {
+                        "type": 1,
+                        "text_item": {
+                            "text": text
+                        }
+                    }
+                ]
+            },
+            "base_info": {
+                "channel_version": env!("CARGO_PKG_VERSION")
+            }
+        });
+
+        self.send_request("ilink/bot/sendmessage", &body, Duration::from_secs(30))
+            .await?;
+
+        Ok(())
     }
 
     async fn incoming_message_to_content(
@@ -548,6 +591,28 @@ impl WechatChannel {
     }
 }
 
+pub(crate) fn load_wechat_latest_context_token() -> BabataResult<Option<String>> {
+    let path = wechat_latest_context_token_path()?;
+    if !path.exists() {
+        return Ok(None);
+    }
+
+    let content = std::fs::read_to_string(&path).map_err(|err| {
+        BabataError::channel(format!(
+            "Failed to read Wechat context_token from '{}': {}",
+            path.display(),
+            err
+        ))
+    })?;
+
+    let content = content.trim();
+    if content.is_empty() {
+        return Ok(None);
+    }
+
+    Ok(Some(content.to_string()))
+}
+
 pub(crate) fn wechat_latest_context_token_path() -> BabataResult<PathBuf> {
     Ok(wechat_latest_context_token_path_in(&babata_dir()?))
 }
@@ -557,6 +622,31 @@ pub(crate) fn wechat_latest_context_token_path_in(babata_home: &Path) -> PathBuf
         .join("channels")
         .join("wechat")
         .join("latest_context_token")
+}
+
+fn render_feedback_text(content: &[Content]) -> BabataResult<String> {
+    let text = content
+        .iter()
+        .map(|item| match item {
+            Content::Text { text } => Ok(text.trim().to_string()),
+            Content::ImageUrl { url } => Ok(url.clone()),
+            Content::ImageData { .. } | Content::AudioData { .. } => Err(BabataError::channel(
+                "Wechat feedback only supports text or image URLs for outbound prompts",
+            )),
+        })
+        .collect::<BabataResult<Vec<_>>>()?
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n\n");
+
+    if text.is_empty() {
+        return Err(BabataError::channel(
+            "Wechat feedback requires non-empty outbound content",
+        ));
+    }
+
+    Ok(text)
 }
 
 #[async_trait::async_trait]
@@ -571,8 +661,26 @@ impl super::Channel for WechatChannel {
     }
 
     async fn feedback(&self, content: Vec<Content>) -> BabataResult<Vec<Content>> {
-        let _ = content;
-        unimplemented!("Wechat feedback is not implemented yet")
+        let text = render_feedback_text(&content)?;
+
+        // Load the latest context_token
+        let context_token = load_wechat_latest_context_token()?.ok_or_else(|| {
+            BabataError::channel(
+                "Wechat context_token not found; no messages have been received yet".to_string(),
+            )
+        })?;
+
+        // Send the feedback message
+        self.send_text_message(&context_token, &text).await?;
+
+        // Wait for user's reply
+        let (sender, receiver) = oneshot::channel();
+        let key = hash_feedback_key(&text);
+        self.feedback_waiters.lock().await.insert(key, sender);
+
+        receiver.await.map_err(|_| {
+            BabataError::channel("Wechat feedback waiter was dropped before reply arrived")
+        })
     }
 }
 
@@ -879,7 +987,7 @@ struct WechatProtocolItem {
     #[serde(default)]
     video_item: Option<WechatVideoItem>,
     #[serde(default)]
-    ref_msg: Option<WechatRefMessage>,
+    ref_item_list: Option<Vec<WechatProtocolItem>>,
 }
 
 impl WechatProtocolItem {
@@ -954,14 +1062,6 @@ struct WechatVideoItem {
     thumb_media: Option<WechatCdnMedia>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-struct WechatRefMessage {
-    #[serde(default)]
-    title: Option<String>,
-    #[serde(default)]
-    message_item: Option<Box<WechatProtocolItem>>,
-}
-
 #[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 struct WechatCdnMedia {
@@ -988,13 +1088,11 @@ fn parse_protocol_items(raw_items: Vec<WechatProtocolItem>) -> Vec<WechatMessage
     let mut items = Vec::new();
 
     for raw in raw_items {
-        if let Some(quote) = raw
-            .ref_msg
-            .as_ref()
-            .and_then(parse_ref_message)
-            .filter(|quoted| !quoted.is_empty())
-        {
-            items.push(WechatMessageItem::Quote(quote));
+        if let Some(ref_items) = raw.ref_item_list.as_ref() {
+            let quoted = parse_protocol_items(ref_items.clone());
+            if !quoted.is_empty() {
+                items.push(WechatMessageItem::Quote(quoted));
+            }
         }
 
         match raw.item_type() {
@@ -1070,15 +1168,28 @@ fn parse_protocol_items(raw_items: Vec<WechatProtocolItem>) -> Vec<WechatMessage
     items
 }
 
-fn parse_ref_message(ref_msg: &WechatRefMessage) -> Option<Vec<WechatMessageItem>> {
-    let mut items = Vec::new();
-    if let Some(title) = ref_msg.title.as_deref().and_then(non_empty) {
-        items.push(WechatMessageItem::Text(title.to_string()));
+/// Extract a hash from quoted content to match against feedback prompts.
+/// Returns the hash of the quoted text content if a Quote item is found.
+fn extract_quote_hash(items: &[WechatMessageItem]) -> Option<String> {
+    for item in items {
+        if let WechatMessageItem::Quote(quoted) = item {
+            let text = body_from_items(quoted);
+            if !text.is_empty() {
+                return Some(hash_feedback_key(&text));
+            }
+        }
     }
-    if let Some(message_item) = ref_msg.message_item.clone() {
-        items.extend(parse_protocol_items(vec![*message_item]));
-    }
-    (!items.is_empty()).then_some(items)
+    None
+}
+
+/// Hash feedback content to use as a key in the feedback_waiters map.
+fn hash_feedback_key(content: &str) -> String {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    let mut hasher = DefaultHasher::new();
+    content.hash(&mut hasher);
+    format!("{:016x}", hasher.finish())
 }
 
 fn body_from_items(items: &[WechatMessageItem]) -> String {
@@ -1358,13 +1469,16 @@ mod tests {
                 {
                     "type": 1,
                     "text_item": { "text": "reply" },
-                    "ref_msg": {
-                        "title": "summary",
-                        "message_item": {
+                    "ref_item_list": [
+                        {
+                            "type": 1,
+                            "text_item": { "text": "summary" }
+                        },
+                        {
                             "type": 1,
                             "text_item": { "text": "original" }
                         }
-                    }
+                    ]
                 },
                 {
                     "type": 2,

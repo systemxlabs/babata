@@ -7,7 +7,7 @@ use crate::{
         babata::{BabataAgent, Skill},
         codex::CodexAgent,
     },
-    channel::wechat_latest_context_token_path,
+    channel::load_wechat_latest_context_token,
     config::{AgentConfig, ChannelConfig, Config},
     error::BabataError,
     utils::{babata_dir, resolve_home_dir},
@@ -129,22 +129,6 @@ fn agent_description(agent: &AgentConfig) -> &'static str {
         AgentConfig::Babata(_) => BabataAgent::description(),
         AgentConfig::Codex(_) => CodexAgent::description(),
     }
-}
-
-fn load_wechat_latest_context_token() -> BabataResult<Option<String>> {
-    let path = wechat_latest_context_token_path()?;
-    if !path.exists() {
-        return Ok(None);
-    }
-
-    let content = std::fs::read_to_string(path)
-        .map_err(|e| BabataError::internal(format!("Failed to read context token: {e}")))?;
-    let content = content.trim();
-    if content.is_empty() {
-        return Ok(None);
-    }
-
-    Ok(Some(content.to_string()))
 }
 
 fn load_workspace_prompt() -> BabataResult<Option<String>> {
