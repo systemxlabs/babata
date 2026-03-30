@@ -65,6 +65,7 @@ fn main() {
                 babata::cli::task::count(status.as_deref())
             }
         },
+        babata::cli::Command::Dashboard { no_open } => babata::cli::dashboard::run(no_open),
         babata::cli::Command::Onboard => babata::cli::onboard::run(),
     }
 }

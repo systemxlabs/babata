@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc, usize};
+use std::{collections::HashMap, fs, path::PathBuf, sync::Arc, usize};
 
 use chrono::Utc;
 use log::{error, info, warn};
@@ -92,11 +92,27 @@ impl TaskManager {
                 "Task {} is being relaunched to continue running when server started.",
                 task.task_id
             );
-            let running_task = self
-                .launcher
-                .relaunch(&task, self.exit_tx.clone(), &reason)?;
-            self.running_tasks.lock().insert(task.task_id, running_task);
-            info!("Recovered running task {}", task.task_id);
+            match self.launcher.relaunch(&task, self.exit_tx.clone(), &reason) {
+                Ok(running_task) => {
+                    self.running_tasks.lock().insert(task.task_id, running_task);
+                    info!("Recovered running task {}", task.task_id);
+                }
+                Err(err) => {
+                    warn!(
+                        "Failed to recover running task {}: {}. Marking task as canceled.",
+                        task.task_id, err
+                    );
+                    if let Err(store_err) = self
+                        .store
+                        .update_task_status(task.task_id, TaskStatus::Canceled)
+                    {
+                        error!(
+                            "Failed to mark unrecoverable task {} as canceled: {}",
+                            task.task_id, store_err
+                        );
+                    }
+                }
+            }
         }
 
         Ok(())
@@ -221,9 +237,6 @@ impl TaskManager {
         }
 
         self.cancel_task_recursive(task_id)?;
-        if task.task_id == task.root_task_id {
-            self.remove_task_dir_recursive(task_id);
-        }
         Ok(())
     }
 
@@ -238,6 +251,65 @@ impl TaskManager {
 
     pub fn get_task(&self, task_id: Uuid) -> BabataResult<TaskRecord> {
         self.store.get_task(task_id)
+    }
+
+    pub fn list_tasks_filtered(
+        &self,
+        query: &crate::task::TaskListQuery,
+    ) -> BabataResult<Vec<TaskRecord>> {
+        self.store.list_tasks_filtered(query)
+    }
+
+    pub fn list_root_tree(&self, root_task_id: Uuid) -> BabataResult<Vec<TaskRecord>> {
+        self.store.list_root_tree(root_task_id)
+    }
+
+    pub fn task_artifact_root(&self, task_id: Uuid) -> BabataResult<PathBuf> {
+        self.store.get_task(task_id)?;
+        let task_root = task_dir(task_id)?;
+        let artifact_root = task_root.join("artifacts");
+
+        let metadata = match fs::symlink_metadata(&artifact_root) {
+            Ok(metadata) => metadata,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(artifact_root),
+            Err(err) => {
+                return Err(BabataError::internal(format!(
+                    "Failed to inspect task artifact root '{}': {}",
+                    artifact_root.display(),
+                    err
+                )));
+            }
+        };
+        if metadata.file_type().is_symlink() {
+            return Err(BabataError::config(format!(
+                "Task artifact root '{}' cannot be a symlink",
+                artifact_root.display()
+            )));
+        }
+
+        let canonical_task_root = task_root.canonicalize().map_err(|err| {
+            BabataError::internal(format!(
+                "Failed to resolve task root '{}': {}",
+                task_root.display(),
+                err
+            ))
+        })?;
+        let canonical_artifact_root = artifact_root.canonicalize().map_err(|err| {
+            BabataError::internal(format!(
+                "Failed to resolve task artifact root '{}': {}",
+                artifact_root.display(),
+                err
+            ))
+        })?;
+        if !canonical_artifact_root.starts_with(&canonical_task_root) {
+            return Err(BabataError::config(format!(
+                "Task artifact root '{}' resolves outside task root '{}'",
+                artifact_root.display(),
+                task_root.display()
+            )));
+        }
+
+        Ok(artifact_root)
     }
 
     pub fn count_tasks(&self, status: Option<TaskStatus>) -> BabataResult<usize> {
@@ -298,9 +370,6 @@ impl TaskManager {
             );
             return;
         }
-        if task.task_id == task.root_task_id {
-            self.remove_task_dir_recursive(task_id);
-        }
     }
 
     fn relaunch_after_completion(&self, task: &TaskRecord, reason: &str, failure_context: &str) {
@@ -353,25 +422,6 @@ impl TaskManager {
                 error!("Failed to relaunch task {} after failure: {}", task_id, err);
             }
         }
-    }
-
-    fn remove_task_dir_recursive(&self, task_id: Uuid) {
-        let subtasks = match self.store.list_subtasks(task_id) {
-            Ok(subtasks) => subtasks,
-            Err(err) => {
-                error!(
-                    "Failed to load subtasks for task {} while cleaning task tree directories: {}",
-                    task_id, err
-                );
-                return;
-            }
-        };
-
-        for subtask in subtasks {
-            self.remove_task_dir_recursive(subtask.task_id);
-        }
-
-        remove_task_dir(task_id);
     }
 
     fn has_unfinished_subtasks(&self, task_id: Uuid) -> bool {
@@ -485,6 +535,7 @@ fn initialize_task_dir(task: &TaskRecord, prompt: &[Content]) -> BabataResult<()
     Ok(())
 }
 
+#[cfg(test)]
 fn remove_task_dir(task_id: Uuid) {
     let task_dir = match task_dir(task_id) {
         Ok(path) => path,
@@ -649,7 +700,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn handle_task_completed_marks_root_task_done_and_cleans_directory() {
+    async fn completed_root_task_directory_is_retained() {
         let temp_root = temp_test_root("manager-complete-root");
         fs::create_dir_all(&temp_root).expect("create temp root");
         let manager = build_test_manager(&temp_root);
@@ -670,8 +721,9 @@ mod tests {
 
         let stored_task = manager.store.get_task(task.task_id).expect("load task");
         assert_eq!(stored_task.status, TaskStatus::Done);
-        assert!(!task_dir(task.task_id).expect("resolve task dir").exists());
+        assert!(task_dir(task.task_id).expect("resolve task dir").exists());
 
+        cleanup_task_artifacts(&manager, task.task_id);
         let _ = fs::remove_dir_all(&temp_root);
     }
 
@@ -721,6 +773,28 @@ mod tests {
 
         cleanup_task_artifacts(&manager, task.task_id);
         remove_task_dir(subtask.task_id);
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[tokio::test]
+    async fn recover_running_tasks_cancels_tasks_with_missing_files() {
+        let temp_root = temp_test_root("manager-recover-missing-files");
+        fs::create_dir_all(&temp_root).expect("create temp root");
+        let manager = Arc::new(build_test_manager(&temp_root));
+        let task = task_record(false);
+        manager
+            .store
+            .insert_task(task.clone())
+            .expect("insert running task record");
+
+        remove_task_dir(task.task_id);
+
+        manager.start().expect("start manager should succeed");
+
+        let stored_task = manager.store.get_task(task.task_id).expect("load task");
+        assert_eq!(stored_task.status, TaskStatus::Canceled);
+        assert!(!manager.running_tasks.lock().contains_key(&task.task_id));
+
         let _ = fs::remove_dir_all(&temp_root);
     }
 }

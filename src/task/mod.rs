@@ -1,9 +1,11 @@
 mod launcher;
 mod manager;
+mod query;
 mod store;
 
 pub use launcher::*;
 pub use manager::*;
+pub use query::*;
 use serde::{Deserialize, Serialize};
 pub use store::*;
 

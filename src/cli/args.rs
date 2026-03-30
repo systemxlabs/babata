@@ -13,6 +13,11 @@ pub enum Command {
         #[command(subcommand)]
         action: ServerAction,
     },
+    #[command(about = "Start or open the local dashboard")]
+    Dashboard {
+        #[arg(long, help = "Print the URL without opening the browser")]
+        no_open: bool,
+    },
     #[command(about = "Channel config management (add/delete/list)")]
     Channel {
         #[command(subcommand)]

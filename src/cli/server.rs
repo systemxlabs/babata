@@ -8,10 +8,14 @@ use std::{
 
 use log::{error, info, warn};
 
-use crate::{BabataResult, config::Config, error::BabataError, http::HttpApp, task::TaskStore};
 use crate::{
+    BabataResult,
     channel::{build_channels, start_channel_loops},
+    config::{AgentConfig, CodexAgentConfig, Config},
+    error::BabataError,
+    http::HttpApp,
     message::Content,
+    task::TaskStore,
 };
 use crate::{
     task::{CreateTaskRequest, TaskLauncher, TaskManager},
@@ -24,6 +28,7 @@ const WINDOWS_SERVICE_NAME: &str = "babata.server";
 const WINDOWS_SERVICE_DISPLAY_NAME: &str = "Babata Server";
 const WINDOWS_SERVICE_DESCRIPTION: &str =
     "Babata background server managed by Windows Service Control Manager.";
+pub const DASHBOARD_BOOTSTRAP_ENV: &str = "BABATA_DASHBOARD_BOOTSTRAP";
 
 pub fn serve() {
     if let Err(err) = run_serve() {
@@ -92,7 +97,7 @@ pub fn install_windows_service() -> BabataResult<()> {
 fn run_serve() -> BabataResult<()> {
     info!("Server run babata dir: {}", babata_dir()?.display());
 
-    let config = Config::load()?;
+    let config = load_serve_config()?;
     let channels = build_channels(&config)?;
     let task_store = TaskStore::new()?;
     let task_launcher = TaskLauncher::new(&config, channels.clone())?;
@@ -109,7 +114,7 @@ fn run_serve() -> BabataResult<()> {
         task_manager.start()?;
         start_channel_loops(channels, task_manager.clone());
 
-        broadcast_service_started(&task_manager).await;
+        broadcast_service_started(&config, &task_manager).await;
 
         http_app.serve().await
     })?;
@@ -117,7 +122,60 @@ fn run_serve() -> BabataResult<()> {
     Ok(())
 }
 
-async fn broadcast_service_started(task_manager: &Arc<TaskManager>) {
+fn load_serve_config() -> BabataResult<Config> {
+    match Config::load() {
+        Ok(config) => Ok(config),
+        Err(error) if should_bootstrap_dashboard_config(&error) => {
+            warn!(
+                "Dashboard bootstrap mode enabled without persisted config; using a minimal local codex runtime"
+            );
+            build_dashboard_bootstrap_config()
+        }
+        Err(error) => Err(error),
+    }
+}
+
+fn should_bootstrap_dashboard_config(error: &BabataError) -> bool {
+    dashboard_bootstrap_requested() && is_missing_config_error(error)
+}
+
+fn dashboard_bootstrap_requested() -> bool {
+    matches!(std::env::var(DASHBOARD_BOOTSTRAP_ENV).as_deref(), Ok("1"))
+}
+
+fn is_missing_config_error(error: &BabataError) -> bool {
+    matches!(
+        error,
+        BabataError::Config(message, _)
+            if message.contains("Failed to read config file")
+                && message.contains("No such file or directory")
+    )
+}
+
+fn build_dashboard_bootstrap_config() -> BabataResult<Config> {
+    let workspace = std::env::current_dir().map_err(|err| {
+        BabataError::internal(format!(
+            "Failed to resolve current working directory: {err}"
+        ))
+    })?;
+
+    Ok(Config {
+        providers: Vec::new(),
+        agents: vec![AgentConfig::Codex(CodexAgentConfig {
+            command: "codex".to_string(),
+            workspace: workspace.display().to_string(),
+            model: None,
+        })],
+        channels: Vec::new(),
+        memory: Vec::new(),
+    })
+}
+
+async fn broadcast_service_started(config: &Config, task_manager: &Arc<TaskManager>) {
+    if config.channels.is_empty() {
+        return;
+    }
+
     let babata_home = match crate::utils::babata_dir() {
         Ok(path) => path.display().to_string(),
         Err(err) => format!("unavailable ({err})"),
@@ -854,9 +912,10 @@ mod windows_service_host {
 #[cfg(test)]
 mod tests {
     use super::{
-        WindowsServiceState, is_macos_service_not_found_error, parse_windows_service_state,
-        windows_service_bin_path,
+        WindowsServiceState, build_dashboard_bootstrap_config, is_macos_service_not_found_error,
+        is_missing_config_error, parse_windows_service_state, windows_service_bin_path,
     };
+    use crate::{config::AgentConfig, error::BabataError};
 
     #[test]
     fn detects_launchctl_missing_service_error() {
@@ -907,5 +966,33 @@ SERVICE_NAME: babata.server
             parse_windows_service_state(output),
             WindowsServiceState::StopPending
         );
+    }
+
+    #[test]
+    fn detects_missing_config_read_error() {
+        let error = BabataError::config(
+            "Failed to read config file '/tmp/.babata/config.json': No such file or directory (os error 2)",
+        );
+        assert!(is_missing_config_error(&error));
+    }
+
+    #[test]
+    fn dashboard_bootstrap_config_uses_current_dir_for_codex_workspace() {
+        let config = build_dashboard_bootstrap_config().unwrap();
+        let workspace = std::env::current_dir().unwrap().display().to_string();
+
+        assert!(config.providers.is_empty());
+        assert!(config.channels.is_empty());
+        assert!(config.memory.is_empty());
+        assert_eq!(config.agents.len(), 1);
+
+        match &config.agents[0] {
+            AgentConfig::Codex(codex) => {
+                assert_eq!(codex.command, "codex");
+                assert_eq!(codex.workspace, workspace);
+                assert_eq!(codex.model, None);
+            }
+            other => panic!("expected codex bootstrap agent, got {other:?}"),
+        }
     }
 }

@@ -106,7 +106,6 @@ impl TelegramChannel {
                 combined.extend(message_content);
                 message_content = combined;
             }
-
             content.extend(message_content);
         }
 

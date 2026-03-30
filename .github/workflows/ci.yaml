@@ -13,6 +13,19 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '25.8.2'
+
+      - name: Install frontend deps
+        run: npm install
+        working-directory: web
+
+      - name: Build frontend
+        run: npm run build
+        working-directory: web
+
       - name: Run cargo check
         run: cargo check --workspace
 

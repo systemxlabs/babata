@@ -1,10 +1,15 @@
 use std::path::{Path, PathBuf};
 
-use rusqlite::{Connection, OptionalExtension, Row, params};
+use rusqlite::{Connection, OptionalExtension, Row, params, params_from_iter, types::Value};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{BabataResult, error::BabataError, task::TaskStatus, utils::babata_dir};
+use crate::{
+    BabataResult,
+    error::BabataError,
+    task::{TaskListQuery, TaskStatus},
+    utils::babata_dir,
+};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TaskRecord {
@@ -146,104 +151,94 @@ impl TaskStore {
         limit: usize,
         offset: Option<usize>,
     ) -> BabataResult<Vec<TaskRecord>> {
-        if limit == 0 {
+        self.list_tasks_filtered(&TaskListQuery {
+            status,
+            limit,
+            offset,
+            ..TaskListQuery::default()
+        })
+    }
+
+    pub fn list_tasks_filtered(&self, query: &TaskListQuery) -> BabataResult<Vec<TaskRecord>> {
+        if query.limit == 0 {
             return Ok(Vec::new());
         }
 
-        let conn = self.connect()?;
-        let tasks = match (status, offset) {
-            (Some(status), Some(offset)) => {
-                let mut stmt = conn
-                    .prepare(
-                        "SELECT task_id, description, agent, status, parent_task_id, root_task_id, created_at, never_ends
-                         FROM tasks
-                         WHERE status = ?1
-                         ORDER BY created_at DESC
-                         LIMIT ?2 OFFSET ?3",
-                    )
-                    .map_err(|err| {
-                        BabataError::internal(format!(
-                            "Failed to prepare task list query statement: {}",
-                            err
-                        ))
-                    })?;
-                collect_task_records(
-                    stmt.query_map(
-                        params![status.as_str(), limit as i64, offset as i64],
-                        parse_task_record,
-                    )
-                    .map_err(|err| {
-                        BabataError::internal(format!("Failed to query task rows: {}", err))
-                    })?,
-                )?
-            }
-            (Some(status), None) => {
-                let mut stmt = conn
-                    .prepare(
-                        "SELECT task_id, description, agent, status, parent_task_id, root_task_id, created_at, never_ends
-                         FROM tasks
-                         WHERE status = ?1
-                         ORDER BY created_at DESC
-                         LIMIT ?2",
-                    )
-                    .map_err(|err| {
-                        BabataError::internal(format!(
-                            "Failed to prepare task list query statement: {}",
-                            err
-                        ))
-                    })?;
-                collect_task_records(
-                    stmt.query_map(params![status.as_str(), limit as i64], parse_task_record)
-                        .map_err(|err| {
-                            BabataError::internal(format!("Failed to query task rows: {}", err))
-                        })?,
-                )?
-            }
-            (None, Some(offset)) => {
-                let mut stmt = conn
-                    .prepare(
-                        "SELECT task_id, description, agent, status, parent_task_id, root_task_id, created_at, never_ends
-                         FROM tasks
-                         ORDER BY created_at DESC
-                         LIMIT ?1 OFFSET ?2",
-                    )
-                    .map_err(|err| {
-                        BabataError::internal(format!(
-                            "Failed to prepare task list query statement: {}",
-                            err
-                        ))
-                    })?;
-                collect_task_records(
-                    stmt.query_map(params![limit as i64, offset as i64], parse_task_record)
-                        .map_err(|err| {
-                            BabataError::internal(format!("Failed to query task rows: {}", err))
-                        })?,
-                )?
-            }
-            (None, None) => {
-                let mut stmt = conn
-                    .prepare(
-                        "SELECT task_id, description, agent, status, parent_task_id, root_task_id, created_at, never_ends
-                         FROM tasks
-                         ORDER BY created_at DESC
-                         LIMIT ?1",
-                    )
-                    .map_err(|err| {
-                        BabataError::internal(format!(
-                            "Failed to prepare task list query statement: {}",
-                            err
-                        ))
-                    })?;
-                collect_task_records(
-                    stmt.query_map(params![limit as i64], parse_task_record)
-                        .map_err(|err| {
-                            BabataError::internal(format!("Failed to query task rows: {}", err))
-                        })?,
-                )?
-            }
-        };
+        let mut sql = String::from(
+            "SELECT task_id, description, agent, status, parent_task_id, root_task_id, created_at, never_ends
+             FROM tasks",
+        );
 
-        Ok(tasks)
+        let mut clauses = Vec::new();
+        let mut bind_params: Vec<Value> = Vec::new();
+
+        if let Some(status) = query.status {
+            clauses.push("status = ?".to_string());
+            bind_params.push(Value::from(status.as_str().to_string()));
+        }
+
+        if query.root_only {
+            clauses.push("parent_task_id IS NULL".to_string());
+        }
+
+        if let Some(root_task_id) = query.root_task_id {
+            clauses.push("root_task_id = ?".to_string());
+            bind_params.push(Value::from(root_task_id.to_string()));
+        }
+
+        if !clauses.is_empty() {
+            sql.push_str(" WHERE ");
+            sql.push_str(&clauses.join(" AND "));
+        }
+
+        sql.push_str(" ORDER BY created_at DESC LIMIT ?");
+        let limit = query.limit.min(i64::MAX as usize) as i64;
+        bind_params.push(Value::from(limit));
+
+        if let Some(offset) = query.offset {
+            sql.push_str(" OFFSET ?");
+            let offset = offset.min(i64::MAX as usize) as i64;
+            bind_params.push(Value::from(offset));
+        }
+
+        let conn = self.connect()?;
+        let mut stmt = conn.prepare(&sql).map_err(|err| {
+            BabataError::internal(format!(
+                "Failed to prepare task list query statement: {}",
+                err
+            ))
+        })?;
+
+        collect_task_records(
+            stmt.query_map(params_from_iter(bind_params), parse_task_record)
+                .map_err(|err| {
+                    BabataError::internal(format!("Failed to query task rows: {}", err))
+                })?,
+        )
+    }
+
+    pub fn list_root_tree(&self, root_task_id: Uuid) -> BabataResult<Vec<TaskRecord>> {
+        let conn = self.connect()?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT task_id, description, agent, status, parent_task_id, root_task_id, created_at, never_ends
+                 FROM tasks
+                 WHERE root_task_id = ?1
+                 ORDER BY created_at ASC",
+            )
+            .map_err(|err| {
+                BabataError::internal(format!(
+                    "Failed to prepare root tree query statement: {}",
+                    err
+                ))
+            })?;
+
+        collect_task_records(
+            stmt.query_map(params![root_task_id.to_string()], parse_task_record)
+                .map_err(|err| {
+                    BabataError::internal(format!("Failed to query root tree rows: {}", err))
+                })?,
+        )
     }
 
     pub fn count_tasks(&self, status: Option<TaskStatus>) -> BabataResult<usize> {
@@ -415,6 +410,7 @@ fn collect_task_records(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::task::TaskListQuery;
 
     fn temp_db_path(test_name: &str) -> PathBuf {
         std::env::temp_dir().join(format!("babata-{test_name}-{}.db", Uuid::new_v4()))
@@ -496,6 +492,69 @@ mod tests {
         let task = store.get_task(task_id).expect("load task");
         assert_eq!(task.description, "after");
         assert!(task.never_ends);
+
+        let _ = std::fs::remove_file(&db_path);
+    }
+
+    #[test]
+    fn list_tasks_filters_root_only() {
+        let db_path = temp_db_path("task-store-root-only");
+        let store = TaskStore::open(&db_path).expect("open store");
+
+        let root_a = Uuid::new_v4();
+        let sub_a = Uuid::new_v4();
+        let root_b = Uuid::new_v4();
+
+        store
+            .insert_task(TaskRecord {
+                task_id: root_a,
+                description: "root a".to_string(),
+                agent: None,
+                status: TaskStatus::Running,
+                parent_task_id: None,
+                root_task_id: root_a,
+                created_at: 100,
+                never_ends: false,
+            })
+            .expect("insert root a");
+
+        store
+            .insert_task(TaskRecord {
+                task_id: sub_a,
+                description: "sub a".to_string(),
+                agent: None,
+                status: TaskStatus::Running,
+                parent_task_id: Some(root_a),
+                root_task_id: root_a,
+                created_at: 200,
+                never_ends: false,
+            })
+            .expect("insert sub a");
+
+        store
+            .insert_task(TaskRecord {
+                task_id: root_b,
+                description: "root b".to_string(),
+                agent: None,
+                status: TaskStatus::Running,
+                parent_task_id: None,
+                root_task_id: root_b,
+                created_at: 300,
+                never_ends: false,
+            })
+            .expect("insert root b");
+
+        let tasks = store
+            .list_tasks_filtered(&TaskListQuery {
+                root_only: true,
+                ..TaskListQuery::default()
+            })
+            .expect("list tasks");
+
+        assert_eq!(tasks.len(), 2);
+        assert!(tasks.iter().all(|task| task.parent_task_id.is_none()));
+        assert_eq!(tasks[0].task_id, root_b);
+        assert_eq!(tasks[1].task_id, root_a);
 
         let _ = std::fs::remove_file(&db_path);
     }
