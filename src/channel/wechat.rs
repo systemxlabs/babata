@@ -220,12 +220,7 @@ impl WechatChannel {
             .join("get_updates_buf"))
     }
 
-    async fn send_text_message_with_quote(
-        &self,
-        context_token: &str,
-        text: &str,
-        quote_text: &str,
-    ) -> BabataResult<()> {
+    async fn send_text_message(&self, context_token: &str, text: &str) -> BabataResult<()> {
         let body = serde_json::json!({
             "msg": {
                 "to_user_id": self.user_id,
@@ -238,15 +233,7 @@ impl WechatChannel {
                         "type": 1,
                         "text_item": {
                             "text": text
-                        },
-                        "ref_item_list": [
-                            {
-                                "type": 1,
-                                "text_item": {
-                                    "text": quote_text
-                                }
-                            }
-                        ]
+                        }
                     }
                 ]
             },
@@ -683,9 +670,8 @@ impl super::Channel for WechatChannel {
             )
         })?;
 
-        // Send the feedback message with quote (to make it replyable)
-        self.send_text_message_with_quote(&context_token, &text, &text)
-            .await?;
+        // Send the feedback message
+        self.send_text_message(&context_token, &text).await?;
 
         // Wait for user's reply
         let (sender, receiver) = oneshot::channel();
