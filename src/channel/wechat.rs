@@ -987,7 +987,7 @@ struct WechatProtocolItem {
     #[serde(default)]
     video_item: Option<WechatVideoItem>,
     #[serde(default)]
-    ref_item_list: Option<Vec<WechatProtocolItem>>,
+    ref_msg: Option<WechatRefMessage>,
 }
 
 impl WechatProtocolItem {
@@ -1062,6 +1062,12 @@ struct WechatVideoItem {
     thumb_media: Option<WechatCdnMedia>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+struct WechatRefMessage {
+    #[serde(default)]
+    message_item: Option<Box<WechatProtocolItem>>,
+}
+
 #[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 struct WechatCdnMedia {
@@ -1088,11 +1094,14 @@ fn parse_protocol_items(raw_items: Vec<WechatProtocolItem>) -> Vec<WechatMessage
     let mut items = Vec::new();
 
     for raw in raw_items {
-        if let Some(ref_items) = raw.ref_item_list.as_ref() {
-            let quoted = parse_protocol_items(ref_items.clone());
-            if !quoted.is_empty() {
-                items.push(WechatMessageItem::Quote(quoted));
-            }
+        if let Some(quote) = raw
+            .ref_msg
+            .as_ref()
+            .and_then(|ref_msg| ref_msg.message_item.as_ref())
+            .map(|item| parse_protocol_items(vec![*item.clone()]))
+            .filter(|quoted| !quoted.is_empty())
+        {
+            items.push(WechatMessageItem::Quote(quote));
         }
 
         match raw.item_type() {
@@ -1469,16 +1478,12 @@ mod tests {
                 {
                     "type": 1,
                     "text_item": { "text": "reply" },
-                    "ref_item_list": [
-                        {
-                            "type": 1,
-                            "text_item": { "text": "summary" }
-                        },
-                        {
+                    "ref_msg": {
+                        "message_item": {
                             "type": 1,
                             "text_item": { "text": "original" }
                         }
-                    ]
+                    }
                 },
                 {
                     "type": 2,
@@ -1534,7 +1539,7 @@ mod tests {
         assert_eq!(message.message_type, WechatProtocolMessageType::User);
         assert_eq!(message.message_state, WechatProtocolMessageState::Finish);
         assert_eq!(message.items.len(), 7);
-        assert!(matches!(&message.items[0], WechatMessageItem::Quote(items) if items.len() == 2));
+        assert!(matches!(&message.items[0], WechatMessageItem::Quote(items) if items.len() == 1));
         assert!(matches!(
             &message.items[1],
             WechatMessageItem::Text(text) if text == "reply"
