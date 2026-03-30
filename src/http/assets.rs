@@ -43,8 +43,7 @@ pub(super) fn prefers_html(headers: &HeaderMap) -> bool {
 
     match (html, json) {
         (Some(html), Some(json)) => html.outranks(&json),
-        (Some(_), None) => true,
-        _ => false,
+        _ => true,
     }
 }
 
