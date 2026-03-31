@@ -110,8 +110,8 @@ pub fn build_skills_prompt(skills: &[Skill]) -> Option<String> {
     for skill in skills {
         let title = format!(
             "{}: {}\n  path: {}",
-            skill.frontmatter.name.trim(),
-            skill.frontmatter.description.trim(),
+            skill.frontmatter.name,
+            skill.frontmatter.description,
             skill.path.display()
         );
         skill_summaries.push(format!("- {title}"));
@@ -145,7 +145,6 @@ fn load_workspace_prompt() -> BabataResult<Option<String>> {
             err
         ))
     })?;
-    let content = content.trim();
     if content.is_empty() {
         return Ok(None);
     }
@@ -199,8 +198,8 @@ mod tests {
 
         // BASE_SYSTEM_PROMPTS (2) + runtime + agents + channels + workspace (if exists)
         assert!(prompts.len() >= 5);
-        assert!(prompts[0].contains("# AGENTS") || prompts[0].contains("# SYSTEM"));
-        assert!(prompts[1].contains("Be genuinely helpful"));
+        assert!(prompts[0].contains("# SOUL"));
+        assert!(prompts[1].contains("# Babata System"));
         assert!(prompts[2].contains("Runtime context:"));
         assert!(prompts[3].contains("Configured agents:"));
         assert!(prompts[4].contains("Configured channels:"));

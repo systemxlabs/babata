@@ -275,11 +275,8 @@ fn build_system_blocks(
     system_prompts: &[String],
     context: &str,
 ) -> Option<Vec<AnthropicSystemBlock>> {
-    let context = context.trim();
-
     let mut blocks = Vec::new();
     for system_prompt in system_prompts {
-        let system_prompt = system_prompt.trim();
         if system_prompt.is_empty() {
             continue;
         }
@@ -287,7 +284,7 @@ fn build_system_blocks(
             text: system_prompt.to_string(),
         });
     }
-    if !context.is_empty() {
+    if !context.trim().is_empty() {
         blocks.push(AnthropicSystemBlock::Text {
             text: format!("Context:\n{context}"),
         });

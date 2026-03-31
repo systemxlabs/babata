@@ -328,19 +328,19 @@ impl Memory for SimpleMemory {
         // Load long-term memory from MEMORY.md
         let memory_md_path = babata_dir()?.join("memory").join("MEMORY.md");
         if memory_md_path.exists() {
-            match std::fs::read_to_string(&memory_md_path) {
-                Ok(long_term_memory) => {
-                    if !long_term_memory.is_empty() {
-                        context_parts.push(format!(
-                            "# Long-term Memory (from {})\n\n{}",
-                            memory_md_path.display(),
-                            long_term_memory
-                        ));
-                    }
-                }
-                Err(err) => {
-                    eprintln!("Warning: Failed to read MEMORY.md: {}", err);
-                }
+            let long_term_memory = std::fs::read_to_string(&memory_md_path).map_err(|err| {
+                BabataError::memory(format!(
+                    "Failed to read MEMORY.md '{}': {}",
+                    memory_md_path.display(),
+                    err
+                ))
+            })?;
+            if !long_term_memory.is_empty() {
+                context_parts.push(format!(
+                    "# Long-term Memory (from {})\n\n{}",
+                    memory_md_path.display(),
+                    long_term_memory
+                ));
             }
         }
 

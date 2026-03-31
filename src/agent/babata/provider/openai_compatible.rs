@@ -71,7 +71,6 @@ impl OpenAICompatibleProvider {
             }
         } else {
             for system_prompt in system_prompts {
-                let system_prompt = system_prompt.trim();
                 if system_prompt.is_empty() {
                     continue;
                 }
@@ -80,8 +79,7 @@ impl OpenAICompatibleProvider {
                 });
             }
 
-            let context = context.trim();
-            if !context.is_empty() {
+            if !context.trim().is_empty() {
                 request_messages.push(ChatCompletionMessageParam::System {
                     content: format!("Context:\n{context}"),
                 });
@@ -298,13 +296,11 @@ fn audio_format_from_media_type(media_type: &MediaType) -> String {
 fn build_combined_system_prompt(system_prompts: &[String], context: &str) -> Option<String> {
     let mut sections = system_prompts
         .iter()
-        .map(|system_prompt| system_prompt.trim())
         .filter(|system_prompt| !system_prompt.is_empty())
         .map(ToOwned::to_owned)
         .collect::<Vec<_>>();
 
-    let context = context.trim();
-    if !context.is_empty() {
+    if !context.trim().is_empty() {
         sections.push(format!("Context:\n{context}"));
     }
 
