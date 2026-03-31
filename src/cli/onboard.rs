@@ -20,17 +20,6 @@ use crate::{
     },
     error::BabataError,
 };
-use rust_embed::RustEmbed;
-
-/// Embed the entire project source code into the binary
-/// Excludes: target/, .git/, *.lock (except Cargo.lock)
-#[derive(RustEmbed)]
-#[folder = "$CARGO_MANIFEST_DIR"]
-#[exclude = "target/*"]
-#[exclude = ".git/*"]
-#[exclude = "*.pdb"]
-#[exclude = "*.exe"]
-struct EmbeddedProject;
 
 const EMBEDDED_MACOS_SERVICE_TEMPLATE: &str =
     include_str!("../../services/babata.server.plist.template");
@@ -87,54 +76,10 @@ fn run_onboard() -> BabataResult<()> {
 fn ensure_default_directories() -> BabataResult<()> {
     let base = crate::utils::babata_dir()?;
     let workspace = base.join("workspace");
-    let source_dir = base.join("source");
 
     ensure_directory_if_missing(&workspace)?;
     println!("Created directory {}", workspace.display());
 
-    // Clean and write embedded project source to disk
-    remove_dir_all_if_exists(&source_dir)?;
-    ensure_directory_if_missing(&source_dir)?;
-    println!("Created directory {}", source_dir.display());
-    write_embedded_project(&source_dir)?;
-
-    Ok(())
-}
-
-/// Write all embedded project files to disk
-fn write_embedded_project(base_path: &Path) -> BabataResult<()> {
-    let mut file_count = 0;
-
-    for file_path in EmbeddedProject::iter() {
-        let file_path_str = file_path.as_ref();
-        let target = base_path.join(file_path_str);
-
-        // Ensure parent directory exists
-        if let Some(parent) = target.parent() {
-            ensure_directory_if_missing(parent)?;
-        }
-
-        // Get file contents and write to disk
-        let content = EmbeddedProject::get(&file_path)
-            .unwrap_or_else(|| panic!("Failed to get embedded file: {}", file_path_str));
-
-        // Write file
-        std::fs::write(&target, &content.data).map_err(|err| {
-            BabataError::config(format!(
-                "Failed to write file '{}': {}",
-                target.display(),
-                err
-            ))
-        })?;
-
-        file_count += 1;
-    }
-
-    println!(
-        "Wrote {} source files to {}",
-        file_count,
-        base_path.display()
-    );
     Ok(())
 }
 
@@ -150,21 +95,6 @@ fn ensure_directory_if_missing(path: &Path) -> BabataResult<()> {
             err
         ))
     })
-}
-
-/// Remove directory and all its contents if it exists
-fn remove_dir_all_if_exists(path: &Path) -> BabataResult<()> {
-    if path.exists() {
-        std::fs::remove_dir_all(path).map_err(|err| {
-            BabataError::config(format!(
-                "Failed to remove directory '{}': {}",
-                path.display(),
-                err
-            ))
-        })?;
-        println!("Removed directory {}", path.display());
-    }
-    Ok(())
 }
 
 fn prompt_provider_setup() -> BabataResult<Option<ProviderConfig>> {
