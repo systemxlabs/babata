@@ -18,8 +18,7 @@ fn main() {
                     e.as_ref()
                         .ok()
                         .and_then(|e| e.metadata().ok())
-                        .map(|m| m.modified().ok())
-                        .flatten()
+                        .and_then(|m| m.modified().ok())
                         .map(|t| {
                             web_dist
                                 .metadata()

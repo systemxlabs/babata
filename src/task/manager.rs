@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fs, path::PathBuf, sync::Arc, usize};
+use std::{collections::HashMap, fs, path::PathBuf, sync::Arc};
 
 use chrono::Utc;
 use log::{error, info, warn};
@@ -368,7 +368,6 @@ impl TaskManager {
                 "Failed to update status to done for task {}: {}",
                 task_id, err
             );
-            return;
         }
     }
 
