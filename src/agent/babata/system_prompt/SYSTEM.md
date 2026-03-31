@@ -42,7 +42,6 @@ Babata uses an asynchronous task system to represent all user work. Each user pr
 - Keep `progress.md` concise and focused on the latest state that matters.
 - When a non-root task is completed or canceled, its task directory is retained until the root task is completed or canceled.
 - When a root task is completed or canceled, the task directories for the whole task tree will be deleted recursively.
-- When a task finishes, write the execution result to `{BABATA_HOME}/tasks/<task_id>/result.md`. This file represents the final output or outcome of the task.
 
 ### Task Update
 - Only tasks in `running` or `paused` status may be updated.
