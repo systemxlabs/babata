@@ -20,7 +20,7 @@ impl GetTaskTool {
         Ok(Self {
             spec: ToolSpec {
                 name: "get_task".to_string(),
-                description: "Get a task by id.".to_string(),
+                description: "Get task metadata by id.".to_string(),
                 parameters: json!({
                     "type": "object",
                     "properties": {

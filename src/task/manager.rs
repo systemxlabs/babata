@@ -83,7 +83,8 @@ impl TaskManager {
                     "Task {} is missing required files (task.md or progress.md), canceling task",
                     task.task_id
                 );
-                self.store.update_task_status(task.task_id, TaskStatus::Canceled)?;
+                self.store
+                    .update_task_status(task.task_id, TaskStatus::Canceled)?;
                 continue;
             }
 
