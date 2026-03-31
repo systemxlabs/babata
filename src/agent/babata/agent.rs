@@ -9,8 +9,9 @@ use crate::{
         Agent, AgentTask,
         babata::{
             GenerationRequest, Provider, Tool, ToolContext, ToolSpec, build_system_prompts,
-            build_tools, create_provider, load_skills,
+            build_tools, create_provider,
         },
+        skill::load_skills,
     },
     channel::Channel,
     config::{AgentConfig, Config},

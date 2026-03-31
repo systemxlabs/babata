@@ -1,5 +1,6 @@
 pub mod babata;
 pub mod codex;
+pub mod skill;
 
 use std::{collections::HashMap, fmt::Debug, sync::Arc};
 

@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::{
     BabataResult,
-    agent::{Agent, AgentTask},
+    agent::{Agent, AgentTask, skill},
     config::{AgentConfig, CodexAgentConfig, Config},
     error::BabataError,
     message::Content,
@@ -51,6 +51,25 @@ impl CodexAgent {
             .map(|task_id| task_id.to_string())
             .unwrap_or_else(|| "none".to_string());
 
+        let skills = skill::load_skills()?;
+        let skills_section = if skills.is_empty() {
+            String::new()
+        } else {
+            let skills_text = skills
+                .iter()
+                .map(|s| {
+                    format!(
+                        "- `{}` ({}): {}",
+                        s.frontmatter.name,
+                        s.path.display(),
+                        s.frontmatter.description
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            format!("\n\nAvailable skills:\n{}", skills_text)
+        };
+
         Ok(format!(
             "You are executing a Babata task through Codex CLI.\n\
              \n\
@@ -58,7 +77,7 @@ impl CodexAgent {
              - task_id: {}\n\
              - parent_task_id: {}\n\
              - root_task_id: {}\n\
-             - default workspace: {}\n\
+             - default workspace: {}{}\n\
              \n\
              Execution mode:\n\
              - You are running with approvals and sandbox bypassed.\n\
@@ -72,6 +91,7 @@ impl CodexAgent {
             parent_task_id,
             task.root_task_id,
             self.workspace.display(),
+            skills_section,
             prompt_text
         ))
     }
