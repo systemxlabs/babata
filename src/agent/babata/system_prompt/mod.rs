@@ -2,11 +2,7 @@ use chrono::Local;
 
 use crate::{
     BabataResult,
-    agent::{
-        Agent,
-        babata::{BabataAgent, Skill},
-        codex::CodexAgent,
-    },
+    agent::{Agent, babata::BabataAgent, codex::CodexAgent, skill::Skill},
     channel::load_wechat_latest_context_token,
     config::{AgentConfig, ChannelConfig, Config},
     error::BabataError,
@@ -161,7 +157,7 @@ mod tests {
         build_system_prompts,
     };
     use crate::{
-        agent::babata::{Skill, SkillFrontmatter},
+        agent::skill::{Skill, SkillFrontmatter},
         config::{
             AgentConfig, BabataAgentConfig, ChannelConfig, CodexAgentConfig, Config,
             TelegramChannelConfig, WechatChannelConfig,
