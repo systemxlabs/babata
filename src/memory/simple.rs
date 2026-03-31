@@ -17,7 +17,57 @@ impl SimpleMemory {
 
     pub fn new() -> BabataResult<Self> {
         let db_path = Self::default_db_path()?;
-        Self::open(db_path)
+        let memory = Self::open(db_path)?;
+        Self::ensure_memory_md()?;
+        Ok(memory)
+    }
+
+    fn ensure_memory_md() -> BabataResult<()> {
+        let memory_dir = babata_dir()?.join("memory");
+        std::fs::create_dir_all(&memory_dir).map_err(|err| {
+            BabataError::memory(format!(
+                "Failed to create memory directory '{}': {}",
+                memory_dir.display(),
+                err
+            ))
+        })?;
+
+        let memory_md_path = memory_dir.join("MEMORY.md");
+        if !memory_md_path.exists() {
+            let initial_content = r#"# Long-term Memory
+
+This file stores important information that should persist across sessions.
+
+## User Information
+
+(Important facts about the user)
+
+## Preferences
+
+(User preferences learned over time)
+
+## Project Context
+
+(Information about ongoing projects)
+
+## Important Notes
+
+(Things to remember)
+
+---
+
+*This file is automatically updated by babata when important information should be remembered.*"#;
+
+            std::fs::write(&memory_md_path, initial_content).map_err(|err| {
+                BabataError::memory(format!(
+                    "Failed to create MEMORY.md '{}': {}",
+                    memory_md_path.display(),
+                    err
+                ))
+            })?;
+        }
+
+        Ok(())
     }
 
     fn open(db_path: impl AsRef<Path>) -> BabataResult<Self> {
@@ -273,8 +323,35 @@ impl Memory for SimpleMemory {
     }
 
     async fn build_context(&self, _prompts: &[Content]) -> BabataResult<String> {
+        let mut context_parts = Vec::new();
+
+        // Load long-term memory from MEMORY.md
+        let memory_md_path = babata_dir()?.join("memory").join("MEMORY.md");
+        if memory_md_path.exists() {
+            match std::fs::read_to_string(&memory_md_path) {
+                Ok(long_term_memory) => {
+                    if !long_term_memory.is_empty() {
+                        context_parts.push(format!(
+                            "# Long-term Memory (from {})\n\n{}",
+                            memory_md_path.display(),
+                            long_term_memory
+                        ));
+                    }
+                }
+                Err(err) => {
+                    eprintln!("Warning: Failed to read MEMORY.md: {}", err);
+                }
+            }
+        }
+
+        // Load short-term conversation history
         let messages = self.scan_messages(Some(Self::CONTEXT_LIMIT))?;
-        Ok(Self::render_context(&messages))
+        let conversation_history = Self::render_context(&messages);
+        if !conversation_history.is_empty() {
+            context_parts.push(conversation_history);
+        }
+
+        Ok(context_parts.join("\n\n"))
     }
 }
 
