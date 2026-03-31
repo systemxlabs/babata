@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, usize};
 
 use chrono::Utc;
 use log::{error, info, warn};
@@ -57,7 +57,7 @@ impl TaskManager {
     fn recover_running_tasks(&self) -> BabataResult<()> {
         let tasks = self
             .store
-            .list_tasks(Some(TaskStatus::Running), 1000, None)?;
+            .list_tasks(Some(TaskStatus::Running), usize::MAX, None)?;
         if tasks.is_empty() {
             info!("No running tasks to recover on startup");
             return Ok(());
@@ -70,6 +70,20 @@ impl TaskManager {
                     "Skipping recovery for task {} because it is already running",
                     task.task_id
                 );
+                continue;
+            }
+
+            // Check if task directory and required files exist
+            let task_dir = task_dir(task.task_id)?;
+            let task_md_path = task_dir.join("task.md");
+            let progress_md_path = task_dir.join("progress.md");
+
+            if !task_md_path.exists() || !progress_md_path.exists() {
+                warn!(
+                    "Task {} is missing required files (task.md or progress.md), canceling task",
+                    task.task_id
+                );
+                self.store.update_task_status(task.task_id, TaskStatus::Canceled)?;
                 continue;
             }
 
