@@ -25,7 +25,7 @@ impl WaitTaskTool {
             spec: ToolSpec {
                 name: "wait_task".to_string(),
                 description:
-                    "Block until a task reaches any target status by querying the local TaskStore. Supports waiting for one or more statuses and an optional timeout. Use this when the next step depends on that task finishing or changing state."
+                    "Block until a task reaches any target status. Supports waiting for one or more statuses and an optional timeout. Use this when the next step depends on that task finishing or changing state."
                         .to_string(),
                 parameters: json!({
                     "type": "object",

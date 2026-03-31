@@ -20,7 +20,7 @@ impl ListTasksTool {
             spec: ToolSpec {
                 name: "list_tasks".to_string(),
                 description:
-                    "List tasks by querying the local TaskStore. Supports optional status filter and offset. The limit parameter is required."
+                    "List tasks. Supports optional status filter and offset. The limit parameter is required."
                         .to_string(),
                 parameters: json!({
                     "type": "object",

@@ -17,9 +17,7 @@ impl ListSubtasksTool {
         Ok(Self {
             spec: ToolSpec {
                 name: "list_subtasks".to_string(),
-                description:
-                    "List direct subtasks of the current task by querying the local TaskStore."
-                        .to_string(),
+                description: "List direct subtasks of the current task.".to_string(),
                 parameters: json!({
                     "type": "object",
                     "properties": {},

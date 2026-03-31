@@ -20,7 +20,7 @@ impl UpdateTaskTool {
             spec: ToolSpec {
                 name: "update_task".to_string(),
                 description:
-                    "Update task fields in the local TaskStore for a running or paused task. If task_id is omitted, update the current task. Use this to keep task summaries and never_ends flags accurate as work evolves."
+                    "Update task fields for a running or paused task. If task_id is omitted, update the current task. Use this to keep task summaries and never_ends flags accurate as work evolves."
                         .to_string(),
                 parameters: json!({
                     "type": "object",

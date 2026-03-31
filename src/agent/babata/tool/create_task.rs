@@ -22,7 +22,7 @@ impl CreateTaskTool {
             spec: ToolSpec {
                 name: "create_task".to_string(),
                 description:
-                    "Create a task through the local HTTP API. By default this creates a subtask of the current task. Use task_type='root' to create a root task instead. Supports an optional agent override."
+                    "Create a task. By default this creates a subtask of the current task. Use task_type='roottask' to create a root task instead. Supports an optional agent override."
                         .to_string(),
                 parameters: json!({
                     "type": "object",
@@ -41,7 +41,7 @@ impl CreateTaskTool {
                         },
                         "task_type": {
                             "type": "string",
-                            "description": "The type of task to create: 'subtask' or 'root'. Defaults to 'subtask'."
+                            "description": "The type of task to create: 'subtask' or 'roottask'. Defaults to 'subtask'."
                         }
                     },
                     "required": ["prompt", "never_ends"]
@@ -111,10 +111,10 @@ fn parse_parent_task_id(
 ) -> BabataResult<Option<uuid::Uuid>> {
     let task_type = args["task_type"].as_str().unwrap_or("subtask");
     match task_type {
-        "root" => Ok(None),
+        "roottask" => Ok(None),
         "subtask" => Ok(Some(*context.task_id)),
         _ => Err(BabataError::tool(format!(
-            "Invalid task_type '{}'; expected 'subtask' or 'root'",
+            "Invalid task_type '{}'; expected 'subtask' or 'roottask'",
             task_type
         ))),
     }
@@ -159,7 +159,7 @@ mod tests {
         };
 
         let parent_task_id =
-            parse_parent_task_id(&json!({ "task_type": "root" }), &context).expect("root task");
+            parse_parent_task_id(&json!({ "task_type": "roottask" }), &context).expect("root task");
         assert_eq!(parent_task_id, None);
     }
 

@@ -18,8 +18,7 @@ impl CountTasksTool {
         Ok(Self {
             spec: ToolSpec {
                 name: "count_tasks".to_string(),
-                description: "Count tasks in the local TaskStore. Supports optional status filter."
-                    .to_string(),
+                description: "Count tasks. Supports optional status filter.".to_string(),
                 parameters: json!({
                     "type": "object",
                     "properties": {

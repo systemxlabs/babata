@@ -21,7 +21,7 @@ impl RelaunchTaskTool {
             spec: ToolSpec {
                 name: "relaunch_task".to_string(),
                 description:
-                    "Relaunch a running task through the local HTTP API with a required reason. Use this when the task should continue with corrected instructions or after new information arrives."
+                    "Relaunch a running task with a required reason. Use this when the task should continue with corrected instructions or after new information arrives."
                         .to_string(),
                 parameters: json!({
                     "type": "object",
