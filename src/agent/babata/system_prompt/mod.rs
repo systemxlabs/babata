@@ -13,7 +13,7 @@ use crate::{
     utils::{babata_dir, resolve_home_dir},
 };
 
-const BASE_SYSTEM_PROMPTS: &[&str] = &[include_str!("SYSTEM.md"), include_str!("SOUL.md")];
+const BASE_SYSTEM_PROMPTS: &[&str] = &[include_str!("SOUL.md"), include_str!("SYSTEM.md")];
 
 pub fn build_system_prompts(config: &Config, skills: &[Skill]) -> BabataResult<Vec<String>> {
     let mut sections = BASE_SYSTEM_PROMPTS
