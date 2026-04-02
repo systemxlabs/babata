@@ -1,5 +1,6 @@
 pub mod babata;
 pub mod codex;
+pub mod opencode;
 pub mod skill;
 
 use std::{collections::HashMap, fmt::Debug, sync::Arc};
@@ -11,6 +12,7 @@ use crate::{
     agent::{
         babata::{BabataAgent, ToolContext},
         codex::CodexAgent,
+        opencode::OpencodeAgent,
     },
     channel::Channel,
     config::{AgentConfig, Config},
@@ -62,6 +64,11 @@ pub fn build_agents(
             AgentConfig::Codex(_) => {
                 let agent_name = CodexAgent::name().to_string();
                 let agent: Arc<dyn Agent> = Arc::new(CodexAgent::new(config)?);
+                agents.insert(agent_name, agent);
+            }
+            AgentConfig::Opencode(_) => {
+                let agent_name = OpencodeAgent::name().to_string();
+                let agent: Arc<dyn Agent> = Arc::new(OpencodeAgent::new(config)?);
                 agents.insert(agent_name, agent);
             }
         }

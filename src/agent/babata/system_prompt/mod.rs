@@ -2,7 +2,7 @@ use chrono::Local;
 
 use crate::{
     BabataResult,
-    agent::{Agent, babata::BabataAgent, codex::CodexAgent, skill::Skill},
+    agent::{Agent, babata::BabataAgent, codex::CodexAgent, opencode::OpencodeAgent, skill::Skill},
     channel::load_wechat_latest_context_token,
     config::{AgentConfig, ChannelConfig, Config},
     error::BabataError,
@@ -124,6 +124,7 @@ fn agent_description(agent: &AgentConfig) -> &'static str {
     match agent {
         AgentConfig::Babata(_) => BabataAgent::description(),
         AgentConfig::Codex(_) => CodexAgent::description(),
+        AgentConfig::Opencode(_) => OpencodeAgent::description(),
     }
 }
 

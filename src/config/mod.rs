@@ -12,7 +12,7 @@ use std::collections::HashSet;
 
 use crate::{
     BabataResult,
-    agent::{Agent, babata::BabataAgent, codex::CodexAgent},
+    agent::{Agent, babata::BabataAgent, codex::CodexAgent, opencode::OpencodeAgent},
     error::BabataError,
     memory::{Memory, SimpleMemory},
     utils::babata_dir,
@@ -169,6 +169,7 @@ impl Config {
                 (existing, &agent_config),
                 (AgentConfig::Babata(_), AgentConfig::Babata(_))
                     | (AgentConfig::Codex(_), AgentConfig::Codex(_))
+                    | (AgentConfig::Opencode(_), AgentConfig::Opencode(_))
             )
         }) {
             *existing = agent_config;
@@ -206,6 +207,7 @@ impl Config {
             .find(|agent| match agent {
                 AgentConfig::Babata(_) => agent_name.eq_ignore_ascii_case(BabataAgent::name()),
                 AgentConfig::Codex(_) => agent_name.eq_ignore_ascii_case(CodexAgent::name()),
+                AgentConfig::Opencode(_) => agent_name.eq_ignore_ascii_case(OpencodeAgent::name()),
             })
             .ok_or_else(|| {
                 BabataError::config(format!("Agent '{}' not found in config", agent_name))

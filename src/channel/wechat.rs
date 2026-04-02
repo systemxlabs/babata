@@ -72,9 +72,12 @@ impl WechatChannel {
                 Duration::from_secs(DEFAULT_POLLING_TIMEOUT_SECS),
             )
             .await?;
-        let payload: WechatGetUpdatesPayload = serde_json::from_value(response).map_err(|err| {
-            BabataError::channel(format!("Failed to parse Wechat getupdates response: {err}"))
-        })?;
+        let payload: WechatGetUpdatesPayload =
+            serde_json::from_value(response.clone()).map_err(|err| {
+                BabataError::channel(format!(
+                    "Failed to parse Wechat getupdates response: {err}, response: {response}"
+                ))
+            })?;
 
         if let Some(new_buf) = payload.get_updates_buf {
             self.update_get_updates_buf(new_buf).await?;
@@ -974,7 +977,7 @@ struct WechatProtocolMessage {
 
 #[derive(Debug, Clone, Deserialize)]
 struct WechatProtocolItem {
-    #[serde(rename = "type")]
+    #[serde(rename = "type", default)]
     item_type: u8,
     #[serde(default)]
     text_item: Option<WechatTextItem>,
@@ -1797,5 +1800,43 @@ mod tests {
 
         assert!(err.to_string().contains("-14"));
         assert!(err.to_string().contains("session expired"));
+    }
+
+    #[test]
+    fn get_updates_payload_parses_ref_msg_without_type() {
+        // 实际场景：微信返回的 ref_msg.message_item 可能缺少 type 字段
+        // 复现用户报告的问题："Failed to parse Wechat getupdates response: missing field `type`"
+        let payload: WechatGetUpdatesPayload = serde_json::from_value(serde_json::json!({
+            "msgs": [
+                {
+                    "from_user_id": "user@wechat",
+                    "item_list": [
+                        {
+                            "ref_msg": {
+                                "message_item": {
+                                    // 注意：这里缺少 "type" 字段
+                                    "create_time_ms": 1775009961
+                                }
+                            },
+                            "text_item": { "text": "修改完了吗？" },
+                            "type": 1
+                        }
+                    ]
+                }
+            ]
+        }))
+        .expect("parse payload with ref_msg missing type");
+
+        assert_eq!(payload.msgs.len(), 1);
+        let msg = &payload.msgs[0];
+        assert_eq!(msg.item_list.len(), 1);
+
+        // 主 item 的 type 是 1（文本消息）
+        assert_eq!(msg.item_list[0].item_type, 1);
+
+        // ref_msg.message_item 缺少 type 字段，应该使用默认值 0
+        let ref_msg = msg.item_list[0].ref_msg.as_ref().expect("ref_msg exists");
+        let message_item = ref_msg.message_item.as_ref().expect("message_item exists");
+        assert_eq!(message_item.item_type, 0); // 默认值
     }
 }
