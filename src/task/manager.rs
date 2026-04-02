@@ -436,7 +436,6 @@ fn initialize_task_dir(task: &TaskRecord, prompt: &[Content]) -> BabataResult<()
     let task_md_path = task_dir.join("task.md");
     let progress_md_path = task_dir.join("progress.md");
     let prompt = render_prompt_markdown(prompt);
-    let agent = task.agent.as_deref().unwrap_or("babata");
     let task_markdown = format!(
         r#"# Task
 
@@ -444,27 +443,38 @@ fn initialize_task_dir(task: &TaskRecord, prompt: &[Content]) -> BabataResult<()
 - Task ID: {}
 - Root Task ID: {}
 - Parent Task ID: {}
-- Agent: {}
-- Status: {}
-- Never Ends: {}
 
 ## Initial Prompt
 {}
+
+## Description
+
+(What the task is about, background, and input)
+
+## Completion Criteria
+
+(What needs to be done)
 "#,
         task.task_id,
         task.root_task_id,
         task.parent_task_id
             .map(|task_id| task_id.to_string())
             .unwrap_or_else(|| "none".to_string()),
-        agent,
-        task.status,
-        task.never_ends,
         prompt
     );
     let progress_markdown = r#"# Progress
 
-- Status: running
-- Updates: task created
+## Current Checkpoint
+
+(What is the current state)
+
+## Recent Actions
+
+(What happened since the last checkpoint)
+
+## Final Result
+
+(The ultimate outcome of the task, update when task finished)
 "#
     .to_string();
 

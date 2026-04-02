@@ -131,11 +131,11 @@ Relaunch reason: {}"#,
 `progress.md` path: {}
 
 Below is the content of `task.md`
----
 {}
 
-Below is the content of `progress.md`
 ---
+
+Below is the content of `progress.md`
 {}
 "#,
             task_md_path.display(),
