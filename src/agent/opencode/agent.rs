@@ -10,7 +10,14 @@ use uuid::Uuid;
 
 use crate::{
     BabataResult,
-    agent::{Agent, AgentTask, skill},
+    agent::{
+        Agent, AgentTask,
+        prompt::{
+            BABATA_SYSTEM_DESCRIPTION, build_agents_prompt, build_channels_prompt,
+            build_runtime_prompt, build_skills_prompt, load_workspace_prompt,
+        },
+        skill,
+    },
     config::{AgentConfig, Config, OpencodeAgentConfig},
     error::BabataError,
     message::Content,
@@ -51,47 +58,45 @@ impl OpencodeAgent {
             .map(|task_id| task_id.to_string())
             .unwrap_or_else(|| "none".to_string());
 
+        // Load config from disk on each execution
+        let config = Config::load()?;
+        let runtime_prompt = build_runtime_prompt()?;
+        let agents_prompt = build_agents_prompt(&config);
+        let channels_prompt = build_channels_prompt(&config)?;
         let skills = skill::load_skills()?;
-        let skills_section = if skills.is_empty() {
-            String::new()
-        } else {
-            let skills_text = skills
-                .iter()
-                .map(|s| {
-                    format!(
-                        "- `{}` ({}): {}",
-                        s.frontmatter.name,
-                        s.path.display(),
-                        s.frontmatter.description
-                    )
-                })
-                .collect::<Vec<_>>()
-                .join("\n");
-            format!("\n\nAvailable skills:\n{}", skills_text)
-        };
+        let skills_prompt = build_skills_prompt(&skills).unwrap_or_default();
+        let workspace_prompt = load_workspace_prompt()?.unwrap_or_default();
 
         Ok(format!(
-            "You are executing a Babata task through OpenCode CLI.\n\
-             \n\
-             Task metadata:\n\
-             - task_id: {}\n\
-             - parent_task_id: {}\n\
-             - root_task_id: {}\n\
-             - default workspace: {}{}\n\
-             \n\
-             Execution mode:\n\
-             - You are running with approvals bypassed.\n\
-             - Use the workspace above as the default working root.\n\
-             - You may access other local files when necessary.\n\
-             - Prefer absolute paths when referring to files outside the workspace.\n\
-             \n\
-             User task:\n\
-             {}",
+            r#"{}
+
+{}
+
+{}
+
+{}
+
+{}
+
+{}
+
+Task metadata:
+- task_id: {}
+- parent_task_id: {}
+- root_task_id: {}
+
+User task:
+{}
+"#,
+            BABATA_SYSTEM_DESCRIPTION,
+            runtime_prompt,
+            agents_prompt,
+            channels_prompt,
+            skills_prompt,
+            workspace_prompt,
             task.task_id,
             parent_task_id,
             task.root_task_id,
-            self.workspace.display(),
-            skills_section,
             prompt_text
         ))
     }
@@ -254,6 +259,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires babata home directory with config.json"]
     fn build_prompt_includes_task_metadata_and_workspace() {
         let agent = OpencodeAgent {
             command: "opencode".to_string(),

@@ -14,11 +14,10 @@ use crate::{
     channel::{Channel, TelegramChannel, WechatChannel},
     config::{
         AgentConfig, AnthropicProviderConfig, BabataAgentConfig, ChannelConfig, CodexAgentConfig,
-        OpencodeAgentConfig,
         CompatibleApi, Config, CustomProviderConfig, DeepSeekProviderConfig, EmbeddingConfig,
         HybridMemoryConfig, KimiProviderConfig, LocalEmbeddingConfig, MemoryConfig,
-        MiniMaxProviderConfig, MoonshotProviderConfig, OpenAIProviderConfig, ProviderConfig,
-        RemoteEmbeddingConfig, TelegramChannelConfig, WechatChannelConfig,
+        MiniMaxProviderConfig, MoonshotProviderConfig, OpenAIProviderConfig, OpencodeAgentConfig,
+        ProviderConfig, RemoteEmbeddingConfig, TelegramChannelConfig, WechatChannelConfig,
     },
     error::BabataError,
 };

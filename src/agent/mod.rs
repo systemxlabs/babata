@@ -1,6 +1,7 @@
 pub mod babata;
 pub mod codex;
 pub mod opencode;
+pub mod prompt;
 pub mod skill;
 
 use std::{collections::HashMap, fmt::Debug, sync::Arc};
