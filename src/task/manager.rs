@@ -275,7 +275,7 @@ impl TaskManager {
             running_task.handle.abort();
         }
 
-        // Delete all subtasks from store
+        // Delete subtasks: cancel running, delete metadata, delete directory
         for subtask in &subtasks {
             // Cancel if running
             if let Some(running_task) = self.running_tasks.lock().remove(&subtask.task_id) {
@@ -285,13 +285,14 @@ impl TaskManager {
             if let Err(err) = self.store.delete_task(subtask.task_id) {
                 error!("Failed to delete subtask {}: {}", subtask.task_id, err);
             }
+            // Delete task directory
+            remove_task_dir(subtask.task_id);
         }
 
         // Delete root task from store
         self.store.delete_task(task_id)?;
-
-        // Remove task directories
-        self.remove_task_dir_recursive(task_id);
+        // Delete root task directory
+        remove_task_dir(task_id);
 
         info!("Deleted task {} and {} subtask(s)", task_id, subtasks.len());
         Ok(())
