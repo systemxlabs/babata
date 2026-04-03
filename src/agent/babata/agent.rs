@@ -1,6 +1,7 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use backon::{ExponentialBuilder, Retryable};
+use futures::future::join_all;
 use log::{info, warn};
 
 use crate::{
@@ -121,26 +122,36 @@ impl Agent for BabataAgent {
                         return Err(BabataError::provider("Provider returned empty tool calls"));
                     }
 
-                    for call in calls {
-                        let tool_context: ToolContext<'_> = ToolContext {
-                            task_id: &task_id,
-                            parent_task_id: parent_task_id.as_ref(),
-                            root_task_id: &root_task_id,
-                            call_id: &call.call_id,
-                        };
-                        if let Some(tool) = self.tools.get(&call.tool_name) {
-                            let result = match tool.execute(&call.args, &tool_context).await {
-                                Ok(result) => result,
-                                Err(e) => format!("Tool execution failed with message: {e}"),
+                    // Execute tool calls in parallel
+                    let tool_futures = calls.into_iter().map(|call| {
+                        let tools = &self.tools;
+                        let task_id = &task_id;
+                        let parent_task_id = parent_task_id.as_ref();
+                        let root_task_id = &root_task_id;
+
+                        async move {
+                            let tool_context: ToolContext<'_> = ToolContext {
+                                task_id,
+                                parent_task_id,
+                                root_task_id,
+                                call_id: &call.call_id,
                             };
-                            conversation.push(Message::ToolResult { call, result });
-                        } else {
-                            conversation.push(Message::ToolResult {
-                                call: call.clone(),
-                                result: format!("Unknown tool: {}", call.tool_name),
-                            });
+
+                            let result = if let Some(tool) = tools.get(&call.tool_name) {
+                                match tool.execute(&call.args, &tool_context).await {
+                                    Ok(result) => result,
+                                    Err(e) => format!("Tool execution failed with message: {e}"),
+                                }
+                            } else {
+                                format!("Unknown tool: {}", call.tool_name)
+                            };
+
+                            Message::ToolResult { call, result }
                         }
-                    }
+                    });
+
+                    let results = join_all(tool_futures).await;
+                    conversation.extend(results);
                 }
                 Message::UserPrompt { .. } | Message::ToolResult { .. } => {
                     return Err(BabataError::provider(

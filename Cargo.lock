@@ -312,6 +312,7 @@ dependencies = [
  "comfy-table",
  "ecb",
  "fastembed",
+ "futures",
  "glob",
  "globwalk",
  "hex",
