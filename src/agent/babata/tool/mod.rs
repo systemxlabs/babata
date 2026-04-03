@@ -1,6 +1,7 @@
 mod control_task;
 mod count_tasks;
 mod create_task;
+mod delete_tasks;
 mod edit_file;
 mod get_task;
 mod glob;
@@ -19,6 +20,7 @@ mod write_file;
 pub use control_task::*;
 pub use count_tasks::*;
 pub use create_task::*;
+pub use delete_tasks::*;
 pub use edit_file::*;
 pub use get_task::*;
 pub use glob::*;
@@ -88,6 +90,7 @@ pub fn build_tools(
         Arc::new(GrepTool::new()),
         Arc::new(ControlTaskTool::new()?),
         Arc::new(CreateTaskTool::new()?),
+        Arc::new(DeleteTasksTool::new()?),
         Arc::new(GetTaskTool::new()?),
         Arc::new(ListTasksTool::new()?),
         Arc::new(CountTasksTool::new()?),
