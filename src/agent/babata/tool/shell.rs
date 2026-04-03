@@ -1,3 +1,5 @@
+use std::{path::PathBuf, process::Output, time::Duration};
+
 use log::info;
 use serde_json::{Value, json};
 
@@ -5,22 +7,24 @@ use crate::{
     BabataResult,
     agent::babata::{Tool, ToolContext, ToolSpec},
     error::BabataError,
+    task::task_dir,
 };
+
+const DEFAULT_TIMEOUT_SECS: u64 = 300;
+const DEFAULT_MAX_LINES: usize = 2000;
 
 #[derive(Debug)]
 pub struct ShellTool {
     spec: ToolSpec,
-    default_timeout_ms: u64,
 }
 
 impl ShellTool {
     pub fn new() -> Self {
-        let default_timeout_ms = 30000;
         let spec = ToolSpec {
             name: "shell".to_string(),
-            description:
-                "Execute a shell command and return the output. Uses bash on Linux/macOS and PowerShell on Windows."
-                    .to_string(),
+            description: format!(
+                "Execute a shell command and return stdout and stderr. Output is truncated to last {DEFAULT_MAX_LINES} lines. If truncated, full output is saved to a temp file."
+            ),
             parameters: json!({
                 "type": "object",
                 "properties": {
@@ -30,16 +34,13 @@ impl ShellTool {
                     },
                     "timeout_ms": {
                         "type": "integer",
-                        "description": format!("Optional timeout in milliseconds (default: {default_timeout_ms})")
+                        "description": format!("Optional timeout in seconds (default: {DEFAULT_TIMEOUT_SECS})")
                     }
                 },
                 "required": ["command"]
             }),
         };
-        Self {
-            spec,
-            default_timeout_ms,
-        }
+        Self { spec }
     }
 }
 
@@ -49,47 +50,30 @@ impl Tool for ShellTool {
         &self.spec
     }
 
-    async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
+    async fn execute(&self, args: &str, context: &ToolContext<'_>) -> BabataResult<String> {
         info!("Executing shell command: {args}",);
 
-        let args: Value = serde_json::from_str(args)?;
-        let command = args["command"]
-            .as_str()
-            .ok_or_else(|| BabataError::tool("Missing command"))?;
+        let (command, timeout_secs) = parse_args(args)?;
 
-        let timeout_ms = args["timeout_ms"]
-            .as_u64()
-            .unwrap_or(self.default_timeout_ms);
+        let output = exec_shell(&command, timeout_secs).await?;
 
-        // Run command with timeout
-        let timeout_duration = std::time::Duration::from_millis(timeout_ms);
-        let output = tokio::time::timeout(timeout_duration, spawn_shell_command(command))
-            .await
-            .map_err(|_| BabataError::tool(format!("Command timed out after {}ms", timeout_ms)))?
-            .map_err(|e| BabataError::tool(format!("Failed to execute command: {}", e)))?;
+        let stdout = process_output_with_truncation(&output.stdout, context, "stdout")?;
+        let stderr = process_output_with_truncation(&output.stderr, context, "stderr")?;
+        let exit_status = output.status.code().unwrap_or(-1);
 
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let stderr = String::from_utf8_lossy(&output.stderr);
+        let result = format!(
+            r#"# STDOUT
 
-        let mut result = String::new();
+{stdout}
 
-        if !stdout.is_empty() {
-            result.push_str(&stdout);
-        }
+# STDERR
 
-        if !stderr.is_empty() {
-            if !result.is_empty() {
-                result.push_str("\n\nSTDERR:\n");
-            }
-            result.push_str(&stderr);
-        }
+{stderr}
 
-        if result.is_empty() {
-            result = format!(
-                "Command completed with exit code: {}",
-                output.status.code().unwrap_or(-1)
-            );
-        }
+# Exit Status
+
+{exit_status}"#
+        );
 
         Ok(result)
     }
@@ -101,13 +85,40 @@ impl Default for ShellTool {
     }
 }
 
-fn spawn_shell_command(
-    command: &str,
-) -> impl std::future::Future<Output = std::io::Result<std::process::Output>> {
-    let mut process = match std::env::consts::OS {
+fn parse_args(args: &str) -> BabataResult<(String, u64)> {
+    let args: Value = serde_json::from_str(args)?;
+    let command = args["command"]
+        .as_str()
+        .ok_or_else(|| BabataError::tool("Missing command"))?;
+
+    let timeout_secs = args["timeout_ms"].as_u64().unwrap_or(DEFAULT_TIMEOUT_SECS);
+
+    Ok((command.to_string(), timeout_secs))
+}
+
+async fn exec_shell(command: &str, timeout_secs: u64) -> BabataResult<Output> {
+    // Run command with timeout
+    let mut cmd = create_command(command);
+    let output = tokio::time::timeout(Duration::from_secs(timeout_secs), cmd.output())
+        .await
+        .map_err(|_| BabataError::tool(format!("Command timed out after {}s", timeout_secs)))?
+        .map_err(|e| BabataError::tool(format!("Failed to execute command: {}", e)))?;
+
+    Ok(output)
+}
+
+fn create_command(command: &str) -> tokio::process::Command {
+    match std::env::consts::OS {
         "windows" => {
             let mut cmd = tokio::process::Command::new("powershell.exe");
-            let wrapped_command = build_windows_command(command);
+            let utf8_session_setup = r#"$utf8NoBom = [System.Text.UTF8Encoding]::new($false);
+$OutputEncoding = $utf8NoBom;
+[Console]::InputEncoding = $utf8NoBom;
+[Console]::OutputEncoding = $utf8NoBom;
+$PSDefaultParameterValues['Out-File:Encoding'] = 'utf8';
+$PSDefaultParameterValues['Set-Content:Encoding'] = 'utf8';
+$PSDefaultParameterValues['Add-Content:Encoding'] = 'utf8';"#;
+            let wrapped_command = format!("{utf8_session_setup}\n{command}");
             cmd.arg("-NoProfile")
                 .arg("-NonInteractive")
                 .arg("-ExecutionPolicy")
@@ -121,31 +132,74 @@ fn spawn_shell_command(
             cmd.arg("-c").arg(command);
             cmd
         }
-    };
-
-    process.output()
+    }
 }
 
-fn build_windows_command(command: &str) -> String {
-    let utf8_session_setup = r#"$utf8NoBom = [System.Text.UTF8Encoding]::new($false);
-$OutputEncoding = $utf8NoBom;
-[Console]::InputEncoding = $utf8NoBom;
-[Console]::OutputEncoding = $utf8NoBom;
-$PSDefaultParameterValues['Out-File:Encoding'] = 'utf8';
-$PSDefaultParameterValues['Set-Content:Encoding'] = 'utf8';
-$PSDefaultParameterValues['Add-Content:Encoding'] = 'utf8';"#;
-    format!("{utf8_session_setup}\n{command}")
+fn process_output_with_truncation(
+    output: &[u8],
+    context: &ToolContext<'_>,
+    stream_name: &str,
+) -> BabataResult<String> {
+    let output = String::from_utf8_lossy(output);
+    let lines: Vec<&str> = output.lines().collect();
+
+    if lines.len() <= DEFAULT_MAX_LINES {
+        return Ok(output.to_string());
+    }
+
+    // Truncate: keep only the last max_lines lines
+    let truncated_lines = &lines[lines.len() - DEFAULT_MAX_LINES..];
+    let truncated_output = truncated_lines.join("\n");
+
+    // Write full output to file
+    let log_file_path = get_shell_log_path(context, stream_name)?;
+    std::fs::write(&log_file_path, output.as_ref()).map_err(|e| {
+        BabataError::internal(format!(
+            "Failed to write shell {} log to '{}': {}",
+            stream_name,
+            log_file_path.display(),
+            e
+        ))
+    })?;
+
+    let truncated_header = format!(
+        "... (output truncated, showing last {} lines, full output written to {})\n",
+        DEFAULT_MAX_LINES,
+        log_file_path.display()
+    );
+
+    Ok(truncated_header + &truncated_output)
+}
+
+fn get_shell_log_path(context: &ToolContext<'_>, stream_name: &str) -> BabataResult<PathBuf> {
+    let task_dir = task_dir(*context.task_id)?;
+    let log_file_name = format!("shell-call-{}-{}.log", context.call_id, stream_name);
+    Ok(task_dir.join(log_file_name))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::build_windows_command;
+    use super::create_command;
 
     #[test]
-    fn build_windows_command_includes_utf8_setup_and_original_command() {
-        let wrapped = build_windows_command("Write-Output 'hello'");
-        assert!(wrapped.contains("$OutputEncoding"));
-        assert!(wrapped.contains("Set-Content:Encoding"));
-        assert!(wrapped.contains("Write-Output 'hello'"));
+    fn spawn_shell_command_windows_includes_utf8_setup() {
+        if std::env::consts::OS != "windows" {
+            return;
+        }
+        let cmd = create_command("Write-Output 'hello'");
+        let args: Vec<&std::ffi::OsStr> = cmd.as_std().get_args().collect();
+        let command_arg = args.last().unwrap().to_str().unwrap();
+        assert!(command_arg.contains("$OutputEncoding"));
+        assert!(command_arg.contains("Set-Content:Encoding"));
+        assert!(command_arg.contains("Write-Output 'hello'"));
+    }
+
+    #[test]
+    fn spawn_shell_command_unix_uses_bash() {
+        if std::env::consts::OS == "windows" {
+            return;
+        }
+        let cmd = create_command("echo hello");
+        assert_eq!(cmd.as_std().get_program(), "bash");
     }
 }
