@@ -255,6 +255,49 @@ impl TaskManager {
         self.store.count_tasks(status)
     }
 
+    pub fn delete_task(&self, task_id: Uuid) -> BabataResult<()> {
+        info!("Deleting task {}", task_id);
+        let task = self.store.get_task(task_id)?;
+
+        // Only root tasks can be deleted
+        if task.parent_task_id.is_some() {
+            return Err(BabataError::config(format!(
+                "Task '{}' is not a root task; only root tasks can be deleted",
+                task_id
+            )));
+        }
+
+        // Get all subtasks recursively
+        let subtasks = self.store.list_all_subtasks(task_id)?;
+
+        // Cancel and delete root task if it's running
+        if let Some(running_task) = self.running_tasks.lock().remove(&task_id) {
+            running_task.handle.abort();
+        }
+
+        // Delete subtasks: cancel running, delete metadata, delete directory
+        for subtask in &subtasks {
+            // Cancel if running
+            if let Some(running_task) = self.running_tasks.lock().remove(&subtask.task_id) {
+                running_task.handle.abort();
+            }
+            // Delete from store
+            if let Err(err) = self.store.delete_task(subtask.task_id) {
+                error!("Failed to delete subtask {}: {}", subtask.task_id, err);
+            }
+            // Delete task directory
+            remove_task_dir(subtask.task_id);
+        }
+
+        // Delete root task from store
+        self.store.delete_task(task_id)?;
+        // Delete root task directory
+        remove_task_dir(task_id);
+
+        info!("Deleted task {} and {} subtask(s)", task_id, subtasks.len());
+        Ok(())
+    }
+
     /// Calculate the depth of a task in the task tree.
     /// Root task has depth 1, its direct children have depth 2, etc.
     fn calculate_task_depth(&self, task_id: Uuid) -> BabataResult<usize> {
