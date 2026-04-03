@@ -60,25 +60,8 @@ impl Tool for EditFileTool {
     }
 
     async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
-        let args: Value = serde_json::from_str(args)?;
-        let path = args["path"]
-            .as_str()
-            .ok_or_else(|| BabataError::tool("Missing required parameter: path"))?;
-        let old_string = args["old_string"]
-            .as_str()
-            .ok_or_else(|| BabataError::tool("Missing required parameter: old_string"))?;
-        let new_string = args["new_string"]
-            .as_str()
-            .ok_or_else(|| BabataError::tool("Missing required parameter: new_string"))?;
-        let replace_all = args["replace_all"].as_bool().unwrap_or(false);
+        let (path, old_string, new_string, replace_all) = parse_args(args)?;
 
-        if old_string.is_empty() {
-            return Err(BabataError::tool(
-                "old_string cannot be empty for edit_file replacements",
-            ));
-        }
-
-        let path = shellexpand::tilde(path).to_string();
         info!("Editing file: {}", path);
 
         let content = tokio::fs::read_to_string(&path)
@@ -86,10 +69,10 @@ impl Tool for EditFileTool {
             .map_err(|err| BabataError::tool(format!("Failed to read file: {}", err)))?;
 
         let (new_content, count) = if replace_all {
-            let count = content.matches(old_string).count();
-            (content.replace(old_string, new_string), count)
-        } else if content.contains(old_string) {
-            (content.replacen(old_string, new_string, 1), 1)
+            let count = content.matches(&old_string).count();
+            (content.replace(&old_string, &new_string), count)
+        } else if content.contains(&old_string) {
+            (content.replacen(&old_string, &new_string, 1), 1)
         } else {
             return Err(BabataError::tool(
                 "old_string not found in file; no changes were made",
@@ -102,6 +85,35 @@ impl Tool for EditFileTool {
 
         Ok(format!("Replaced {} occurrence(s) in {}", count, path))
     }
+}
+
+fn parse_args(args: &str) -> BabataResult<(String, String, String, bool)> {
+    let args: Value = serde_json::from_str(args)?;
+    let path = args["path"]
+        .as_str()
+        .ok_or_else(|| BabataError::tool("Missing required parameter: path"))?;
+    let old_string = args["old_string"]
+        .as_str()
+        .ok_or_else(|| BabataError::tool("Missing required parameter: old_string"))?;
+    let new_string = args["new_string"]
+        .as_str()
+        .ok_or_else(|| BabataError::tool("Missing required parameter: new_string"))?;
+    let replace_all = args["replace_all"].as_bool().unwrap_or(false);
+
+    if old_string.is_empty() {
+        return Err(BabataError::tool(
+            "old_string cannot be empty for edit_file replacements",
+        ));
+    }
+
+    let path = shellexpand::tilde(path).to_string();
+
+    Ok((
+        path,
+        old_string.to_string(),
+        new_string.to_string(),
+        replace_all,
+    ))
 }
 
 #[cfg(test)]

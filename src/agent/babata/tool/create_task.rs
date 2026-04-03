@@ -60,19 +60,13 @@ impl Tool for CreateTaskTool {
 
     async fn execute(&self, args: &str, context: &ToolContext<'_>) -> BabataResult<String> {
         let args: Value = serde_json::from_str(args)?;
-        let prompt = args["prompt"]
-            .as_str()
-            .ok_or_else(|| BabataError::tool("Missing required parameter: prompt"))?;
-
-        if prompt.trim().is_empty() {
-            return Err(BabataError::tool("prompt cannot be empty"));
-        }
+        let (prompt, agent) = parse_args(&args)?;
 
         let request_body = CreateTaskRequest {
             prompt: vec![Content::Text {
                 text: prompt.to_string(),
             }],
-            agent: args["agent"].as_str().map(ToOwned::to_owned),
+            agent,
             parent_task_id: parse_parent_task_id(&args, context)?,
             never_ends: parse_never_ends(&args)?,
         };
@@ -103,6 +97,20 @@ impl Tool for CreateTaskTool {
             ))
         })
     }
+}
+
+fn parse_args(args: &Value) -> BabataResult<(String, Option<String>)> {
+    let prompt = args["prompt"]
+        .as_str()
+        .ok_or_else(|| BabataError::tool("Missing required parameter: prompt"))?;
+
+    if prompt.trim().is_empty() {
+        return Err(BabataError::tool("prompt cannot be empty"));
+    }
+
+    let agent = args["agent"].as_str().map(ToOwned::to_owned);
+
+    Ok((prompt.to_string(), agent))
 }
 
 fn parse_parent_task_id(
@@ -191,5 +199,40 @@ mod tests {
         let never_ends = parse_never_ends(&json!({ "never_ends": true }))
             .expect("boolean never_ends should parse");
         assert!(never_ends);
+    }
+
+    #[test]
+    fn parse_args_extracts_prompt_and_agent() {
+        let (prompt, agent) = super::parse_args(&json!({
+            "prompt": "Test prompt",
+            "agent": "test_agent"
+        }))
+        .expect("parse args");
+        assert_eq!(prompt, "Test prompt");
+        assert_eq!(agent, Some("test_agent".to_string()));
+    }
+
+    #[test]
+    fn parse_args_agent_is_optional() {
+        let (prompt, agent) =
+            super::parse_args(&json!({ "prompt": "Test prompt" })).expect("parse args");
+        assert_eq!(prompt, "Test prompt");
+        assert_eq!(agent, None);
+    }
+
+    #[test]
+    fn parse_args_rejects_empty_prompt() {
+        let error = super::parse_args(&json!({ "prompt": "   " })).expect_err("empty prompt");
+        assert!(error.to_string().contains("prompt cannot be empty"));
+    }
+
+    #[test]
+    fn parse_args_rejects_missing_prompt() {
+        let error = super::parse_args(&json!({})).expect_err("missing prompt");
+        assert!(
+            error
+                .to_string()
+                .contains("Missing required parameter: prompt")
+        );
     }
 }

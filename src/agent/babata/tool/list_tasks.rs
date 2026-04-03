@@ -53,31 +53,37 @@ impl Tool for ListTasksTool {
     }
 
     async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
-        let args: Value = serde_json::from_str(args)?;
-        let status = match args["status"].as_str() {
-            Some(status) => Some(status.parse::<TaskStatus>().map_err(|err| {
-                BabataError::tool(format!("Invalid status '{}': {}", status, err))
-            })?),
-            None => None,
-        };
-        let limit = match args["limit"].as_u64() {
-            Some(limit) => usize::try_from(limit).map_err(|_| {
-                BabataError::tool(format!("limit '{}' is too large for this platform", limit))
-            })?,
-            None => return Err(BabataError::tool("limit is required")),
-        };
-        let offset = match args["offset"].as_u64() {
-            Some(offset) => Some(usize::try_from(offset).map_err(|_| {
-                BabataError::tool(format!(
-                    "offset '{}' is too large for this platform",
-                    offset
-                ))
-            })?),
-            None => None,
-        };
+        let (status, limit, offset) = parse_args(args)?;
 
         let tasks = self.task_store.list_tasks(status, limit, offset)?;
         let response = ListTasksResponse::from_records(tasks);
         serde_json::to_string(&response).map_err(Into::into)
     }
+}
+
+fn parse_args(args: &str) -> BabataResult<(Option<TaskStatus>, usize, Option<usize>)> {
+    let args: Value = serde_json::from_str(args)?;
+    let status =
+        match args["status"].as_str() {
+            Some(status) => Some(status.parse::<TaskStatus>().map_err(|err| {
+                BabataError::tool(format!("Invalid status '{}': {}", status, err))
+            })?),
+            None => None,
+        };
+    let limit = match args["limit"].as_u64() {
+        Some(limit) => usize::try_from(limit).map_err(|_| {
+            BabataError::tool(format!("limit '{}' is too large for this platform", limit))
+        })?,
+        None => return Err(BabataError::tool("limit is required")),
+    };
+    let offset = match args["offset"].as_u64() {
+        Some(offset) => Some(usize::try_from(offset).map_err(|_| {
+            BabataError::tool(format!(
+                "offset '{}' is too large for this platform",
+                offset
+            ))
+        })?),
+        None => None,
+    };
+    Ok((status, limit, offset))
 }

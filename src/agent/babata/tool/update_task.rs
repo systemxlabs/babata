@@ -56,40 +56,7 @@ impl Tool for UpdateTaskTool {
     }
 
     async fn execute(&self, args: &str, context: &ToolContext<'_>) -> BabataResult<String> {
-        let args: Value = serde_json::from_str(args)?;
-        let task_id = match args["task_id"].as_str() {
-            Some(task_id) => Uuid::parse_str(task_id).map_err(|err| {
-                BabataError::tool(format!("Invalid task_id '{}': {}", task_id, err))
-            })?,
-            None => *context.task_id,
-        };
-        let description = match args.get("description") {
-            Some(value) => Some(
-                value
-                    .as_str()
-                    .ok_or_else(|| BabataError::tool("Parameter description must be a string"))?
-                    .trim()
-                    .to_string(),
-            ),
-            None => None,
-        };
-        let never_ends = match args.get("never_ends") {
-            Some(value) => Some(
-                value
-                    .as_bool()
-                    .ok_or_else(|| BabataError::tool("Parameter never_ends must be a boolean"))?,
-            ),
-            None => None,
-        };
-
-        if description.as_deref() == Some("") {
-            return Err(BabataError::tool("description cannot be empty"));
-        }
-        if description.is_none() && never_ends.is_none() {
-            return Err(BabataError::tool(
-                "At least one of description or never_ends must be provided",
-            ));
-        }
+        let (task_id, description, never_ends) = parse_args(args, context)?;
 
         let task = self.task_store.get_task(task_id)?;
         if !matches!(task.status, TaskStatus::Running | TaskStatus::Paused) {
@@ -116,4 +83,45 @@ impl Tool for UpdateTaskTool {
             updates.join(", ")
         ))
     }
+}
+
+fn parse_args(
+    args: &str,
+    context: &ToolContext<'_>,
+) -> BabataResult<(Uuid, Option<String>, Option<bool>)> {
+    let args: Value = serde_json::from_str(args)?;
+    let task_id = match args["task_id"].as_str() {
+        Some(task_id) => Uuid::parse_str(task_id)
+            .map_err(|err| BabataError::tool(format!("Invalid task_id '{}': {}", task_id, err)))?,
+        None => *context.task_id,
+    };
+    let description = match args.get("description") {
+        Some(value) => Some(
+            value
+                .as_str()
+                .ok_or_else(|| BabataError::tool("Parameter description must be a string"))?
+                .trim()
+                .to_string(),
+        ),
+        None => None,
+    };
+    let never_ends = match args.get("never_ends") {
+        Some(value) => Some(
+            value
+                .as_bool()
+                .ok_or_else(|| BabataError::tool("Parameter never_ends must be a boolean"))?,
+        ),
+        None => None,
+    };
+
+    if description.as_deref() == Some("") {
+        return Err(BabataError::tool("description cannot be empty"));
+    }
+    if description.is_none() && never_ends.is_none() {
+        return Err(BabataError::tool(
+            "At least one of description or never_ends must be provided",
+        ));
+    }
+
+    Ok((task_id, description, never_ends))
 }

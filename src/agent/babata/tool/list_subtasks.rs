@@ -42,21 +42,27 @@ impl Tool for ListSubtasksTool {
     }
 
     async fn execute(&self, args: &str, context: &ToolContext<'_>) -> BabataResult<String> {
-        let args: Value = serde_json::from_str(args)?;
-
-        let parent_task_id = match args.get("parent_task_id") {
-            Some(value) => {
-                let task_id_str = value.as_str().ok_or_else(|| {
-                    BabataError::tool("Parameter 'parent_task_id' must be a string")
-                })?;
-                Uuid::parse_str(task_id_str).map_err(|err| {
-                    BabataError::tool(format!("Invalid parent_task_id '{}': {}", task_id_str, err))
-                })?
-            }
-            None => *context.task_id,
-        };
+        let parent_task_id = parse_args(args, context)?;
 
         let tasks = self.task_store.list_subtasks(parent_task_id)?;
         serde_json::to_string(&tasks).map_err(Into::into)
     }
+}
+
+fn parse_args(args: &str, context: &ToolContext<'_>) -> BabataResult<Uuid> {
+    let args: Value = serde_json::from_str(args)?;
+
+    let parent_task_id = match args.get("parent_task_id") {
+        Some(value) => {
+            let task_id_str = value
+                .as_str()
+                .ok_or_else(|| BabataError::tool("Parameter 'parent_task_id' must be a string"))?;
+            Uuid::parse_str(task_id_str).map_err(|err| {
+                BabataError::tool(format!("Invalid parent_task_id '{}': {}", task_id_str, err))
+            })?
+        }
+        None => *context.task_id,
+    };
+
+    Ok(parent_task_id)
 }

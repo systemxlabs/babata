@@ -50,21 +50,11 @@ impl Tool for UserFeedbackTool {
     }
 
     async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
-        let args: Value = serde_json::from_str(args)?;
-        let message = args["message"]
-            .as_str()
-            .ok_or_else(|| BabataError::tool("Missing required parameter: message"))?;
-        let channel_name = args["channel"]
-            .as_str()
-            .ok_or_else(|| BabataError::tool("Missing required parameter: channel"))?;
-
-        if message.trim().is_empty() {
-            return Err(BabataError::tool("message cannot be empty"));
-        }
+        let (message, channel_name) = parse_args(args)?;
 
         let channel = self
             .channels
-            .get(channel_name)
+            .get(&channel_name)
             .ok_or_else(|| BabataError::tool(format!("Channel '{}' not found", channel_name)))?;
 
         let response = channel
@@ -80,4 +70,20 @@ impl Tool for UserFeedbackTool {
             ))
         })
     }
+}
+
+fn parse_args(args: &str) -> BabataResult<(String, String)> {
+    let args: Value = serde_json::from_str(args)?;
+    let message = args["message"]
+        .as_str()
+        .ok_or_else(|| BabataError::tool("Missing required parameter: message"))?;
+    let channel_name = args["channel"]
+        .as_str()
+        .ok_or_else(|| BabataError::tool("Missing required parameter: channel"))?;
+
+    if message.trim().is_empty() {
+        return Err(BabataError::tool("message cannot be empty"));
+    }
+
+    Ok((message.to_string(), channel_name.to_string()))
 }

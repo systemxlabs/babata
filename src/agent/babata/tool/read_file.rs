@@ -54,21 +54,13 @@ impl Tool for ReadFileTool {
     }
 
     async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
-        let args: Value = serde_json::from_str(args)?;
-        let path = args["path"]
-            .as_str()
-            .ok_or_else(|| BabataError::tool("Missing path"))?;
+        let (path, offset, limit) = parse_args(args)?;
 
-        let path = shellexpand::tilde(path).to_string();
         info!("Reading file: {}", path);
 
         let content = tokio::fs::read_to_string(&path)
             .await
             .map_err(|e| BabataError::tool(format!("Failed to read file: {}", e)))?;
-
-        // Handle offset and limit
-        let offset = args["offset"].as_u64().unwrap_or(0) as usize;
-        let limit = args["limit"].as_u64().map(|l| l as usize);
 
         let lines: Vec<&str> = content.lines().collect();
         let total_lines = lines.len();
@@ -86,4 +78,17 @@ impl Tool for ReadFileTool {
 
         Ok(selected.join("\n"))
     }
+}
+
+fn parse_args(args: &str) -> BabataResult<(String, usize, Option<usize>)> {
+    let args: Value = serde_json::from_str(args)?;
+    let path = args["path"]
+        .as_str()
+        .ok_or_else(|| BabataError::tool("Missing path"))?;
+
+    let path = shellexpand::tilde(path).to_string();
+    let offset = args["offset"].as_u64().unwrap_or(0) as usize;
+    let limit = args["limit"].as_u64().map(|l| l as usize);
+
+    Ok((path, offset, limit))
 }

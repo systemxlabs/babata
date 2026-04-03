@@ -51,16 +51,8 @@ impl Tool for WriteFileTool {
     }
 
     async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
-        let args: Value = serde_json::from_str(args)?;
-        let path = args["path"]
-            .as_str()
-            .ok_or_else(|| BabataError::tool("Missing required parameter: path"))?;
+        let (path, content) = parse_args(args)?;
 
-        let content = args["content"]
-            .as_str()
-            .ok_or_else(|| BabataError::tool("Missing required parameter: content"))?;
-
-        let path = shellexpand::tilde(path).to_string();
         info!("Writing to file: {}", path);
 
         let file_path = Path::new(&path);
@@ -72,6 +64,8 @@ impl Tool for WriteFileTool {
                 .map_err(|e| BabataError::tool(format!("Failed to create directories: {}", e)))?;
         }
 
+        let content_len = content.len();
+
         // Write content to file
         tokio::fs::write(&path, content)
             .await
@@ -79,10 +73,24 @@ impl Tool for WriteFileTool {
 
         Ok(format!(
             "Successfully wrote {} bytes to {}",
-            content.len(),
-            path
+            content_len, path
         ))
     }
+}
+
+fn parse_args(args: &str) -> BabataResult<(String, String)> {
+    let args: Value = serde_json::from_str(args)?;
+    let path = args["path"]
+        .as_str()
+        .ok_or_else(|| BabataError::tool("Missing required parameter: path"))?;
+
+    let content = args["content"]
+        .as_str()
+        .ok_or_else(|| BabataError::tool("Missing required parameter: content"))?;
+
+    let path = shellexpand::tilde(path).to_string();
+
+    Ok((path, content.to_string()))
 }
 
 #[cfg(test)]

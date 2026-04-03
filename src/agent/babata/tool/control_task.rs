@@ -50,17 +50,8 @@ impl Tool for ControlTaskTool {
     }
 
     async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
-        let args: Value = serde_json::from_str(args)?;
-        let task_id = args["task_id"]
-            .as_str()
-            .ok_or_else(|| BabataError::tool("Missing required parameter: task_id"))?;
-        let action = args["action"]
-            .as_str()
-            .ok_or_else(|| BabataError::tool("Missing required parameter: action"))?;
+        let (task_id, action) = parse_args(args)?;
 
-        let task_id = Uuid::parse_str(task_id)
-            .map_err(|err| BabataError::tool(format!("Invalid task_id '{}': {}", task_id, err)))?;
-        validate_action(action)?;
         let url = format!("{DEFAULT_HTTP_BASE_URL}/tasks/{task_id}/{action}");
 
         let response = self.http_client.post(url).send().await.map_err(|err| {
@@ -78,6 +69,22 @@ impl Tool for ControlTaskTool {
 
         Ok(format!("Applied action '{}' to task '{}'", action, task_id))
     }
+}
+
+fn parse_args(args: &str) -> BabataResult<(Uuid, String)> {
+    let args: Value = serde_json::from_str(args)?;
+    let task_id = args["task_id"]
+        .as_str()
+        .ok_or_else(|| BabataError::tool("Missing required parameter: task_id"))?;
+    let action = args["action"]
+        .as_str()
+        .ok_or_else(|| BabataError::tool("Missing required parameter: action"))?;
+
+    let task_id = Uuid::parse_str(task_id)
+        .map_err(|err| BabataError::tool(format!("Invalid task_id '{}': {}", task_id, err)))?;
+    validate_action(action)?;
+
+    Ok((task_id, action.to_string()))
 }
 
 fn validate_action(action: &str) -> BabataResult<()> {

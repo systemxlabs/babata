@@ -41,15 +41,21 @@ impl Tool for CountTasksTool {
     }
 
     async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
-        let args: Value = serde_json::from_str(args)?;
-        let status = match args["status"].as_str() {
+        let status = parse_args(args)?;
+
+        let count = self.task_store.count_tasks(status)?;
+        Ok(count.to_string())
+    }
+}
+
+fn parse_args(args: &str) -> BabataResult<Option<TaskStatus>> {
+    let args: Value = serde_json::from_str(args)?;
+    let status =
+        match args["status"].as_str() {
             Some(status) => Some(status.parse::<TaskStatus>().map_err(|err| {
                 BabataError::tool(format!("Invalid status '{}': {}", status, err))
             })?),
             None => None,
         };
-
-        let count = self.task_store.count_tasks(status)?;
-        Ok(count.to_string())
-    }
+    Ok(status)
 }
