@@ -4,6 +4,7 @@ mod create_task;
 mod edit_file;
 mod get_task;
 mod glob;
+mod grep;
 mod list_subtasks;
 mod list_tasks;
 mod read_file;
@@ -21,6 +22,7 @@ pub use create_task::*;
 pub use edit_file::*;
 pub use get_task::*;
 pub use glob::*;
+pub use grep::*;
 pub use list_subtasks::*;
 pub use list_tasks::*;
 pub use read_file::*;
@@ -83,6 +85,7 @@ pub fn build_tools(
         Arc::new(WriteFileTool::new()),
         Arc::new(EditFileTool::new()),
         Arc::new(GlobTool::new()),
+        Arc::new(GrepTool::new()),
         Arc::new(ControlTaskTool::new()?),
         Arc::new(CreateTaskTool::new()?),
         Arc::new(GetTaskTool::new()?),
