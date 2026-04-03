@@ -93,11 +93,6 @@ impl Agent for BabataAgent {
             root_task_id,
             prompt,
         } = task;
-        let tool_context: ToolContext<'_> = ToolContext {
-            task_id: &task_id,
-            parent_task_id: parent_task_id.as_ref(),
-            root_task_id: &root_task_id,
-        };
         let context = self.memory.build_context(&prompt).await?;
         let mut conversation = vec![Message::UserPrompt { content: prompt }];
 
@@ -127,6 +122,12 @@ impl Agent for BabataAgent {
                     }
 
                     for call in calls {
+                        let tool_context: ToolContext<'_> = ToolContext {
+                            task_id: &task_id,
+                            parent_task_id: parent_task_id.as_ref(),
+                            root_task_id: &root_task_id,
+                            call_id: &call.call_id,
+                        };
                         if let Some(tool) = self.tools.get(&call.tool_name) {
                             let result = match tool.execute(&call.args, &tool_context).await {
                                 Ok(result) => result,

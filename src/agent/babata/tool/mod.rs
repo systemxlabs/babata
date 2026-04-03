@@ -53,6 +53,7 @@ pub struct ToolContext<'a> {
     pub task_id: &'a Uuid,
     pub parent_task_id: Option<&'a Uuid>,
     pub root_task_id: &'a Uuid,
+    pub call_id: &'a str,
 }
 
 impl ToolContext<'_> {
@@ -66,6 +67,7 @@ impl ToolContext<'_> {
             task_id,
             parent_task_id: None,
             root_task_id: task_id,
+            call_id: "test_call_id",
         }
     }
 }

@@ -10,11 +10,7 @@ use uuid::Uuid;
 
 use crate::{
     BabataResult,
-    agent::{
-        babata::{BabataAgent, ToolContext},
-        codex::CodexAgent,
-        opencode::OpencodeAgent,
-    },
+    agent::{babata::BabataAgent, codex::CodexAgent, opencode::OpencodeAgent},
     channel::Channel,
     config::{AgentConfig, Config},
     message::Content,
@@ -37,16 +33,6 @@ pub struct AgentTask {
     pub parent_task_id: Option<Uuid>,
     pub root_task_id: Uuid,
     pub prompt: Vec<Content>,
-}
-
-impl AgentTask {
-    pub fn tool_context(&self) -> ToolContext<'_> {
-        ToolContext {
-            task_id: &self.task_id,
-            parent_task_id: self.parent_task_id.as_ref(),
-            root_task_id: &self.root_task_id,
-        }
-    }
 }
 
 pub fn build_agents(

@@ -143,6 +143,7 @@ mod tests {
             task_id: &task_id,
             parent_task_id: None,
             root_task_id: &task_id,
+            call_id: "test_call_id",
         };
 
         let parent_task_id = parse_parent_task_id(&json!({}), &context).expect("parent task id");
@@ -156,6 +157,7 @@ mod tests {
             task_id: &task_id,
             parent_task_id: None,
             root_task_id: &task_id,
+            call_id: "test_call_id",
         };
 
         let parent_task_id =
