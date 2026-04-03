@@ -24,6 +24,16 @@ use crate::{
     task::task_dir,
 };
 
+/// Environment variable for OpenCode configuration to enable YOLO mode
+/// This disables interactive prompts and allows automatic execution
+const OPENCODE_CONFIG_CONTENT: &str = r#"{
+    "permission": {
+        "*": "allow",
+        "external_directory": "allow",
+        "question": "deny"
+    }
+}"#;
+
 #[derive(Debug, Clone)]
 pub struct OpencodeAgent {
     command: String,
@@ -140,6 +150,10 @@ impl Agent for OpencodeAgent {
         if let Some(model) = &self.model {
             command.arg("--model").arg(model);
         }
+
+        // Set environment variable to enable YOLO mode (auto-approve)
+        // This prevents opencode from hanging on interactive prompts
+        command.env("OPENCODE_CONFIG_CONTENT", OPENCODE_CONFIG_CONTENT);
 
         let stdout = File::create(&output_paths.stdout).map_err(|err| {
             BabataError::internal(format!(
