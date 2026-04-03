@@ -53,7 +53,7 @@ impl Tool for DeleteTasksTool {
         // Delete tasks
         let mut success_ids = Vec::new();
         let mut failures = Vec::new();
-        
+
         for task_id in task_ids {
             match delete_task(&self.http_client, task_id).await {
                 Ok(_) => success_ids.push(task_id.to_string()),
@@ -63,21 +63,21 @@ impl Tool for DeleteTasksTool {
 
         // Format results as plain text with two sections
         let mut output = String::new();
-        
+
         // Successful deletions
-        output.push_str("成功删除的任务:\n");
+        output.push_str("Successfully deleted tasks:\n");
         if success_ids.is_empty() {
-            output.push_str("  (无)\n");
+            output.push_str("  (none)\n");
         } else {
             for id in success_ids {
                 output.push_str(&format!("  - {}\n", id));
             }
         }
-        
+
         // Failed deletions
-        output.push_str("\n删除失败的任务:\n");
+        output.push_str("\nFailed to delete tasks:\n");
         if failures.is_empty() {
-            output.push_str("  (无)\n");
+            output.push_str("  (none)\n");
         } else {
             for (id, reason) in failures {
                 output.push_str(&format!("  - {}: {}\n", id, reason));
@@ -98,8 +98,9 @@ fn parse_args(args: &str) -> BabataResult<Vec<Uuid>> {
             v.as_str()
                 .ok_or_else(|| BabataError::tool("Each task_id must be a string"))
                 .and_then(|s| {
-                    Uuid::parse_str(s)
-                        .map_err(|err| BabataError::tool(format!("Invalid task_id '{}': {}", s, err)))
+                    Uuid::parse_str(s).map_err(|err| {
+                        BabataError::tool(format!("Invalid task_id '{}': {}", s, err))
+                    })
                 })
         })
         .collect::<BabataResult<Vec<_>>>()?;
