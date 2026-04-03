@@ -297,6 +297,40 @@ impl TaskStore {
         )
     }
 
+    pub fn list_all_subtasks(&self, task_id: Uuid) -> BabataResult<Vec<TaskRecord>> {
+        let mut all_subtasks = Vec::new();
+        let mut queue = vec![task_id];
+
+        while let Some(current_id) = queue.pop() {
+            let subtasks = self.list_subtasks(current_id)?;
+            for subtask in subtasks {
+                queue.push(subtask.task_id);
+                all_subtasks.push(subtask);
+            }
+        }
+
+        Ok(all_subtasks)
+    }
+
+    pub fn delete_task(&self, task_id: Uuid) -> BabataResult<()> {
+        let conn = self.connect()?;
+        let deleted = conn
+            .execute(
+                "DELETE FROM tasks WHERE task_id = ?1",
+                params![task_id.to_string()],
+            )
+            .map_err(|err| BabataError::internal(format!("Failed to delete task row: {}", err)))?;
+
+        if deleted == 0 {
+            return Err(BabataError::internal(format!(
+                "Task '{}' not found",
+                task_id
+            )));
+        }
+
+        Ok(())
+    }
+
     pub(crate) fn open(db_path: impl AsRef<Path>) -> BabataResult<Self> {
         let db_path = db_path.as_ref().to_path_buf();
         let Some(parent) = db_path.parent() else {

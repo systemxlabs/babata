@@ -1,6 +1,7 @@
 mod control_task;
 mod count_tasks;
 mod create_task;
+mod delete_task;
 mod error;
 mod get_task;
 mod list_tasks;
@@ -10,7 +11,7 @@ use std::sync::Arc;
 use axum::{
     Json, Router,
     response::IntoResponse,
-    routing::{get, post},
+    routing::{delete, get, post},
 };
 use serde_json::json;
 
@@ -58,7 +59,7 @@ fn router(task_manager: Arc<TaskManager>) -> Router {
         .route("/health", get(health))
         .route("/tasks/count", get(count_tasks::handle))
         .route("/tasks", get(list_tasks::handle).post(create_task::handle))
-        .route("/tasks/{task_id}", get(get_task::handle))
+        .route("/tasks/{task_id}", get(get_task::handle).delete(delete_task::handle))
         .route("/tasks/{task_id}/pause", post(control_task::pause))
         .route("/tasks/{task_id}/resume", post(control_task::resume))
         .route("/tasks/{task_id}/cancel", post(control_task::cancel))
