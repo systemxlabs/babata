@@ -50,34 +50,41 @@ impl Tool for DeleteTasksTool {
     async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
         let task_ids = parse_args(args)?;
 
-        // Delete tasks concurrently
-        let mut results = Vec::with_capacity(task_ids.len());
+        // Delete tasks
+        let mut success_ids = Vec::new();
+        let mut failures = Vec::new();
         
         for task_id in task_ids {
-            let result = delete_task(&self.http_client, task_id).await;
-            results.push((task_id, result));
+            match delete_task(&self.http_client, task_id).await {
+                Ok(_) => success_ids.push(task_id.to_string()),
+                Err(err) => failures.push((task_id.to_string(), err.to_string())),
+            }
         }
 
-        // Format results
-        let output: Vec<Value> = results
-            .into_iter()
-            .map(|(task_id, result)| {
-                match result {
-                    Ok(msg) => json!({
-                        "task_id": task_id.to_string(),
-                        "success": true,
-                        "message": msg
-                    }),
-                    Err(err) => json!({
-                        "task_id": task_id.to_string(),
-                        "success": false,
-                        "error": err.to_string()
-                    }),
-                }
-            })
-            .collect();
+        // Format results as plain text with two sections
+        let mut output = String::new();
+        
+        // Successful deletions
+        output.push_str("成功删除的任务:\n");
+        if success_ids.is_empty() {
+            output.push_str("  (无)\n");
+        } else {
+            for id in success_ids {
+                output.push_str(&format!("  - {}\n", id));
+            }
+        }
+        
+        // Failed deletions
+        output.push_str("\n删除失败的任务:\n");
+        if failures.is_empty() {
+            output.push_str("  (无)\n");
+        } else {
+            for (id, reason) in failures {
+                output.push_str(&format!("  - {}: {}\n", id, reason));
+            }
+        }
 
-        Ok(json!({ "results": output }).to_string())
+        Ok(output)
     }
 }
 
