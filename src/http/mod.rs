@@ -11,7 +11,7 @@ use std::sync::Arc;
 use axum::{
     Json, Router,
     response::IntoResponse,
-    routing::{delete, get, post},
+    routing::{get, post},
 };
 use serde_json::json;
 
