@@ -24,7 +24,7 @@ impl WriteFileTool {
         Self {
             spec: ToolSpec {
                 name: "write_file".to_string(),
-                description: "Write content to a file at the given path. Creates parent directories if they don't exist.".to_string(),
+                description: "Create a new file or completely overwrite an existing one. Creates parent directories if they don't exist.".to_string(),
                 parameters: json!({
                     "type": "object",
                     "properties": {
@@ -64,17 +64,14 @@ impl Tool for WriteFileTool {
                 .map_err(|e| BabataError::tool(format!("Failed to create directories: {}", e)))?;
         }
 
-        let content_len = content.len();
+        let lines = content.lines().count();
 
         // Write content to file
         tokio::fs::write(&path, content)
             .await
             .map_err(|e| BabataError::tool(format!("Failed to write file: {}", e)))?;
 
-        Ok(format!(
-            "Successfully wrote {} bytes to {}",
-            content_len, path
-        ))
+        Ok(format!("Successfully wrote {lines} lines to {path}"))
     }
 }
 

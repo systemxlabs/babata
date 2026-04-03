@@ -7,6 +7,8 @@ use crate::{
 };
 use log::info;
 
+const DEFAULT_MAX_LINES: usize = 2000;
+
 #[derive(Debug, Clone)]
 pub struct ReadFileTool {
     spec: ToolSpec,
@@ -37,7 +39,7 @@ impl ReadFileTool {
                         },
                         "limit": {
                             "type": "integer",
-                            "description": "Maximum number of lines to read"
+                            "description": format!("Maximum number of lines to read (default: {DEFAULT_MAX_LINES})")
                         }
                     },
                     "required": ["path"]
@@ -66,9 +68,7 @@ impl Tool for ReadFileTool {
         let total_lines = lines.len();
 
         let start = offset.min(total_lines);
-        let end = limit
-            .map(|l| (start + l).min(total_lines))
-            .unwrap_or(total_lines);
+        let end = (start + limit).min(total_lines);
 
         let selected: Vec<String> = lines[start..end]
             .iter()
@@ -80,7 +80,7 @@ impl Tool for ReadFileTool {
     }
 }
 
-fn parse_args(args: &str) -> BabataResult<(String, usize, Option<usize>)> {
+fn parse_args(args: &str) -> BabataResult<(String, usize, usize)> {
     let args: Value = serde_json::from_str(args)?;
     let path = args["path"]
         .as_str()
@@ -88,7 +88,10 @@ fn parse_args(args: &str) -> BabataResult<(String, usize, Option<usize>)> {
 
     let path = shellexpand::tilde(path).to_string();
     let offset = args["offset"].as_u64().unwrap_or(0) as usize;
-    let limit = args["limit"].as_u64().map(|l| l as usize);
+    let limit = args["limit"]
+        .as_u64()
+        .map(|l| l as usize)
+        .unwrap_or(DEFAULT_MAX_LINES);
 
     Ok((path, offset, limit))
 }
