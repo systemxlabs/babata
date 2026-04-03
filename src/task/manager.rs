@@ -6,6 +6,8 @@ use parking_lot::Mutex;
 use tokio::{sync::mpsc, task::JoinHandle};
 use uuid::Uuid;
 
+const MAX_TASK_TREE_DEPTH: usize = 5;
+
 use crate::{
     BabataResult,
     error::BabataError,
@@ -106,12 +108,21 @@ impl TaskManager {
         let task_id = Uuid::new_v4();
         info!("Creating task {} with request: {:?}", task_id, request);
 
-        let root_task_id = if let Some(parent_task_id) = request.parent_task_id {
+        let (root_task_id, parent_depth) = if let Some(parent_task_id) = request.parent_task_id {
             let task_record = self.store.get_task(parent_task_id)?;
-            task_record.root_task_id
+            let depth = self.calculate_task_depth(parent_task_id)?;
+            (task_record.root_task_id, depth)
         } else {
-            task_id
+            (task_id, 0)
         };
+
+        // Check task tree depth limit
+        if parent_depth >= MAX_TASK_TREE_DEPTH {
+            return Err(BabataError::tool(format!(
+                "Cannot create task: maximum task tree depth ({}) reached",
+                MAX_TASK_TREE_DEPTH
+            )));
+        }
 
         let task_record = TaskRecord {
             task_id,
@@ -242,6 +253,26 @@ impl TaskManager {
 
     pub fn count_tasks(&self, status: Option<TaskStatus>) -> BabataResult<usize> {
         self.store.count_tasks(status)
+    }
+
+    /// Calculate the depth of a task in the task tree.
+    /// Root task has depth 1, its direct children have depth 2, etc.
+    fn calculate_task_depth(&self, task_id: Uuid) -> BabataResult<usize> {
+        let mut depth = 1;
+        let mut current_id = task_id;
+
+        loop {
+            let task = self.store.get_task(current_id)?;
+            match task.parent_task_id {
+                Some(parent_id) => {
+                    depth += 1;
+                    current_id = parent_id;
+                }
+                None => break,
+            }
+        }
+
+        Ok(depth)
     }
 
     fn handle_task_exit(&self, event: TaskExitEvent) {
