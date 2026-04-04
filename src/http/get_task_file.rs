@@ -1,28 +1,15 @@
 use axum::{
+    body::Body,
     extract::{Path, State},
+    http::{header, StatusCode},
     response::{IntoResponse, Response},
 };
-use serde::Serialize;
 use uuid::Uuid;
 
 use super::{ApiError, HttpApp};
 
-/// Response for file metadata (JSON format)
-#[derive(Debug, Serialize)]
-pub(crate) struct FileMetadataResponse {
-    /// File name
-    pub(crate) name: String,
-    /// Relative path from task directory
-    pub(crate) path: String,
-    /// File size in bytes
-    pub(crate) size: u64,
-    /// Last modified timestamp in seconds since Unix epoch
-    pub(crate) modified: Option<u64>,
-    /// MIME type
-    pub(crate) content_type: String,
-}
-
 /// Handle GET /tasks/{task_id}/files/{*path}
+/// Returns raw file content for text files, base64-encoded content for binary files
 pub(super) async fn handle(
     State(state): State<HttpApp>,
     Path((task_id, file_path)): Path<(String, String)>,
@@ -58,7 +45,7 @@ pub(super) async fn handle(
     };
 
     // Check if path exists and is a file
-    let metadata = match tokio::fs::metadata(&target_path).await {
+    match tokio::fs::metadata(&target_path).await {
         Ok(meta) => {
             if !meta.is_file() {
                 return ApiError::bad_request(format!(
@@ -67,26 +54,17 @@ pub(super) async fn handle(
                 ))
                 .into_response();
             }
-            meta
         }
         Err(err) => {
             return ApiError::bad_request(format!("File not found: {}", err)).into_response();
         }
     };
 
-    // Get file name
+    // Get file name and detect content type
     let name = target_path
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| file_path.clone());
-
-    // Calculate relative path
-    let rel_path = target_path
-        .strip_prefix(&task_dir)
-        .map(|p| p.to_string_lossy().to_string().replace('\\', "/"))
-        .unwrap_or_else(|_| file_path.clone());
-
-    // Detect content type
     let content_type = detect_content_type(&name, &target_path).await;
 
     // Check if it's a text file based on content type
@@ -103,44 +81,25 @@ pub(super) async fn handle(
         || content_type.starts_with("application/x-");
 
     if is_text {
-        // Read and return text content
+        // Read and return text content directly
         match tokio::fs::read_to_string(&target_path).await {
             Ok(content) => {
-                let response = serde_json::json!({
-                    "name": name,
-                    "path": rel_path,
-                    "size": metadata.len(),
-                    "modified": metadata
-                        .modified()
-                        .ok()
-                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                        .map(|d| d.as_secs()),
-                    "content_type": content_type,
-                    "content": content,
-                    "encoding": "utf-8"
-                });
-                axum::Json(response).into_response()
+                Response::builder()
+                    .status(StatusCode::OK)
+                    .header(header::CONTENT_TYPE, content_type)
+                    .body(Body::from(content))
+                    .unwrap_or_else(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to build response").into_response())
             }
             Err(err) => {
-                // Try to read as binary if UTF-8 fails
+                // Try to read as binary if UTF-8 fails, return as base64
                 match tokio::fs::read(&target_path).await {
                     Ok(bytes) => {
-                        // Return base64 encoded content for binary files
                         let base64_content = base64::encode(&bytes);
-                        let response = serde_json::json!({
-                            "name": name,
-                            "path": rel_path,
-                            "size": metadata.len(),
-                            "modified": metadata
-                                .modified()
-                                .ok()
-                                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                                .map(|d| d.as_secs()),
-                            "content_type": content_type,
-                            "content": base64_content,
-                            "encoding": "base64"
-                        });
-                        axum::Json(response).into_response()
+                        Response::builder()
+                            .status(StatusCode::OK)
+                            .header(header::CONTENT_TYPE, "text/plain; charset=utf-8")
+                            .body(Body::from(base64_content))
+                            .unwrap_or_else(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to build response").into_response())
                     }
                     Err(_) => ApiError::bad_request(format!("Failed to read file: {}", err))
                         .into_response(),
@@ -148,19 +107,18 @@ pub(super) async fn handle(
             }
         }
     } else {
-        // Return metadata only for binary files
-        let response = FileMetadataResponse {
-            name,
-            path: rel_path,
-            size: metadata.len(),
-            modified: metadata
-                .modified()
-                .ok()
-                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                .map(|d| d.as_secs()),
-            content_type,
-        };
-        axum::Json(response).into_response()
+        // For binary files, read and return base64 encoded content
+        match tokio::fs::read(&target_path).await {
+            Ok(bytes) => {
+                let base64_content = base64::encode(&bytes);
+                Response::builder()
+                    .status(StatusCode::OK)
+                    .header(header::CONTENT_TYPE, "text/plain; charset=utf-8")
+                    .body(Body::from(base64_content))
+                    .unwrap_or_else(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to build response").into_response())
+            }
+            Err(err) => ApiError::bad_request(format!("Failed to read file: {}", err)).into_response(),
+        }
     }
 }
 
