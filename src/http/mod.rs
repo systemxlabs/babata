@@ -4,6 +4,7 @@ mod create_task;
 mod delete_task;
 mod error;
 mod get_task;
+mod list_task_files;
 mod list_tasks;
 
 use std::sync::Arc;
@@ -21,6 +22,7 @@ pub(crate) use control_task::RelaunchTaskRequest;
 pub(crate) use count_tasks::CountTasksResponse;
 pub(crate) use error::ApiError;
 pub(crate) use get_task::TaskResponse;
+
 pub(crate) use list_tasks::ListTasksResponse;
 
 pub const DEFAULT_HTTP_ADDR: &str = "127.0.0.1:18800";
@@ -63,6 +65,7 @@ fn router(task_manager: Arc<TaskManager>) -> Router {
             "/tasks/{task_id}",
             get(get_task::handle).delete(delete_task::handle),
         )
+        .route("/tasks/{task_id}/files", get(list_task_files::handle))
         .route("/tasks/{task_id}/pause", post(control_task::pause))
         .route("/tasks/{task_id}/resume", post(control_task::resume))
         .route("/tasks/{task_id}/cancel", post(control_task::cancel))
