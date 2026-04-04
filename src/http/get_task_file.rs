@@ -9,7 +9,7 @@ use uuid::Uuid;
 use super::{ApiError, HttpApp};
 
 /// Handle GET /tasks/{task_id}/files/{*path}
-/// Returns raw file content for text files, base64-encoded content for binary files
+/// Returns raw file content for text files, raw binary bytes for binary files
 pub(super) async fn handle(
     State(state): State<HttpApp>,
     Path((task_id, file_path)): Path<(String, String)>,
@@ -91,14 +91,13 @@ pub(super) async fn handle(
                     .unwrap_or_else(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to build response").into_response())
             }
             Err(err) => {
-                // Try to read as binary if UTF-8 fails, return as base64
+                // If text read fails, try reading as binary
                 match tokio::fs::read(&target_path).await {
                     Ok(bytes) => {
-                        let base64_content = base64::encode(&bytes);
                         Response::builder()
                             .status(StatusCode::OK)
-                            .header(header::CONTENT_TYPE, "text/plain; charset=utf-8")
-                            .body(Body::from(base64_content))
+                            .header(header::CONTENT_TYPE, content_type)
+                            .body(Body::from(bytes))
                             .unwrap_or_else(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to build response").into_response())
                     }
                     Err(_) => ApiError::bad_request(format!("Failed to read file: {}", err))
@@ -107,14 +106,13 @@ pub(super) async fn handle(
             }
         }
     } else {
-        // For binary files, read and return base64 encoded content
+        // For binary files, read and return raw bytes
         match tokio::fs::read(&target_path).await {
             Ok(bytes) => {
-                let base64_content = base64::encode(&bytes);
                 Response::builder()
                     .status(StatusCode::OK)
-                    .header(header::CONTENT_TYPE, "text/plain; charset=utf-8")
-                    .body(Body::from(base64_content))
+                    .header(header::CONTENT_TYPE, content_type)
+                    .body(Body::from(bytes))
                     .unwrap_or_else(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to build response").into_response())
             }
             Err(err) => ApiError::bad_request(format!("Failed to read file: {}", err)).into_response(),
@@ -201,50 +199,7 @@ async fn detect_content_type(file_name: &str, _file_path: &std::path::Path) -> S
     mime_type.to_string()
 }
 
-// Base64 encoding utility
-mod base64 {
-    pub fn encode(bytes: &[u8]) -> String {
-        const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-        let mut result = String::with_capacity(bytes.len().saturating_mul(4).div_ceil(3));
-        let mut i = 0;
-
-        while i + 3 <= bytes.len() {
-            let b0 = bytes[i] as u32;
-            let b1 = bytes[i + 1] as u32;
-            let b2 = bytes[i + 2] as u32;
-            let n = (b0 << 16) | (b1 << 8) | b2;
-
-            result.push(ALPHABET[(n >> 18) as usize] as char);
-            result.push(ALPHABET[((n >> 12) & 63) as usize] as char);
-            result.push(ALPHABET[((n >> 6) & 63) as usize] as char);
-            result.push(ALPHABET[(n & 63) as usize] as char);
-
-            i += 3;
-        }
-
-        if i + 2 == bytes.len() {
-            let b0 = bytes[i] as u32;
-            let b1 = bytes[i + 1] as u32;
-            let n = (b0 << 16) | (b1 << 8);
-
-            result.push(ALPHABET[(n >> 18) as usize] as char);
-            result.push(ALPHABET[((n >> 12) & 63) as usize] as char);
-            result.push(ALPHABET[((n >> 6) & 63) as usize] as char);
-            result.push('=');
-        } else if i + 1 == bytes.len() {
-            let b0 = bytes[i] as u32;
-            let n = b0 << 16;
-
-            result.push(ALPHABET[(n >> 18) as usize] as char);
-            result.push(ALPHABET[((n >> 12) & 63) as usize] as char);
-            result.push('=');
-            result.push('=');
-        }
-
-        result
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -271,16 +226,6 @@ mod tests {
             detect_content_type("doc.pdf", &temp_dir).await,
             "application/pdf"
         );
-    }
-
-    #[test]
-    fn test_base64_encode() {
-        assert_eq!(base64::encode(b"Hello"), "SGVsbG8=");
-        assert_eq!(base64::encode(b"Hello, World!"), "SGVsbG8sIFdvcmxkIQ==");
-        assert_eq!(base64::encode(b""), "");
-        assert_eq!(base64::encode(b"A"), "QQ==");
-        assert_eq!(base64::encode(b"AB"), "QUI=");
-        assert_eq!(base64::encode(b"ABC"), "QUJD");
     }
 
     #[tokio::test]
