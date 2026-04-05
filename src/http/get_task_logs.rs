@@ -3,7 +3,7 @@ use axum::{
     extract::{Path, Query, State},
     response::{IntoResponse, Response},
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::utils::babata_dir;
@@ -19,16 +19,6 @@ pub(crate) struct LogQueryParams {
     /// Optional: Number of lines to skip (default: 0)
     #[serde(default)]
     offset: usize,
-}
-
-#[derive(Debug, Serialize)]
-pub(crate) struct TaskLogsResponse {
-    task_id: String,
-    total_lines: usize,
-    offset: usize,
-    limit: usize,
-    has_more: bool,
-    logs: Vec<String>,
 }
 
 pub(super) async fn handle(
@@ -69,18 +59,7 @@ pub(super) async fn handle(
 
     // Read and filter logs
     match read_task_logs(&task_id_str, offset, limit).await {
-        Ok((logs, total_lines)) => {
-            let has_more = offset + logs.len() < total_lines;
-            Json(TaskLogsResponse {
-                task_id: task_id_str,
-                total_lines,
-                offset,
-                limit,
-                has_more,
-                logs,
-            })
-            .into_response()
-        }
+        Ok(logs) => Json(logs).into_response(),
         Err(err) => ApiError::bad_request(format!("Failed to read logs: {}", err)).into_response(),
     }
 }
@@ -90,7 +69,7 @@ async fn read_task_logs(
     task_id: &str,
     offset: usize,
     limit: usize,
-) -> Result<(Vec<String>, usize), std::io::Error> {
+) -> Result<Vec<String>, std::io::Error> {
     let log_dir = babata_dir()
         .map_err(|e| std::io::Error::other(e.to_string()))?
         .join("logs");
@@ -132,8 +111,6 @@ async fn read_task_logs(
     // Sort lines by timestamp if possible (lines typically start with timestamp)
     all_matching_lines.sort();
 
-    let total_lines = all_matching_lines.len();
-
     // Apply pagination
     let paginated_logs: Vec<String> = all_matching_lines
         .into_iter()
@@ -141,30 +118,5 @@ async fn read_task_logs(
         .take(limit)
         .collect();
 
-    Ok((paginated_logs, total_lines))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_task_logs_response_serialization() {
-        let response = TaskLogsResponse {
-            task_id: "12345678-1234-1234-1234-123456789abc".to_string(),
-            total_lines: 50,
-            offset: 0,
-            limit: 10,
-            has_more: true,
-            logs: vec![
-                "2026-04-05T08:38:36.969579+08:00   INFO babata::task::manager: manager.rs:109 Creating task 12345678-1234-1234-1234-123456789abc".to_string(),
-            ],
-        };
-
-        let json = serde_json::to_string(&response).unwrap();
-        assert!(json.contains("task_id"));
-        assert!(json.contains("total_lines"));
-        assert!(json.contains("has_more"));
-        assert!(json.contains("logs"));
-    }
+    Ok(paginated_logs)
 }
