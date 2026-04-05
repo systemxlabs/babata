@@ -1,7 +1,7 @@
 use axum::{
     body::Body,
     extract::{Path, State},
-    http::{header, StatusCode},
+    http::{StatusCode, header},
     response::{IntoResponse, Response},
 };
 use uuid::Uuid;
@@ -83,23 +83,31 @@ pub(super) async fn handle(
     if is_text {
         // Read and return text content directly
         match tokio::fs::read_to_string(&target_path).await {
-            Ok(content) => {
-                Response::builder()
-                    .status(StatusCode::OK)
-                    .header(header::CONTENT_TYPE, content_type)
-                    .body(Body::from(content))
-                    .unwrap_or_else(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to build response").into_response())
-            }
+            Ok(content) => Response::builder()
+                .status(StatusCode::OK)
+                .header(header::CONTENT_TYPE, content_type)
+                .body(Body::from(content))
+                .unwrap_or_else(|_| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Failed to build response",
+                    )
+                        .into_response()
+                }),
             Err(err) => {
                 // If text read fails, try reading as binary
                 match tokio::fs::read(&target_path).await {
-                    Ok(bytes) => {
-                        Response::builder()
-                            .status(StatusCode::OK)
-                            .header(header::CONTENT_TYPE, content_type)
-                            .body(Body::from(bytes))
-                            .unwrap_or_else(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to build response").into_response())
-                    }
+                    Ok(bytes) => Response::builder()
+                        .status(StatusCode::OK)
+                        .header(header::CONTENT_TYPE, content_type)
+                        .body(Body::from(bytes))
+                        .unwrap_or_else(|_| {
+                            (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                "Failed to build response",
+                            )
+                                .into_response()
+                        }),
                     Err(_) => ApiError::bad_request(format!("Failed to read file: {}", err))
                         .into_response(),
                 }
@@ -108,14 +116,20 @@ pub(super) async fn handle(
     } else {
         // For binary files, read and return raw bytes
         match tokio::fs::read(&target_path).await {
-            Ok(bytes) => {
-                Response::builder()
-                    .status(StatusCode::OK)
-                    .header(header::CONTENT_TYPE, content_type)
-                    .body(Body::from(bytes))
-                    .unwrap_or_else(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to build response").into_response())
+            Ok(bytes) => Response::builder()
+                .status(StatusCode::OK)
+                .header(header::CONTENT_TYPE, content_type)
+                .body(Body::from(bytes))
+                .unwrap_or_else(|_| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Failed to build response",
+                    )
+                        .into_response()
+                }),
+            Err(err) => {
+                ApiError::bad_request(format!("Failed to read file: {}", err)).into_response()
             }
-            Err(err) => ApiError::bad_request(format!("Failed to read file: {}", err)).into_response(),
         }
     }
 }
@@ -198,8 +212,6 @@ async fn detect_content_type(file_name: &str, _file_path: &std::path::Path) -> S
 
     mime_type.to_string()
 }
-
-
 
 #[cfg(test)]
 mod tests {

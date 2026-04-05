@@ -5,6 +5,7 @@ mod delete_task;
 mod error;
 mod get_task;
 mod get_task_file;
+mod get_task_logs;
 mod list_task_files;
 mod list_tasks;
 
@@ -68,6 +69,7 @@ fn router(task_manager: Arc<TaskManager>) -> Router {
         )
         .route("/tasks/{task_id}/files", get(list_task_files::handle))
         .route("/tasks/{task_id}/files/{*path}", get(get_task_file::handle))
+        .route("/tasks/{task_id}/logs", get(get_task_logs::handle))
         .route("/tasks/{task_id}/pause", post(control_task::pause))
         .route("/tasks/{task_id}/resume", post(control_task::resume))
         .route("/tasks/{task_id}/cancel", post(control_task::cancel))

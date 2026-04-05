@@ -33,10 +33,7 @@ pub(crate) struct ListTaskFilesResponse {
 }
 
 /// Handle GET /tasks/{task_id}/files
-pub(super) async fn handle(
-    State(state): State<HttpApp>,
-    Path(task_id): Path<String>,
-) -> Response {
+pub(super) async fn handle(State(state): State<HttpApp>, Path(task_id): Path<String>) -> Response {
     // Parse task ID
     let task_id = match Uuid::parse_str(&task_id) {
         Ok(task_id) => task_id,
