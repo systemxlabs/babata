@@ -221,7 +221,7 @@ mod tests {
     async fn test_detect_content_type() {
         // Test with a temporary path
         let temp_dir = std::env::temp_dir();
-
+        
         assert_eq!(
             detect_content_type("test.txt", &temp_dir).await,
             "text/plain"
@@ -243,20 +243,15 @@ mod tests {
     #[tokio::test]
     async fn test_normalize_path() {
         // Create a temporary directory for testing
-        let temp_dir =
-            tokio::task::spawn_blocking(|| std::env::temp_dir().join("babata_test_normalize_path"))
-                .await
-                .unwrap();
-
+        let temp_dir = tokio::task::spawn_blocking(|| std::env::temp_dir().join("babata_test_normalize_path"))
+            .await
+            .unwrap();
+        
         // Clean up and create directory
         let _ = tokio::fs::remove_dir_all(&temp_dir).await;
         tokio::fs::create_dir_all(&temp_dir).await.unwrap();
-        tokio::fs::write(temp_dir.join("task.md"), "test content")
-            .await
-            .unwrap();
-        tokio::fs::create_dir_all(temp_dir.join("subdir"))
-            .await
-            .unwrap();
+        tokio::fs::write(temp_dir.join("task.md"), "test content").await.unwrap();
+        tokio::fs::create_dir_all(temp_dir.join("subdir")).await.unwrap();
 
         // Valid path within directory
         let result = normalize_path(&temp_dir, "task.md");
