@@ -47,24 +47,22 @@ pub(super) async fn handle(
         return ApiError::bad_request("limit must be greater than 0").into_response();
     }
     if params.limit > MAX_LIMIT {
-        return ApiError::bad_request(format!(
-            "limit exceeds maximum value of {}",
-            MAX_LIMIT
-        ))
-        .into_response();
+        return ApiError::bad_request(format!("limit exceeds maximum value of {}", MAX_LIMIT))
+            .into_response();
     }
 
     let limit = params.limit;
     let offset = params.offset;
 
-    // Read and filter logs
+    // Read and filter logs with pagination
     match read_task_logs(&task_id_str, offset, limit).await {
         Ok(logs) => Json(logs).into_response(),
         Err(err) => ApiError::bad_request(format!("Failed to read logs: {}", err)).into_response(),
     }
 }
 
-/// Read logs from all log files in the log directory and filter by task_id with pagination
+/// Read logs from log files in chronological order with pagination.
+/// Only reads files that are needed based on offset and limit.
 async fn read_task_logs(
     task_id: &str,
     offset: usize,
@@ -74,49 +72,85 @@ async fn read_task_logs(
         .map_err(|e| std::io::Error::other(e.to_string()))?
         .join("logs");
 
-    // Collect all log lines from all .log files in the log directory
-    let mut all_matching_lines: Vec<String> = Vec::new();
+    // Collect all log files with their metadata
+    let mut log_files: Vec<(std::path::PathBuf, std::time::SystemTime)> = Vec::new();
 
-    // Read directory entries
     let mut entries = tokio::fs::read_dir(&log_dir).await?;
-
     while let Some(entry) = entries.next_entry().await? {
         let path = entry.path();
-
-        // Only process .log files
         if path.extension().map(|e| e == "log").unwrap_or(false) && path.is_file() {
-            // Read the log file
-            match tokio::fs::read_to_string(&path).await {
-                Ok(content) => {
-                    // Filter lines containing the task_id
-                    let lines: Vec<String> = content
-                        .lines()
-                        .filter(|line| line.contains(task_id))
-                        .map(|line| line.to_string())
-                        .collect();
-                    all_matching_lines.extend(lines);
-                }
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                    // File was removed between listing and reading, skip
-                    continue;
-                }
-                Err(e) => {
-                    log::warn!("Failed to read log file {:?}: {}", path, e);
-                    continue;
-                }
-            };
+            // Get file modification time for sorting
+            let metadata = tokio::fs::metadata(&path).await?;
+            let modified = metadata
+                .modified()
+                .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+            log_files.push((path, modified));
         }
     }
 
-    // Sort lines by timestamp if possible (lines typically start with timestamp)
-    all_matching_lines.sort();
+    // Sort by modification time: oldest first (chronological order)
+    log_files.sort_by(|a, b| a.1.cmp(&b.1));
 
-    // Apply pagination
-    let paginated_logs: Vec<String> = all_matching_lines
-        .into_iter()
-        .skip(offset)
-        .take(limit)
-        .collect();
+    let target_start = offset;
+    let target_end = offset.saturating_add(limit);
+    let mut current_line_count: usize = 0;
+    let mut result: Vec<String> = Vec::new();
 
-    Ok(paginated_logs)
+    // Iterate through files in chronological order
+    for (path, _) in log_files {
+        // Check if we've collected enough lines
+        if current_line_count >= target_end {
+            break;
+        }
+
+        // Read file line by line to count matching lines
+        match tokio::fs::read_to_string(&path).await {
+            Ok(content) => {
+                let lines: Vec<&str> = content.lines().collect();
+                let mut matching_lines_in_file: Vec<String> = Vec::new();
+
+                // Filter lines containing task_id
+                for line in &lines {
+                    if line.contains(task_id) {
+                        matching_lines_in_file.push(line.to_string());
+                    }
+                }
+
+                let file_matching_count = matching_lines_in_file.len();
+
+                // Check if this file contains lines we need
+                let file_start = current_line_count;
+                let file_end = current_line_count.saturating_add(file_matching_count);
+
+                // If there's overlap between [file_start, file_end) and [target_start, target_end)
+                if file_start < target_end && file_end > target_start {
+                    // Calculate which lines from this file to take
+                    let skip_in_file = target_start.saturating_sub(file_start);
+                    let take_in_file = std::cmp::min(
+                        file_matching_count.saturating_sub(skip_in_file),
+                        target_end.saturating_sub(std::cmp::max(file_start, target_start)),
+                    );
+
+                    // Add the relevant lines to result
+                    result.extend(
+                        matching_lines_in_file
+                            .into_iter()
+                            .skip(skip_in_file)
+                            .take(take_in_file),
+                    );
+                }
+
+                current_line_count += file_matching_count;
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                continue;
+            }
+            Err(e) => {
+                log::warn!("Failed to read log file {:?}: {}", path, e);
+                continue;
+            }
+        }
+    }
+
+    Ok(result)
 }
