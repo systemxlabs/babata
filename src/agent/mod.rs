@@ -1,6 +1,4 @@
 pub mod babata;
-pub mod codex;
-pub mod opencode;
 pub mod prompt;
 pub mod skill;
 
@@ -10,7 +8,7 @@ use uuid::Uuid;
 
 use crate::{
     BabataResult,
-    agent::{babata::BabataAgent, codex::CodexAgent, opencode::OpencodeAgent},
+    agent::babata::BabataAgent,
     channel::Channel,
     config::{AgentConfig, Config},
     message::Content,
@@ -46,16 +44,6 @@ pub fn build_agents(
             AgentConfig::Babata(_) => {
                 let agent_name = BabataAgent::name().to_string();
                 let agent: Arc<dyn Agent> = Arc::new(BabataAgent::new(config, channels.clone())?);
-                agents.insert(agent_name, agent);
-            }
-            AgentConfig::Codex(_) => {
-                let agent_name = CodexAgent::name().to_string();
-                let agent: Arc<dyn Agent> = Arc::new(CodexAgent::new(config)?);
-                agents.insert(agent_name, agent);
-            }
-            AgentConfig::Opencode(_) => {
-                let agent_name = OpencodeAgent::name().to_string();
-                let agent: Arc<dyn Agent> = Arc::new(OpencodeAgent::new(config)?);
                 agents.insert(agent_name, agent);
             }
         }

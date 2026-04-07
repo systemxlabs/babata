@@ -56,7 +56,9 @@ impl Tool for RelaunchTaskTool {
 
         let response = self
             .http_client
-            .post(format!("{DEFAULT_HTTP_BASE_URL}/api/tasks/{task_id}/relaunch"))
+            .post(format!(
+                "{DEFAULT_HTTP_BASE_URL}/api/tasks/{task_id}/relaunch"
+            ))
             .json(&RelaunchTaskRequest {
                 reason: reason.clone(),
             })

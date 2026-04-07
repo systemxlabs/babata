@@ -62,7 +62,7 @@ mod tests {
         let error = serde_json::from_value::<TaskResponse>(json!({
             "task_id": "12345678-1234-1234-1234-123456789abc",
             "description": "demo",
-            "agent": "codex",
+            "agent": "babata",
             "status": "running",
             "parent_task_id": null,
             "root_task_id": "12345678-1234-1234-1234-123456789abc",

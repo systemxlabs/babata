@@ -74,7 +74,9 @@ fn run_control(action: &str, task_id: &str) -> BabataResult<()> {
     let runtime = build_runtime()?;
     runtime.block_on(async move {
         let response = Client::new()
-            .post(format!("{DEFAULT_HTTP_BASE_URL}/api/tasks/{task_id}/{action}"))
+            .post(format!(
+                "{DEFAULT_HTTP_BASE_URL}/api/tasks/{task_id}/{action}"
+            ))
             .send()
             .await
             .map_err(|err| {
@@ -106,7 +108,9 @@ fn run_relaunch(task_id: &str, reason: &str) -> BabataResult<()> {
     let runtime = build_runtime()?;
     runtime.block_on(async move {
         let response = Client::new()
-            .post(format!("{DEFAULT_HTTP_BASE_URL}/api/tasks/{task_id}/relaunch"))
+            .post(format!(
+                "{DEFAULT_HTTP_BASE_URL}/api/tasks/{task_id}/relaunch"
+            ))
             .json(&RelaunchTaskRequest {
                 reason: reason.to_string(),
             })

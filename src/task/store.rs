@@ -460,7 +460,7 @@ mod tests {
         let mut payload = serde_json::to_value(TaskRecord {
             task_id,
             description: "missing never_ends".to_string(),
-            agent: Some("codex".to_string()),
+            agent: Some("babata".to_string()),
             status: TaskStatus::Running,
             parent_task_id: None,
             root_task_id: task_id,
@@ -489,7 +489,7 @@ mod tests {
             .insert_task(TaskRecord {
                 task_id,
                 description: "persist never_ends".to_string(),
-                agent: Some("codex".to_string()),
+                agent: Some("babata".to_string()),
                 status: TaskStatus::Running,
                 parent_task_id: None,
                 root_task_id: task_id,
@@ -514,7 +514,7 @@ mod tests {
             .insert_task(TaskRecord {
                 task_id,
                 description: "before".to_string(),
-                agent: Some("codex".to_string()),
+                agent: Some("babata".to_string()),
                 status: TaskStatus::Running,
                 parent_task_id: None,
                 root_task_id: task_id,

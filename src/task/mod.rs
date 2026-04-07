@@ -44,7 +44,7 @@ mod tests {
         let request = serde_json::from_value::<CreateTaskRequest>(json!({
             "prompt": [{ "type": "text", "text": "hello" }],
             "parent_task_id": parent_task_id,
-            "agent": "codex",
+            "agent": "babata",
             "never_ends": true,
         }))
         .expect("request should deserialize");
@@ -56,7 +56,7 @@ mod tests {
             }]
         );
         assert_eq!(request.parent_task_id, Some(parent_task_id));
-        assert_eq!(request.agent.as_deref(), Some("codex"));
+        assert_eq!(request.agent.as_deref(), Some("babata"));
         assert!(request.never_ends);
     }
 }

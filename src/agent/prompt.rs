@@ -2,7 +2,7 @@ use chrono::Local;
 
 use crate::{
     BabataResult,
-    agent::{Agent, babata::BabataAgent, codex::CodexAgent, opencode::OpencodeAgent, skill::Skill},
+    agent::{Agent, babata::BabataAgent, skill::Skill},
     channel::load_wechat_latest_context_token,
     config::{AgentConfig, ChannelConfig, Config},
     error::BabataError,
@@ -35,8 +35,6 @@ pub fn build_agents_prompt(config: &Config) -> String {
     for agent in &config.agents {
         let description = match agent {
             AgentConfig::Babata(_) => BabataAgent::description(),
-            AgentConfig::Codex(_) => CodexAgent::description(),
-            AgentConfig::Opencode(_) => OpencodeAgent::description(),
         };
         agent_sections.push(format!("- `{}`: {}", agent.name(), description,));
     }
@@ -132,8 +130,8 @@ mod tests {
     use crate::{
         agent::skill::{Skill, SkillFrontmatter},
         config::{
-            AgentConfig, BabataAgentConfig, ChannelConfig, CodexAgentConfig, Config,
-            TelegramChannelConfig, WechatChannelConfig,
+            AgentConfig, BabataAgentConfig, ChannelConfig, Config, TelegramChannelConfig,
+            WechatChannelConfig,
         },
     };
 
@@ -154,18 +152,11 @@ mod tests {
     fn build_agents_prompt_includes_agent_descriptions_and_config() {
         let config = Config {
             providers: Vec::new(),
-            agents: vec![
-                AgentConfig::Babata(BabataAgentConfig {
-                    provider: "openai".to_string(),
-                    model: "gpt-4.1".to_string(),
-                    memory: "simple".to_string(),
-                }),
-                AgentConfig::Codex(CodexAgentConfig {
-                    command: "codex".to_string(),
-                    workspace: "/tmp/workspace".to_string(),
-                    model: Some("gpt-5-codex".to_string()),
-                }),
-            ],
+            agents: vec![AgentConfig::Babata(BabataAgentConfig {
+                provider: "openai".to_string(),
+                model: "gpt-4.1".to_string(),
+                memory: "simple".to_string(),
+            })],
             channels: Vec::new(),
             memory: Vec::new(),
         };
@@ -175,8 +166,6 @@ mod tests {
         assert!(prompt.contains("Configured agents:"));
         assert!(prompt.contains("`babata`"));
         assert!(prompt.contains("general tasks, task orchestration"));
-        assert!(prompt.contains("`codex`"));
-        assert!(prompt.contains("code writing"));
     }
 
     #[test]

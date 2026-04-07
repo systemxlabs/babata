@@ -8,16 +8,14 @@ use crate::{
             AnthropicProvider, BabataAgent, CustomProvider, DeepSeekProvider, KimiProvider,
             MiniMaxProvider, Model, MoonshotProvider, OpenAIProvider, Provider,
         },
-        codex::CodexAgent,
-        opencode::OpencodeAgent,
     },
     channel::{Channel, TelegramChannel, WechatChannel},
     config::{
-        AgentConfig, AnthropicProviderConfig, BabataAgentConfig, ChannelConfig, CodexAgentConfig,
-        CompatibleApi, Config, CustomProviderConfig, DeepSeekProviderConfig, EmbeddingConfig,
-        HybridMemoryConfig, KimiProviderConfig, LocalEmbeddingConfig, MemoryConfig,
-        MiniMaxProviderConfig, MoonshotProviderConfig, OpenAIProviderConfig, OpencodeAgentConfig,
-        ProviderConfig, RemoteEmbeddingConfig, TelegramChannelConfig, WechatChannelConfig,
+        AgentConfig, AnthropicProviderConfig, BabataAgentConfig, ChannelConfig, CompatibleApi,
+        Config, CustomProviderConfig, DeepSeekProviderConfig, EmbeddingConfig, HybridMemoryConfig,
+        KimiProviderConfig, LocalEmbeddingConfig, MemoryConfig, MiniMaxProviderConfig,
+        MoonshotProviderConfig, OpenAIProviderConfig, ProviderConfig, RemoteEmbeddingConfig,
+        TelegramChannelConfig, WechatChannelConfig,
     },
     error::BabataError,
 };
@@ -199,16 +197,6 @@ fn prompt_agent_setup(config: &Config) -> BabataResult<Option<AgentConfig>> {
         return Ok(Some(AgentConfig::Babata(agent)));
     }
 
-    if agent_name == CodexAgent::name() {
-        let agent = prompt_codex_agent_setup()?;
-        return Ok(Some(AgentConfig::Codex(agent)));
-    }
-
-    if agent_name == OpencodeAgent::name() {
-        let agent = prompt_opencode_agent_setup()?;
-        return Ok(Some(AgentConfig::Opencode(agent)));
-    }
-
     Err(BabataError::config(format!(
         "Unsupported agent '{}'",
         agent_name
@@ -216,11 +204,7 @@ fn prompt_agent_setup(config: &Config) -> BabataResult<Option<AgentConfig>> {
 }
 
 fn available_agent_names() -> Vec<String> {
-    vec![
-        BabataAgent::name().to_string(),
-        CodexAgent::name().to_string(),
-        OpencodeAgent::name().to_string(),
-    ]
+    vec![BabataAgent::name().to_string()]
 }
 
 fn prompt_babata_agent_setup(config: &Config) -> BabataResult<BabataAgentConfig> {
@@ -262,66 +246,6 @@ fn prompt_babata_agent_setup(config: &Config) -> BabataResult<BabataAgentConfig>
         provider: provider_name.to_string(),
         model,
         memory,
-    })
-}
-
-fn prompt_codex_agent_setup() -> BabataResult<CodexAgentConfig> {
-    let command = prompt_line("Codex command (press Enter for default 'codex')")?;
-    let workspace = prompt_line("Codex workspace directory")?;
-    let model_raw = prompt_line("Codex model (press Enter to use Codex CLI default)")?;
-
-    let command = if command.trim().is_empty() {
-        "codex".to_string()
-    } else {
-        command.trim().to_string()
-    };
-    let workspace = workspace.trim().to_string();
-    if workspace.is_empty() {
-        return Err(BabataError::config(
-            "Codex workspace directory cannot be empty",
-        ));
-    }
-
-    let model = if model_raw.trim().is_empty() {
-        None
-    } else {
-        Some(model_raw.trim().to_string())
-    };
-
-    Ok(CodexAgentConfig {
-        command,
-        workspace,
-        model,
-    })
-}
-
-fn prompt_opencode_agent_setup() -> BabataResult<OpencodeAgentConfig> {
-    let command = prompt_line("Opencode command (press Enter for default 'opencode')")?;
-    let workspace = prompt_line("Opencode workspace directory")?;
-    let model_raw = prompt_line("Opencode model (press Enter to use Opencode CLI default)")?;
-
-    let command = if command.trim().is_empty() {
-        "opencode".to_string()
-    } else {
-        command.trim().to_string()
-    };
-    let workspace = workspace.trim().to_string();
-    if workspace.is_empty() {
-        return Err(BabataError::config(
-            "Opencode workspace directory cannot be empty",
-        ));
-    }
-
-    let model = if model_raw.trim().is_empty() {
-        None
-    } else {
-        Some(model_raw.trim().to_string())
-    };
-
-    Ok(OpencodeAgentConfig {
-        command,
-        workspace,
-        model,
     })
 }
 

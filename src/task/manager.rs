@@ -589,7 +589,7 @@ fn render_prompt_markdown(prompt: &[Content]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{AgentConfig, CodexAgentConfig, Config};
+    use crate::config::{AgentConfig, BabataAgentConfig, Config};
     use std::{collections::HashMap, fs, path::PathBuf};
     use uuid::Uuid;
 
@@ -601,7 +601,7 @@ mod tests {
         TaskRecord {
             task_id,
             description: "test task".to_string(),
-            agent: Some("codex".to_string()),
+            agent: Some("babata".to_string()),
             status: TaskStatus::Running,
             parent_task_id: None,
             root_task_id: task_id,
@@ -614,7 +614,7 @@ mod tests {
         TaskRecord {
             task_id: Uuid::new_v4(),
             description: "test subtask".to_string(),
-            agent: Some("codex".to_string()),
+            agent: Some("babata".to_string()),
             status: TaskStatus::Running,
             parent_task_id: Some(parent_task_id),
             root_task_id,
@@ -627,38 +627,20 @@ mod tests {
         std::env::temp_dir().join(format!("babata-{test_name}-{}", Uuid::new_v4()))
     }
 
-    fn create_dummy_codex_command(dir: &std::path::Path) -> PathBuf {
-        #[cfg(windows)]
-        {
-            let command_path = dir.join("fake-codex.cmd");
-            fs::write(&command_path, "@echo off\r\nexit /b 0\r\n").expect("write fake codex cmd");
-            command_path
-        }
-
-        #[cfg(not(windows))]
-        {
-            let command_path = dir.join("fake-codex");
-            fs::write(&command_path, "#!/bin/sh\nexit 0\n").expect("write fake codex script");
-            let mut permissions = fs::metadata(&command_path)
-                .expect("read fake codex metadata")
-                .permissions();
-            permissions.set_mode(0o755);
-            fs::set_permissions(&command_path, permissions).expect("chmod fake codex script");
-            command_path
-        }
-    }
-
     fn build_test_manager(temp_root: &std::path::Path) -> TaskManager {
-        let workspace = temp_root.join("workspace");
-        fs::create_dir_all(&workspace).expect("create workspace");
+        let _workspace = temp_root.join("workspace");
+        fs::create_dir_all(&_workspace).expect("create workspace");
 
-        let command = create_dummy_codex_command(temp_root);
         let config = Config {
-            providers: Vec::new(),
-            agents: vec![AgentConfig::Codex(CodexAgentConfig {
-                command: command.display().to_string(),
-                workspace: workspace.display().to_string(),
-                model: None,
+            providers: vec![crate::config::ProviderConfig::OpenAI(
+                crate::config::OpenAIProviderConfig {
+                    api_key: "test-key".to_string(),
+                },
+            )],
+            agents: vec![AgentConfig::Babata(BabataAgentConfig {
+                provider: "openai".to_string(),
+                model: "gpt-4".to_string(),
+                memory: "simple".to_string(),
             })],
             channels: Vec::new(),
             memory: Vec::new(),
