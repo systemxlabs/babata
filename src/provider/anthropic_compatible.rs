@@ -1,4 +1,4 @@
-use log::{debug, warn};
+﻿use log::{debug, warn};
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -75,7 +75,7 @@ impl AnthropicCompatibleProvider {
 
         for message in prompts {
             let (role, blocks) = match message {
-                Message::UserPrompt { content } | Message::UserSteering { content } => {
+                Message::UserPrompt { content, .. } | Message::UserSteering { content, .. } => {
                     let mut blocks = Vec::new();
                     for part in content {
                         match self.format_content_block(part) {
@@ -88,10 +88,7 @@ impl AnthropicCompatibleProvider {
                     }
                     ("user", blocks)
                 }
-                Message::AssistantToolCalls {
-                    calls,
-                    reasoning_content: _,
-                } => {
+                Message::AssistantToolCalls { calls, reasoning_content: _, .. } => {
                     let blocks = calls
                         .iter()
                         .map(|call| {
@@ -106,10 +103,7 @@ impl AnthropicCompatibleProvider {
                         .collect();
                     ("assistant", blocks)
                 }
-                Message::AssistantResponse {
-                    content,
-                    reasoning_content: _,
-                } => {
+                Message::AssistantResponse { content, reasoning_content: _, .. } => {
                     let mut blocks = Vec::new();
                     for part in content {
                         match self.format_content_block(part) {
@@ -122,7 +116,7 @@ impl AnthropicCompatibleProvider {
                     }
                     ("assistant", blocks)
                 }
-                Message::ToolResult { call, result } => (
+                Message::ToolResult { call, result, .. } => (
                     "user",
                     vec![AnthropicContentBlock::ToolResult {
                         tool_use_id: call.call_id.clone(),
@@ -243,6 +237,7 @@ impl AnthropicCompatibleProvider {
             };
             return Ok(GenerationResponse {
                 message: Message::AssistantToolCalls {
+                    task_id: String::new(),
                     calls: tool_calls,
                     reasoning_content,
                 },
@@ -255,6 +250,7 @@ impl AnthropicCompatibleProvider {
 
         Ok(GenerationResponse {
             message: Message::AssistantResponse {
+                    task_id: String::new(),
                 content: text_content,
                 reasoning_content: None,
             },
@@ -392,3 +388,6 @@ mod tests {
         );
     }
 }
+
+
+

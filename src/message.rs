@@ -24,20 +24,25 @@ impl std::fmt::Display for Role {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Message {
     UserPrompt {
+        task_id: String,
         content: Vec<Content>,
     },
     UserSteering {
+        task_id: String,
         content: Vec<Content>,
     },
     AssistantResponse {
+        task_id: String,
         content: Vec<Content>,
         reasoning_content: Option<String>,
     },
     AssistantToolCalls {
+        task_id: String,
         calls: Vec<ToolCall>,
         reasoning_content: Option<String>,
     },
     ToolResult {
+        task_id: String,
         call: ToolCall,
         result: String,
     },

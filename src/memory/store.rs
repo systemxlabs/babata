@@ -179,11 +179,13 @@ mod tests {
 
         let messages = vec![
             Message::UserPrompt {
+                task_id: "task-1".to_string(),
                 content: vec![Content::Text {
                     text: "hello".to_string(),
                 }],
             },
             Message::AssistantToolCalls {
+                task_id: "task-2".to_string(),
                 calls: vec![ToolCall {
                     call_id: "call-1".to_string(),
                     tool_name: "read_file".to_string(),
@@ -192,6 +194,7 @@ mod tests {
                 reasoning_content: None,
             },
             Message::ToolResult {
+                task_id: "task-3".to_string(),
                 call: ToolCall {
                     call_id: "call-1".to_string(),
                     tool_name: "read_file".to_string(),
@@ -200,6 +203,7 @@ mod tests {
                 result: "file content".to_string(),
             },
             Message::AssistantResponse {
+                task_id: "task-4".to_string(),
                 content: vec![
                     Content::Text {
                         text: "done".to_string(),
@@ -234,16 +238,19 @@ mod tests {
         let store = MessageStore::open(&db_path).expect("open sqlite message store");
         let messages = vec![
             Message::UserPrompt {
+                task_id: "task-1".to_string(),
                 content: vec![Content::Text {
                     text: "m1".to_string(),
                 }],
             },
             Message::UserPrompt {
+                task_id: "task-2".to_string(),
                 content: vec![Content::Text {
                     text: "m2".to_string(),
                 }],
             },
             Message::UserPrompt {
+                task_id: "task-3".to_string(),
                 content: vec![Content::Text {
                     text: "m3".to_string(),
                 }],
