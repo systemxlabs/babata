@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use super::{ApiError, HttpApp};
 
-/// Handle GET /tasks/{task_id}/files/{*path}
+/// Handle GET /api/tasks/{task_id}/files/{*path}
 /// Returns raw file content for text files, raw binary bytes for binary files
 pub(super) async fn handle(
     State(state): State<HttpApp>,

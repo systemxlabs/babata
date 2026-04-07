@@ -48,7 +48,7 @@ impl Tool for GetTaskTool {
 
         let response = self
             .http_client
-            .get(format!("{DEFAULT_HTTP_BASE_URL}/tasks/{task_id}"))
+            .get(format!("{DEFAULT_HTTP_BASE_URL}/api/tasks/{task_id}"))
             .send()
             .await
             .map_err(|err| {

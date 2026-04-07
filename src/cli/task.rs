@@ -74,7 +74,7 @@ fn run_control(action: &str, task_id: &str) -> BabataResult<()> {
     let runtime = build_runtime()?;
     runtime.block_on(async move {
         let response = Client::new()
-            .post(format!("{DEFAULT_HTTP_BASE_URL}/tasks/{task_id}/{action}"))
+            .post(format!("{DEFAULT_HTTP_BASE_URL}/api/tasks/{task_id}/{action}"))
             .send()
             .await
             .map_err(|err| {
@@ -106,7 +106,7 @@ fn run_relaunch(task_id: &str, reason: &str) -> BabataResult<()> {
     let runtime = build_runtime()?;
     runtime.block_on(async move {
         let response = Client::new()
-            .post(format!("{DEFAULT_HTTP_BASE_URL}/tasks/{task_id}/relaunch"))
+            .post(format!("{DEFAULT_HTTP_BASE_URL}/api/tasks/{task_id}/relaunch"))
             .json(&RelaunchTaskRequest {
                 reason: reason.to_string(),
             })
@@ -163,7 +163,7 @@ fn run_create(
             never_ends,
         };
         let response = Client::new()
-            .post(format!("{DEFAULT_HTTP_BASE_URL}/tasks"))
+            .post(format!("{DEFAULT_HTTP_BASE_URL}/api/tasks"))
             .json(&request)
             .send()
             .await
@@ -195,7 +195,7 @@ fn run_list(status: Option<&str>, limit: Option<usize>, pretty_format: bool) -> 
     let runtime = build_runtime()?;
     runtime.block_on(async move {
         let client = Client::new();
-        let mut request = client.get(format!("{DEFAULT_HTTP_BASE_URL}/tasks"));
+        let mut request = client.get(format!("{DEFAULT_HTTP_BASE_URL}/api/tasks"));
         if let Some(status) = status {
             request = request.query(&[("status", status)]);
         }
@@ -238,7 +238,7 @@ fn run_get(task_id: &str) -> BabataResult<()> {
     let runtime = build_runtime()?;
     runtime.block_on(async move {
         let response = Client::new()
-            .get(format!("{DEFAULT_HTTP_BASE_URL}/tasks/{task_id}"))
+            .get(format!("{DEFAULT_HTTP_BASE_URL}/api/tasks/{task_id}"))
             .send()
             .await
             .map_err(|err| {
@@ -269,7 +269,7 @@ fn run_count(status: Option<&str>) -> BabataResult<()> {
     let runtime = build_runtime()?;
     runtime.block_on(async move {
         let client = Client::new();
-        let mut request = client.get(format!("{DEFAULT_HTTP_BASE_URL}/tasks/count"));
+        let mut request = client.get(format!("{DEFAULT_HTTP_BASE_URL}/api/tasks/count"));
         if let Some(status) = status {
             request = request.query(&[("status", status)]);
         }

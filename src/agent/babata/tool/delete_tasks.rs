@@ -109,7 +109,7 @@ fn parse_args(args: &str) -> BabataResult<Vec<Uuid>> {
 }
 
 async fn delete_task(http_client: &Client, task_id: Uuid) -> BabataResult<String> {
-    let url = format!("{DEFAULT_HTTP_BASE_URL}/tasks/{task_id}");
+    let url = format!("{DEFAULT_HTTP_BASE_URL}/api/tasks/{task_id}");
 
     let response = http_client.delete(&url).send().await.map_err(|err| {
         BabataError::tool(format!("Failed to call delete_task HTTP API: {}", err))

@@ -60,20 +60,20 @@ impl HttpApp {
 
 fn router(task_manager: Arc<TaskManager>) -> Router {
     Router::new()
-        .route("/health", get(health))
-        .route("/tasks/count", get(count_tasks::handle))
-        .route("/tasks", get(list_tasks::handle).post(create_task::handle))
+        .route("/api/health", get(health))
+        .route("/api/tasks/count", get(count_tasks::handle))
+        .route("/api/tasks", get(list_tasks::handle).post(create_task::handle))
         .route(
-            "/tasks/{task_id}",
+            "/api/tasks/{task_id}",
             get(get_task::handle).delete(delete_task::handle),
         )
-        .route("/tasks/{task_id}/files", get(list_task_files::handle))
-        .route("/tasks/{task_id}/files/{*path}", get(get_task_file::handle))
-        .route("/tasks/{task_id}/logs", get(get_task_logs::handle))
-        .route("/tasks/{task_id}/pause", post(control_task::pause))
-        .route("/tasks/{task_id}/resume", post(control_task::resume))
-        .route("/tasks/{task_id}/cancel", post(control_task::cancel))
-        .route("/tasks/{task_id}/relaunch", post(control_task::relaunch))
+        .route("/api/tasks/{task_id}/files", get(list_task_files::handle))
+        .route("/api/tasks/{task_id}/files/{*path}", get(get_task_file::handle))
+        .route("/api/tasks/{task_id}/logs", get(get_task_logs::handle))
+        .route("/api/tasks/{task_id}/pause", post(control_task::pause))
+        .route("/api/tasks/{task_id}/resume", post(control_task::resume))
+        .route("/api/tasks/{task_id}/cancel", post(control_task::cancel))
+        .route("/api/tasks/{task_id}/relaunch", post(control_task::relaunch))
         .with_state(HttpApp { task_manager })
 }
 

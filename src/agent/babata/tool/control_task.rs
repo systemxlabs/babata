@@ -52,7 +52,7 @@ impl Tool for ControlTaskTool {
     async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
         let (task_id, action) = parse_args(args)?;
 
-        let url = format!("{DEFAULT_HTTP_BASE_URL}/tasks/{task_id}/{action}");
+        let url = format!("{DEFAULT_HTTP_BASE_URL}/api/tasks/{task_id}/{action}");
 
         let response = self.http_client.post(url).send().await.map_err(|err| {
             BabataError::tool(format!("Failed to call control_task HTTP API: {}", err))

@@ -23,7 +23,7 @@ pub(crate) struct FileEntry {
     pub(crate) modified: Option<u64>,
 }
 
-/// Handle GET /tasks/{task_id}/files
+/// Handle GET /api/tasks/{task_id}/files
 pub(super) async fn handle(State(state): State<HttpApp>, Path(task_id): Path<String>) -> Response {
     // Parse task ID
     let task_id = match Uuid::parse_str(&task_id) {

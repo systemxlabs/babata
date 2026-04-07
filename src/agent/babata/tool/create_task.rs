@@ -73,7 +73,7 @@ impl Tool for CreateTaskTool {
 
         let response = self
             .http_client
-            .post(format!("{DEFAULT_HTTP_BASE_URL}/tasks"))
+            .post(format!("{DEFAULT_HTTP_BASE_URL}/api/tasks"))
             .json(&request_body)
             .send()
             .await
