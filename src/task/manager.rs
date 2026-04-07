@@ -642,7 +642,8 @@ mod tests {
         };
 
         let store = TaskStore::open(temp_root.join("task.db")).expect("open temp task store");
-        let launcher = TaskLauncher::new(&config, HashMap::new()).expect("build task launcher");
+        let launcher =
+            TaskLauncher::new(&config, &[], HashMap::new()).expect("build task launcher");
         TaskManager::new(store, launcher).expect("build task manager")
     }
 

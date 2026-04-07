@@ -1,3 +1,7 @@
+mod definition;
+
+pub use definition::*;
+
 use std::{collections::HashMap, fmt::Debug, sync::Arc, time::Duration};
 
 use backon::{ExponentialBuilder, Retryable};
@@ -23,21 +27,6 @@ const PROVIDER_RETRY_MIN_DELAY_MS: u64 = 200;
 const PROVIDER_RETRY_MAX_DELAY_SECS: u64 = 2;
 
 #[derive(Debug, Clone)]
-pub struct AgentDefinition {
-    pub name: String,
-    pub description: String,
-    pub provider: String,
-    pub model: String,
-    pub memory: Option<String>,
-    pub allowed_tools: Vec<String>,
-    pub prompt: String,
-}
-
-pub fn load_agent_definitions() -> BabataResult<Vec<AgentDefinition>> {
-    todo!()
-}
-
-#[derive(Debug, Clone)]
 pub struct AgentTask {
     pub task_id: Uuid,
     pub parent_task_id: Option<Uuid>,
@@ -46,10 +35,16 @@ pub struct AgentTask {
 }
 
 pub fn build_agents(
-    _config: &Config,
-    _channels: HashMap<String, Arc<dyn Channel>>,
+    config: &Config,
+    definitions: &[AgentDefinition],
+    channels: HashMap<String, Arc<dyn Channel>>,
 ) -> BabataResult<HashMap<String, Arc<Agent>>> {
-    todo!()
+    let mut agents = HashMap::with_capacity(definitions.len());
+    for def in definitions {
+        let agent = Agent::new(config, def.clone(), channels.clone())?;
+        agents.insert(def.frontmatter.name.clone(), Arc::new(agent));
+    }
+    Ok(agents)
 }
 
 #[derive(Debug)]
@@ -65,7 +60,10 @@ impl Agent {
         definition: AgentDefinition,
         channels: HashMap<String, Arc<dyn Channel>>,
     ) -> BabataResult<Self> {
-        let memory = build_memory(config, definition.memory.as_deref().unwrap_or("simple"))?;
+        let memory = build_memory(
+            config,
+            definition.frontmatter.memory.as_deref().unwrap_or("simple"),
+        )?;
         let tools = build_tools(channels)?;
 
         Ok(Self {
@@ -87,16 +85,17 @@ impl Agent {
 
     pub async fn execute(&self, task: AgentTask) -> BabataResult<()> {
         let config = Config::load()?;
+        let definations = load_agent_definitions()?;
 
-        let provider_config = config.get_provider(&self.definition.provider)?;
+        let provider_config = config.get_provider(&self.definition.frontmatter.provider)?;
         let provider = create_provider(provider_config)?;
-        let model = self.definition.model.clone();
+        let model = self.definition.frontmatter.model.clone();
 
         let skills = load_skills()?;
 
         let tool_specs = self.collect_tool_specs();
 
-        let system_prompts = build_system_prompts(&config, &skills)?;
+        let system_prompts = build_system_prompts(&config, &definations, &skills)?;
 
         let AgentTask {
             task_id,

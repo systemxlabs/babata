@@ -8,7 +8,10 @@ use std::{
 
 use log::{error, info, warn};
 
-use crate::{BabataResult, config::Config, error::BabataError, http::HttpApp, task::TaskStore};
+use crate::{
+    BabataResult, agent::load_agent_definitions, config::Config, error::BabataError, http::HttpApp,
+    task::TaskStore,
+};
 use crate::{
     channel::{build_channels, start_channel_loops},
     message::Content,
@@ -93,9 +96,10 @@ fn run_serve() -> BabataResult<()> {
     info!("Server run babata dir: {}", babata_dir()?.display());
 
     let config = Config::load()?;
+    let agent_definitions = load_agent_definitions()?;
     let channels = build_channels(&config)?;
     let task_store = TaskStore::new()?;
-    let task_launcher = TaskLauncher::new(&config, channels.clone())?;
+    let task_launcher = TaskLauncher::new(&config, &agent_definitions, channels.clone())?;
     let task_manager = Arc::new(TaskManager::new(task_store, task_launcher)?);
 
     let http_app = HttpApp::new(task_manager.clone());
