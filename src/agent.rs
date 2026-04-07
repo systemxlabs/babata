@@ -1,18 +1,20 @@
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{collections::HashMap, fmt::Debug, sync::Arc, time::Duration};
 
 use backon::{ExponentialBuilder, Retryable};
 use futures::future::join_all;
 use log::{info, warn};
+use uuid::Uuid;
 
 use crate::{
     BabataResult,
-    agent::{Agent, AgentTask, babata::build_system_prompts, skill::load_skills},
     channel::Channel,
-    config::{AgentConfig, Config},
+    config::Config,
     error::BabataError,
     memory::{Memory, build_memory},
-    message::Message,
+    message::{Content, Message},
     provider::{GenerationRequest, Provider, create_provider},
+    skill::load_skills,
+    system_prompt::build_system_prompts,
     tool::{Tool, ToolContext, ToolSpec, build_tools},
 };
 
@@ -20,26 +22,57 @@ const PROVIDER_RETRY_MAX_TIMES: usize = 3;
 const PROVIDER_RETRY_MIN_DELAY_MS: u64 = 200;
 const PROVIDER_RETRY_MAX_DELAY_SECS: u64 = 2;
 
+#[derive(Debug, Clone)]
+pub struct AgentDefinition {
+    pub name: String,
+    pub description: String,
+    pub provider: String,
+    pub model: String,
+    pub memory: Option<String>,
+    pub allowed_tools: Vec<String>,
+    pub prompt: String,
+}
+
+pub fn load_agent_definitions() -> BabataResult<Vec<AgentDefinition>> {
+    todo!()
+}
+
+#[derive(Debug, Clone)]
+pub struct AgentTask {
+    pub task_id: Uuid,
+    pub parent_task_id: Option<Uuid>,
+    pub root_task_id: Uuid,
+    pub prompt: Vec<Content>,
+}
+
+pub fn build_agents(
+    _config: &Config,
+    _channels: HashMap<String, Arc<dyn Channel>>,
+) -> BabataResult<HashMap<String, Arc<Agent>>> {
+    todo!()
+}
+
 #[derive(Debug)]
-pub struct BabataAgent {
+pub struct Agent {
+    pub definition: AgentDefinition,
     pub memory: Box<dyn Memory>,
     pub tools: HashMap<String, Arc<dyn Tool>>,
 }
 
-impl BabataAgent {
-    pub fn new(config: &Config, channels: HashMap<String, Arc<dyn Channel>>) -> BabataResult<Self> {
-        let agent_config = config.get_agent(BabataAgent::name())?;
-        #[allow(irrefutable_let_patterns)]
-        let AgentConfig::Babata(babata_config) = agent_config else {
-            return Err(BabataError::config(
-                "Agent config for 'babata' must be of type 'BabataAgentConfig'",
-            ));
-        };
-
-        let memory = build_memory(config, &babata_config.memory)?;
+impl Agent {
+    pub fn new(
+        config: &Config,
+        definition: AgentDefinition,
+        channels: HashMap<String, Arc<dyn Channel>>,
+    ) -> BabataResult<Self> {
+        let memory = build_memory(config, definition.memory.as_deref().unwrap_or("simple"))?;
         let tools = build_tools(channels)?;
 
-        Ok(Self { memory, tools })
+        Ok(Self {
+            definition,
+            memory,
+            tools,
+        })
     }
 
     fn collect_tool_specs(&self) -> Vec<ToolSpec> {
@@ -51,31 +84,13 @@ impl BabataAgent {
         specs.sort_by(|a, b| a.name.cmp(&b.name));
         specs
     }
-}
 
-#[async_trait::async_trait]
-impl Agent for BabataAgent {
-    fn name() -> &'static str {
-        "babata"
-    }
-
-    fn description() -> &'static str {
-        "Use for general tasks, task orchestration, task management, and simple scripting"
-    }
-
-    async fn execute(&self, task: AgentTask) -> BabataResult<()> {
+    pub async fn execute(&self, task: AgentTask) -> BabataResult<()> {
         let config = Config::load()?;
-        let agent_config = config.get_agent(BabataAgent::name())?;
-        #[allow(irrefutable_let_patterns)]
-        let AgentConfig::Babata(babata_config) = agent_config else {
-            return Err(BabataError::config(
-                "Agent config for 'babata' must be of type 'BabataAgentConfig'",
-            ));
-        };
 
-        let provider_config = config.get_provider(&babata_config.provider)?;
+        let provider_config = config.get_provider(&self.definition.provider)?;
         let provider = create_provider(provider_config)?;
-        let model = babata_config.model.clone();
+        let model = self.definition.model.clone();
 
         let skills = load_skills()?;
 
@@ -83,7 +98,7 @@ impl Agent for BabataAgent {
 
         let system_prompts = build_system_prompts(&config, &skills)?;
 
-        let crate::agent::AgentTask {
+        let AgentTask {
             task_id,
             parent_task_id,
             root_task_id,

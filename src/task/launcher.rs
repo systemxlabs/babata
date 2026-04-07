@@ -5,7 +5,7 @@ use tokio::sync::mpsc;
 
 use crate::{
     BabataResult,
-    agent::{Agent, AgentTask, babata::BabataAgent, build_agents},
+    agent::{Agent, AgentTask, build_agents},
     channel::Channel,
     config::Config,
     error::BabataError,
@@ -15,13 +15,14 @@ use crate::{
 
 #[derive(Debug)]
 pub struct TaskLauncher {
-    agents: HashMap<String, Arc<dyn Agent>>,
+    default_agent: Arc<Agent>,
+    agents: HashMap<String, Arc<Agent>>,
 }
 
 impl TaskLauncher {
     pub fn new(config: &Config, channels: HashMap<String, Arc<dyn Channel>>) -> BabataResult<Self> {
-        let agents = build_agents(config, channels)?;
-        Ok(Self { agents })
+        let _agents = build_agents(config, channels)?;
+        todo!()
     }
 
     pub fn launch(
@@ -59,7 +60,7 @@ impl TaskLauncher {
         }
         let agent_name = match task.agent.as_deref() {
             Some(agent_name) => agent_name,
-            None => BabataAgent::name(),
+            None => &self.default_agent.definition.name,
         };
 
         let agent = self

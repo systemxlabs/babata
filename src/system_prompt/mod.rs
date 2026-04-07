@@ -1,15 +1,37 @@
-use chrono::Local;
-
 use crate::{
     BabataResult,
-    agent::{Agent, babata::BabataAgent, skill::Skill},
+    agent::AgentDefinition,
     channel::load_wechat_latest_context_token,
-    config::{AgentConfig, ChannelConfig, Config},
+    config::{ChannelConfig, Config},
     error::BabataError,
+    skill::Skill,
     utils::{babata_dir, resolve_home_dir},
 };
+use chrono::Local;
 
+const SOUL_PROMPT: &str = include_str!("SOUL.md");
 pub const BABATA_SYSTEM_DESCRIPTION: &str = include_str!("SYSTEM.md");
+
+pub fn build_system_prompts(config: &Config, skills: &[Skill]) -> BabataResult<Vec<String>> {
+    let mut sections = vec![
+        SOUL_PROMPT.to_string(),
+        BABATA_SYSTEM_DESCRIPTION.to_string(),
+        build_runtime_prompt()?,
+        // TODO
+        // build_agents_prompt(config),
+        build_channels_prompt(config)?,
+    ];
+
+    if let Some(workspace_prompt) = load_workspace_prompt()? {
+        sections.push(workspace_prompt);
+    }
+
+    if let Some(skills_prompt) = build_skills_prompt(skills) {
+        sections.push(skills_prompt);
+    }
+
+    Ok(sections)
+}
 
 pub fn build_runtime_prompt() -> BabataResult<String> {
     let now = Local::now();
@@ -30,13 +52,10 @@ pub fn build_runtime_prompt() -> BabataResult<String> {
     ))
 }
 
-pub fn build_agents_prompt(config: &Config) -> String {
-    let mut agent_sections = Vec::with_capacity(config.agents.len());
-    for agent in &config.agents {
-        let description = match agent {
-            AgentConfig::Babata(_) => BabataAgent::description(),
-        };
-        agent_sections.push(format!("- `{}`: {}", agent.name(), description,));
+pub fn build_agents_prompt(agent_definitions: &[AgentDefinition]) -> String {
+    let mut agent_sections = Vec::with_capacity(agent_definitions.len());
+    for def in agent_definitions {
+        agent_sections.push(format!("- `{}`: {}", def.name, def.description,));
     }
 
     format!(
@@ -124,15 +143,10 @@ pub fn load_workspace_prompt() -> BabataResult<Option<String>> {
 mod tests {
     use std::path::PathBuf;
 
-    use super::{
-        build_agents_prompt, build_channels_prompt, build_runtime_prompt, build_skills_prompt,
-    };
+    use super::{build_channels_prompt, build_runtime_prompt, build_skills_prompt};
     use crate::{
-        agent::skill::{Skill, SkillFrontmatter},
-        config::{
-            AgentConfig, BabataAgentConfig, ChannelConfig, Config, TelegramChannelConfig,
-            WechatChannelConfig,
-        },
+        config::{ChannelConfig, Config, TelegramChannelConfig, WechatChannelConfig},
+        skill::{Skill, SkillFrontmatter},
     };
 
     #[test]
@@ -149,30 +163,9 @@ mod tests {
     }
 
     #[test]
-    fn build_agents_prompt_includes_agent_descriptions_and_config() {
-        let config = Config {
-            providers: Vec::new(),
-            agents: vec![AgentConfig::Babata(BabataAgentConfig {
-                provider: "openai".to_string(),
-                model: "gpt-4.1".to_string(),
-                memory: "simple".to_string(),
-            })],
-            channels: Vec::new(),
-            memory: Vec::new(),
-        };
-
-        let prompt = build_agents_prompt(&config);
-
-        assert!(prompt.contains("Configured agents:"));
-        assert!(prompt.contains("`babata`"));
-        assert!(prompt.contains("general tasks, task orchestration"));
-    }
-
-    #[test]
     fn build_channels_prompt_includes_channel_capabilities() {
         let config = Config {
             providers: Vec::new(),
-            agents: Vec::new(),
             channels: vec![
                 ChannelConfig::Telegram(TelegramChannelConfig {
                     bot_token: "token".to_string(),
@@ -200,7 +193,6 @@ mod tests {
     fn build_channels_prompt_returns_none_config_when_empty() {
         let config = Config {
             providers: Vec::new(),
-            agents: Vec::new(),
             channels: Vec::new(),
             memory: Vec::new(),
         };

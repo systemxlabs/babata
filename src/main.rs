@@ -23,13 +23,6 @@ fn main() {
             babata::cli::ChannelAction::Delete { name } => babata::cli::channel::delete(&name),
             babata::cli::ChannelAction::List => babata::cli::channel::list(),
         },
-        babata::cli::Command::Agent { action } => match action {
-            babata::cli::AgentAction::Add { agent_config_json } => {
-                babata::cli::agent::add(&agent_config_json)
-            }
-            babata::cli::AgentAction::Delete { name } => babata::cli::agent::delete(&name),
-            babata::cli::AgentAction::List => babata::cli::agent::list(),
-        },
         babata::cli::Command::Provider { action } => match action {
             babata::cli::ProviderAction::Add {
                 provider_config_json,

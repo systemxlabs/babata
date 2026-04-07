@@ -18,11 +18,6 @@ pub enum Command {
         #[command(subcommand)]
         action: ChannelAction,
     },
-    #[command(about = "Agent config management (add/delete/list)")]
-    Agent {
-        #[command(subcommand)]
-        action: AgentAction,
-    },
     #[command(about = "Provider config management (add/delete/list)")]
     Provider {
         #[command(subcommand)]
@@ -96,25 +91,6 @@ pub enum ChannelAction {
         name: String,
     },
     #[command(about = "List all channel configs (one JSON per line)")]
-    List,
-}
-
-#[derive(Subcommand, Debug)]
-pub enum AgentAction {
-    #[command(about = "Add or update agent config (JSON)")]
-    Add {
-        #[arg(
-            value_name = "AGENT_CONFIG_JSON",
-            help = "Agent config JSON, e.g. {\"name\":\"main\",\"provider\":\"openai\",\"model\":\"gpt-4.1\"}"
-        )]
-        agent_config_json: String,
-    },
-    #[command(about = "Delete an agent by name (main agent cannot be deleted)")]
-    Delete {
-        #[arg(value_name = "AGENT_NAME", help = "Agent name (must not be main)")]
-        name: String,
-    },
-    #[command(about = "List all agent configs (one JSON per line)")]
     List,
 }
 

@@ -2,18 +2,17 @@ use std::path::Path;
 
 use crate::{
     BabataResult,
-    agent::{Agent, babata::BabataAgent},
     channel::{Channel, TelegramChannel, WechatChannel},
     config::{
-        AgentConfig, AnthropicProviderConfig, BabataAgentConfig, ChannelConfig, CompatibleApi,
-        Config, CustomProviderConfig, DeepSeekProviderConfig, EmbeddingConfig, HybridMemoryConfig,
-        KimiProviderConfig, LocalEmbeddingConfig, MemoryConfig, MiniMaxProviderConfig,
-        MoonshotProviderConfig, OpenAIProviderConfig, ProviderConfig, RemoteEmbeddingConfig,
-        TelegramChannelConfig, WechatChannelConfig,
+        AnthropicProviderConfig, ChannelConfig, CompatibleApi, Config, CustomProviderConfig,
+        DeepSeekProviderConfig, EmbeddingConfig, HybridMemoryConfig, KimiProviderConfig,
+        LocalEmbeddingConfig, MemoryConfig, MiniMaxProviderConfig, MoonshotProviderConfig,
+        OpenAIProviderConfig, ProviderConfig, RemoteEmbeddingConfig, TelegramChannelConfig,
+        WechatChannelConfig,
     },
     error::BabataError,
     provider::{
-        AnthropicProvider, CustomProvider, DeepSeekProvider, KimiProvider, MiniMaxProvider, Model,
+        AnthropicProvider, CustomProvider, DeepSeekProvider, KimiProvider, MiniMaxProvider,
         MoonshotProvider, OpenAIProvider, Provider,
     },
 };
@@ -41,10 +40,6 @@ fn run_onboard() -> BabataResult<()> {
 
     if let Some(memory_config) = prompt_memory_setup()? {
         config.upsert_memory(memory_config);
-    }
-
-    if let Some(agent_config) = prompt_agent_setup(&config)? {
-        config.upsert_agent(agent_config);
     }
 
     if let Some(channel_config) = prompt_channel_setup()? {
@@ -160,175 +155,6 @@ fn prompt_custom_compatible_api() -> BabataResult<CompatibleApi> {
     Err(BabataError::config(
         "Invalid compatible API, expected 'openai' or 'anthropic'",
     ))
-}
-
-fn prompt_agent_setup(config: &Config) -> BabataResult<Option<AgentConfig>> {
-    println!("Select agent:");
-    let agents = available_agent_names();
-    for (idx, agent) in agents.iter().enumerate() {
-        println!("{}. {}", idx + 1, agent);
-    }
-    println!("{}. skip", agents.len() + 1);
-
-    let selection = prompt_line(&format!(
-        "Choice (1-{}, or press Enter to skip)",
-        agents.len() + 1
-    ))?;
-    let selection = selection.trim();
-    if selection.is_empty() || selection.eq_ignore_ascii_case("skip") {
-        return Ok(None);
-    }
-
-    let idx: usize = selection
-        .parse()
-        .map_err(|_| BabataError::config("Invalid agent selection"))?;
-    if idx == agents.len() + 1 {
-        return Ok(None);
-    }
-
-    let Some(agent_name) = agents.get(idx.saturating_sub(1)) else {
-        return Err(BabataError::config("Invalid agent selection"));
-    };
-
-    if agent_name == BabataAgent::name() {
-        let agent = prompt_babata_agent_setup(config)?;
-        return Ok(Some(AgentConfig::Babata(agent)));
-    }
-
-    Err(BabataError::config(format!(
-        "Unsupported agent '{}'",
-        agent_name
-    )))
-}
-
-fn available_agent_names() -> Vec<String> {
-    vec![BabataAgent::name().to_string()]
-}
-
-fn prompt_babata_agent_setup(config: &Config) -> BabataResult<BabataAgentConfig> {
-    if config.providers.is_empty() {
-        return Err(BabataError::config(
-            "No providers configured; cannot set main agent",
-        ));
-    }
-
-    println!("Select provider for main agent:");
-    let mut provider_names: Vec<String> = config
-        .providers
-        .iter()
-        .map(|provider| provider.name().to_string())
-        .collect();
-    provider_names.sort();
-    for (idx, name) in provider_names.iter().enumerate() {
-        println!("{}. {}", idx + 1, name);
-    }
-    let choice = prompt_line("Choice")?;
-    let idx: usize = choice
-        .trim()
-        .parse()
-        .map_err(|_| BabataError::config("Invalid provider choice"))?;
-    let Some(provider_name) = provider_names.get(idx.saturating_sub(1)) else {
-        return Err(BabataError::config("Invalid provider choice"));
-    };
-
-    let provider_config = config
-        .providers
-        .iter()
-        .find(|provider| provider.matches_name(provider_name))
-        .ok_or_else(|| {
-            BabataError::config(format!("Provider '{}' not found in config", provider_name))
-        })?;
-    let model = prompt_model_setup(provider_config)?;
-    let memory = prompt_agent_memory_setup(config)?;
-    Ok(BabataAgentConfig {
-        provider: provider_name.to_string(),
-        model,
-        memory,
-    })
-}
-
-fn prompt_model_setup(provider_config: &ProviderConfig) -> BabataResult<String> {
-    let supported_models = supported_models_for_provider(provider_config);
-    if supported_models.is_empty() {
-        let model = prompt_line("Model name (free form)")?;
-        if model.trim().is_empty() {
-            return Err(BabataError::config("Model name cannot be empty"));
-        }
-        return Ok(model);
-    }
-
-    println!("Select model for main agent:");
-    for (idx, model) in supported_models.iter().enumerate() {
-        println!(
-            "{}. {} (context: {} tokens)",
-            idx + 1,
-            model.name,
-            model.context_length
-        );
-    }
-
-    let choice = prompt_line(&format!("Choice (1-{})", supported_models.len()))?;
-    let idx: usize = choice
-        .trim()
-        .parse()
-        .map_err(|_| BabataError::config("Invalid model choice"))?;
-    let Some(model) = supported_models.get(idx.saturating_sub(1)) else {
-        return Err(BabataError::config("Invalid model choice"));
-    };
-
-    Ok(model.name.to_string())
-}
-
-fn prompt_agent_memory_setup(config: &Config) -> BabataResult<String> {
-    let memory_names: Vec<&str> = config
-        .memory
-        .iter()
-        .map(|m| match m {
-            MemoryConfig::Simple => "simple",
-            MemoryConfig::Hybrid(_) => "hybrid",
-        })
-        .collect();
-
-    if memory_names.is_empty() {
-        println!("No memory configured, using default: simple");
-        return Ok("simple".to_string());
-    }
-
-    println!("Select memory for agent:");
-    for (idx, name) in memory_names.iter().enumerate() {
-        println!("{}. {}", idx + 1, name);
-    }
-
-    let choice = prompt_line(&format!(
-        "Choice (1-{}, or press Enter for simple)",
-        memory_names.len()
-    ))?;
-    let choice = choice.trim();
-
-    if choice.is_empty() {
-        return Ok("simple".to_string());
-    }
-
-    let idx: usize = choice
-        .parse()
-        .map_err(|_| BabataError::config("Invalid memory choice"))?;
-    let Some(name) = memory_names.get(idx.saturating_sub(1)) else {
-        return Err(BabataError::config("Invalid memory choice"));
-    };
-
-    Ok(name.to_string())
-}
-
-fn supported_models_for_provider(provider_config: &ProviderConfig) -> &'static [Model] {
-    match provider_config {
-        ProviderConfig::OpenAI(_) => OpenAIProvider::supported_models(),
-        ProviderConfig::Kimi(_) => KimiProvider::supported_models(),
-        ProviderConfig::Moonshot(_) => MoonshotProvider::supported_models(),
-        ProviderConfig::DeepSeek(_) => DeepSeekProvider::supported_models(),
-        ProviderConfig::MiniMax(_) => MiniMaxProvider::supported_models(),
-        ProviderConfig::Anthropic(_) => AnthropicProvider::supported_models(),
-        ProviderConfig::Custom(_) => CustomProvider::supported_models(),
-    }
 }
 
 fn build_provider_config(provider_name: &str, api_key: String) -> BabataResult<ProviderConfig> {

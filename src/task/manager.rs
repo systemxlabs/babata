@@ -589,7 +589,7 @@ fn render_prompt_markdown(prompt: &[Content]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{AgentConfig, BabataAgentConfig, Config};
+    use crate::config::Config;
     use std::{collections::HashMap, fs, path::PathBuf};
     use uuid::Uuid;
 
@@ -637,11 +637,6 @@ mod tests {
                     api_key: "test-key".to_string(),
                 },
             )],
-            agents: vec![AgentConfig::Babata(BabataAgentConfig {
-                provider: "openai".to_string(),
-                model: "gpt-4".to_string(),
-                memory: "simple".to_string(),
-            })],
             channels: Vec::new(),
             memory: Vec::new(),
         };
