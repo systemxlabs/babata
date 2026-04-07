@@ -168,73 +168,64 @@ impl MessageStore {
         })
     }
 
-    /// Convert Message to database fields
-    fn message_to_record_fields(
-        message: &Message,
-    ) -> BabataResult<(
-        MessageType,
-        Option<Vec<Content>>,
-        Option<String>,
-        Option<Vec<ToolCall>>,
-        Option<String>,
-        String,
-    )> {
-        let created_at = message.created_at().to_rfc3339();
+    /// Convert Message to MessageRecord
+    fn message_to_record(message: &Message) -> BabataResult<MessageRecord> {
+        let created_at = message.created_at().clone();
 
-        let fields = match message {
-            Message::UserPrompt { content: c, .. } => (
-                MessageType::UserPrompt,
-                Some(c.clone()),
-                None,
-                None,
-                None,
+        let record = match message {
+            Message::UserPrompt { content: c, .. } => MessageRecord {
+                message_type: MessageType::UserPrompt,
+                content: Some(c.clone()),
+                reasoning_content: None,
+                tool_calls: None,
+                result: None,
                 created_at,
-            ),
-            Message::UserSteering { content: c, .. } => (
-                MessageType::UserSteering,
-                Some(c.clone()),
-                None,
-                None,
-                None,
+            },
+            Message::UserSteering { content: c, .. } => MessageRecord {
+                message_type: MessageType::UserSteering,
+                content: Some(c.clone()),
+                reasoning_content: None,
+                tool_calls: None,
+                result: None,
                 created_at,
-            ),
+            },
             Message::AssistantResponse {
                 content: c,
                 reasoning_content: r,
                 ..
-            } => (
-                MessageType::AssistantResponse,
-                Some(c.clone()),
-                r.clone(),
-                None,
-                None,
+            } => MessageRecord {
+                message_type: MessageType::AssistantResponse,
+                content: Some(c.clone()),
+                reasoning_content: r.clone(),
+                tool_calls: None,
+                result: None,
                 created_at,
-            ),
+            },
             Message::AssistantToolCalls {
                 calls,
                 reasoning_content: r,
                 ..
-            } => (
-                MessageType::AssistantToolCalls,
-                None,
-                r.clone(),
-                Some(calls.clone()),
-                None,
+            } => MessageRecord {
+                message_type: MessageType::AssistantToolCalls,
+                content: None,
+                reasoning_content: r.clone(),
+                tool_calls: Some(calls.clone()),
+                result: None,
                 created_at,
-            ),
+            },
             Message::ToolResult {
                 call, result: res, ..
-            } => (
-                MessageType::ToolResult,
-                None,
-                None,
-                Some(vec![call.clone()]),
-                Some(res.clone()),
+            } => MessageRecord {
+                message_type: MessageType::ToolResult,
+                content: None,
+                reasoning_content: None,
+                tool_calls: Some(vec![call.clone()]),
+                result: Some(res.clone()),
                 created_at,
-            ),
+            },
         };
 
-        Ok(fields)
+        Ok(record)
     }
 
     /// Convert database record to Message
@@ -310,24 +301,19 @@ impl MessageStore {
             })?;
 
         for message in messages {
-            let (
-                message_type,
-                content,
-                reasoning_content,
-                tool_calls,
-                result,
-                created_at,
-            ) = Self::message_to_record_fields(message)?;
-            let message_type_str = serde_json::to_string(&message_type).map_err(|e| {
+            let record = Self::message_to_record(message)?;
+            let message_type_str = serde_json::to_string(&record.message_type).map_err(|e| {
                 BabataError::memory(format!("Failed to serialize message type: {}", e))
             })?;
             let message_type_str = message_type_str.trim_matches('"').to_string();
 
-            let content_json = content
+            let content_json = record
+                .content
                 .as_ref()
                 .map(|c| serde_json::to_string(c).map_err(|e| BabataError::memory(format!("Failed to serialize content: {}", e))))
                 .transpose()?;
-            let tool_calls_json = tool_calls
+            let tool_calls_json = record
+                .tool_calls
                 .as_ref()
                 .map(|c| serde_json::to_string(c).map_err(|e| BabataError::memory(format!("Failed to serialize tool calls: {}", e))))
                 .transpose()?;
@@ -335,10 +321,10 @@ impl MessageStore {
             stmt.execute(params![
                 message_type_str,
                 content_json,
-                reasoning_content,
+                record.reasoning_content,
                 tool_calls_json,
-                result,
-                created_at
+                record.result,
+                record.created_at.to_rfc3339()
             ])
             .map_err(|err| BabataError::memory(format!("Failed to insert message row: {}", err)))?;
         }
