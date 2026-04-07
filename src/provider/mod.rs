@@ -22,9 +22,9 @@ use std::{collections::HashMap, fmt::Debug, sync::Arc};
 
 use crate::{
     BabataResult,
-    agent::babata::ToolSpec,
     config::{Config, ProviderConfig},
     message::Message,
+    tool::ToolSpec,
 };
 
 #[async_trait::async_trait]

@@ -5,8 +5,8 @@ use serde_json::{Value, json};
 
 use crate::{
     BabataResult,
-    agent::babata::{Tool, ToolContext, ToolSpec},
     error::BabataError,
+    tool::{Tool, ToolContext, ToolSpec},
 };
 
 #[derive(Debug, Clone)]

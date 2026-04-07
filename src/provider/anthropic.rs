@@ -1,40 +1,47 @@
 use crate::{
     BabataResult,
-    agent::babata::{
+    provider::{
         GenerationRequest, GenerationResponse, InteractionRequest, InteractionResponse, Model,
         Provider,
     },
 };
 
-use super::OpenAICompatibleProvider;
+use super::AnthropicCompatibleProvider;
 
 #[derive(Debug)]
-pub struct KimiProvider {
-    inner: OpenAICompatibleProvider,
+pub struct AnthropicProvider {
+    inner: AnthropicCompatibleProvider,
 }
 
-const KIMI_SUPPORTED_MODELS: &[Model] = &[Model {
-    provider: "kimi",
-    name: "kimi-k2.5",
-    context_length: 128_000,
-}];
+const ANTHROPIC_SUPPORTED_MODELS: &[Model] = &[
+    Model {
+        provider: "anthropic",
+        name: "claude-opus-4-6",
+        context_length: 200_000,
+    },
+    Model {
+        provider: "anthropic",
+        name: "claude-sonnet-4-6",
+        context_length: 200_000,
+    },
+];
 
-impl KimiProvider {
+impl AnthropicProvider {
     pub fn new(api_key: &str) -> Self {
-        let inner = OpenAICompatibleProvider::new(api_key, "https://api.kimi.com/coding/v1")
-            .with_user_agent(Some("KimiCLI/1.6".to_string()));
-        Self { inner }
+        Self {
+            inner: AnthropicCompatibleProvider::new(api_key, "https://api.anthropic.com"),
+        }
     }
 }
 
 #[async_trait::async_trait]
-impl Provider for KimiProvider {
+impl Provider for AnthropicProvider {
     fn name() -> &'static str {
-        "kimi"
+        "anthropic"
     }
 
     fn supported_models() -> &'static [Model] {
-        KIMI_SUPPORTED_MODELS
+        ANTHROPIC_SUPPORTED_MODELS
     }
 
     async fn generate<'a>(

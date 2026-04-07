@@ -4,8 +4,8 @@ use similar::{ChangeTag, TextDiff};
 
 use crate::{
     BabataResult,
-    agent::babata::tool::{Tool, ToolContext, ToolSpec},
     error::BabataError,
+    tool::{Tool, ToolContext, ToolSpec},
 };
 
 #[derive(Debug, Clone)]

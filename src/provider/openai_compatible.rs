@@ -5,12 +5,10 @@ use serde_json::Value;
 
 use crate::{
     BabataResult,
-    agent::babata::ToolSpec,
-    agent::babata::{
-        GenerationRequest, GenerationResponse, InteractionRequest, InteractionResponse,
-    },
     error::BabataError,
     message::{Content, MediaType, Message, ToolCall},
+    provider::{GenerationRequest, GenerationResponse, InteractionRequest, InteractionResponse},
+    tool::ToolSpec,
 };
 
 #[derive(Debug)]
@@ -443,8 +441,8 @@ mod tests {
     use serde_json::json;
 
     use crate::{
-        agent::babata::ToolSpec,
         message::{Content, MediaType, Message},
+        tool::ToolSpec,
     };
 
     use super::OpenAICompatibleProvider;

@@ -2,11 +2,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     BabataResult,
-    agent::babata::{
+    error::BabataError,
+    provider::{
         AnthropicProvider, CustomProvider, DeepSeekProvider, KimiProvider, MiniMaxProvider,
         MoonshotProvider, OpenAIProvider, Provider,
     },
-    error::BabataError,
 };
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]

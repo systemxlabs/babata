@@ -5,12 +5,10 @@ use serde_json::Value;
 
 use crate::{
     BabataResult,
-    agent::babata::ToolSpec,
-    agent::babata::{
-        GenerationRequest, GenerationResponse, InteractionRequest, InteractionResponse,
-    },
     error::BabataError,
     message::{Content, Message, ToolCall},
+    provider::{GenerationRequest, GenerationResponse, InteractionRequest, InteractionResponse},
+    tool::ToolSpec,
 };
 
 const ANTHROPIC_API_VERSION: &str = "2023-06-01";
@@ -368,8 +366,8 @@ struct AnthropicResponse {
 mod tests {
     use super::*;
     use crate::{
-        agent::babata::ToolSpec,
         message::{Content, Message},
+        tool::ToolSpec,
     };
     use serde_json::json;
 
@@ -414,7 +412,7 @@ mod tests {
             }],
         }];
 
-        let request = crate::agent::babata::GenerationRequest {
+        let request = crate::provider::GenerationRequest {
             system_prompts: &[],
             model: "claude-opus-4-6",
             prompts: &messages,
@@ -471,7 +469,7 @@ mod tests {
             }],
         }];
 
-        let request = crate::agent::babata::provider::GenerationRequest {
+        let request = crate::provider::GenerationRequest {
             model: "claude-opus-4-6",
             system_prompts: &[],
             prompts: &messages,
@@ -514,7 +512,7 @@ mod tests {
         });
 
         // Second request: get final response with tool results
-        let request = crate::agent::babata::GenerationRequest {
+        let request = crate::provider::GenerationRequest {
             model: "claude-opus-4-6",
             system_prompts: &[],
             prompts: &messages,

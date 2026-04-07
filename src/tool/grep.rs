@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 
 use crate::{
     BabataResult,
-    agent::babata::{Tool, ToolContext, ToolSpec},
     error::BabataError,
+    tool::{Tool, ToolContext, ToolSpec},
 };
 
 // skip these dirs to avoid noise

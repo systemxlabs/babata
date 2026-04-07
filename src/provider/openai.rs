@@ -1,6 +1,6 @@
 use crate::{
     BabataResult,
-    agent::babata::{
+    provider::{
         GenerationRequest, GenerationResponse, InteractionRequest, InteractionResponse, Model,
         Provider,
     },
@@ -9,30 +9,33 @@ use crate::{
 use super::OpenAICompatibleProvider;
 
 #[derive(Debug)]
-pub struct MiniMaxProvider {
+pub struct OpenAIProvider {
     inner: OpenAICompatibleProvider,
 }
 
-const MINIMAX_SUPPORTED_MODELS: &[Model] = &[];
+const OPENAI_SUPPORTED_MODELS: &[Model] = &[Model {
+    provider: "openai",
+    name: "gpt-4.1",
+    context_length: 1_000_000,
+}];
 
-impl MiniMaxProvider {
+impl OpenAIProvider {
     pub fn new(api_key: &str) -> Self {
         Self {
-            inner: OpenAICompatibleProvider::new(api_key, "https://api.minimaxi.com/v1")
-                .with_user_agent(None)
-                .with_combined_system_prompt(true),
+            inner: OpenAICompatibleProvider::new(api_key, "https://api.openai.com/v1")
+                .with_user_agent(None),
         }
     }
 }
 
 #[async_trait::async_trait]
-impl Provider for MiniMaxProvider {
+impl Provider for OpenAIProvider {
     fn name() -> &'static str {
-        "minimax"
+        "openai"
     }
 
     fn supported_models() -> &'static [Model] {
-        MINIMAX_SUPPORTED_MODELS
+        OPENAI_SUPPORTED_MODELS
     }
 
     async fn generate<'a>(

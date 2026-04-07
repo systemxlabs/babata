@@ -3,10 +3,10 @@ use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     BabataResult,
-    agent::babata::{Tool, ToolContext, ToolSpec},
     channel::Channel,
     error::BabataError,
     message::Content,
+    tool::{Tool, ToolContext, ToolSpec},
 };
 
 #[derive(Debug, Clone)]

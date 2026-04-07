@@ -1,6 +1,6 @@
 use crate::{
     BabataResult,
-    agent::babata::{
+    provider::{
         GenerationRequest, GenerationResponse, InteractionRequest, InteractionResponse, Model,
         Provider,
     },
@@ -9,39 +9,30 @@ use crate::{
 use super::OpenAICompatibleProvider;
 
 #[derive(Debug)]
-pub struct DeepSeekProvider {
+pub struct MiniMaxProvider {
     inner: OpenAICompatibleProvider,
 }
 
-const DEEPSEEK_SUPPORTED_MODELS: &[Model] = &[
-    Model {
-        provider: "deepseek",
-        name: "deepseek-chat",
-        context_length: 64_000,
-    },
-    Model {
-        provider: "deepseek",
-        name: "deepseek-reasoner",
-        context_length: 64_000,
-    },
-];
+const MINIMAX_SUPPORTED_MODELS: &[Model] = &[];
 
-impl DeepSeekProvider {
+impl MiniMaxProvider {
     pub fn new(api_key: &str) -> Self {
-        let inner = OpenAICompatibleProvider::new(api_key, "https://api.deepseek.com/v1")
-            .with_user_agent(None);
-        Self { inner }
+        Self {
+            inner: OpenAICompatibleProvider::new(api_key, "https://api.minimaxi.com/v1")
+                .with_user_agent(None)
+                .with_combined_system_prompt(true),
+        }
     }
 }
 
 #[async_trait::async_trait]
-impl Provider for DeepSeekProvider {
+impl Provider for MiniMaxProvider {
     fn name() -> &'static str {
-        "deepseek"
+        "minimax"
     }
 
     fn supported_models() -> &'static [Model] {
-        DEEPSEEK_SUPPORTED_MODELS
+        MINIMAX_SUPPORTED_MODELS
     }
 
     async fn generate<'a>(

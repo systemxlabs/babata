@@ -1,10 +1,10 @@
 use crate::{
     BabataResult,
-    agent::babata::{
+    config::{CompatibleApi, CustomProviderConfig},
+    provider::{
         AnthropicCompatibleProvider, GenerationRequest, GenerationResponse, InteractionRequest,
         InteractionResponse, Model, OpenAICompatibleProvider, Provider,
     },
-    config::{CompatibleApi, CustomProviderConfig},
 };
 
 #[derive(Debug)]

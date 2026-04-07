@@ -3,8 +3,8 @@ use std::path::PathBuf;
 
 use crate::{
     BabataResult,
-    agent::babata::{Tool, ToolContext, ToolSpec},
     error::BabataError,
+    tool::{Tool, ToolContext, ToolSpec},
 };
 
 const MAX_RESULTS: usize = 100;

@@ -3,11 +3,11 @@ use serde_json::{Value, json};
 
 use crate::{
     BabataResult,
-    agent::babata::{Tool, ToolContext, ToolSpec},
     error::BabataError,
     http::DEFAULT_HTTP_BASE_URL,
     message::Content,
     task::CreateTaskRequest,
+    tool::{Tool, ToolContext, ToolSpec},
 };
 
 #[derive(Debug)]
@@ -140,7 +140,7 @@ fn parse_never_ends(args: &Value) -> BabataResult<bool> {
 #[cfg(test)]
 mod tests {
     use super::{parse_never_ends, parse_parent_task_id};
-    use crate::agent::babata::ToolContext;
+    use crate::tool::ToolContext;
     use serde_json::json;
     use uuid::Uuid;
 

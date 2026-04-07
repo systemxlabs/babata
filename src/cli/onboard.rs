@@ -2,13 +2,7 @@ use std::path::Path;
 
 use crate::{
     BabataResult,
-    agent::{
-        Agent,
-        babata::{
-            AnthropicProvider, BabataAgent, CustomProvider, DeepSeekProvider, KimiProvider,
-            MiniMaxProvider, Model, MoonshotProvider, OpenAIProvider, Provider,
-        },
-    },
+    agent::{Agent, babata::BabataAgent},
     channel::{Channel, TelegramChannel, WechatChannel},
     config::{
         AgentConfig, AnthropicProviderConfig, BabataAgentConfig, ChannelConfig, CompatibleApi,
@@ -18,6 +12,10 @@ use crate::{
         TelegramChannelConfig, WechatChannelConfig,
     },
     error::BabataError,
+    provider::{
+        AnthropicProvider, CustomProvider, DeepSeekProvider, KimiProvider, MiniMaxProvider, Model,
+        MoonshotProvider, OpenAIProvider, Provider,
+    },
 };
 
 const EMBEDDED_MACOS_SERVICE_TEMPLATE: &str =

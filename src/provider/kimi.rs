@@ -1,6 +1,6 @@
 use crate::{
     BabataResult,
-    agent::babata::{
+    provider::{
         GenerationRequest, GenerationResponse, InteractionRequest, InteractionResponse, Model,
         Provider,
     },
@@ -9,33 +9,32 @@ use crate::{
 use super::OpenAICompatibleProvider;
 
 #[derive(Debug)]
-pub struct OpenAIProvider {
+pub struct KimiProvider {
     inner: OpenAICompatibleProvider,
 }
 
-const OPENAI_SUPPORTED_MODELS: &[Model] = &[Model {
-    provider: "openai",
-    name: "gpt-4.1",
-    context_length: 1_000_000,
+const KIMI_SUPPORTED_MODELS: &[Model] = &[Model {
+    provider: "kimi",
+    name: "kimi-k2.5",
+    context_length: 128_000,
 }];
 
-impl OpenAIProvider {
+impl KimiProvider {
     pub fn new(api_key: &str) -> Self {
-        Self {
-            inner: OpenAICompatibleProvider::new(api_key, "https://api.openai.com/v1")
-                .with_user_agent(None),
-        }
+        let inner = OpenAICompatibleProvider::new(api_key, "https://api.kimi.com/coding/v1")
+            .with_user_agent(Some("KimiCLI/1.6".to_string()));
+        Self { inner }
     }
 }
 
 #[async_trait::async_trait]
-impl Provider for OpenAIProvider {
+impl Provider for KimiProvider {
     fn name() -> &'static str {
-        "openai"
+        "kimi"
     }
 
     fn supported_models() -> &'static [Model] {
-        OPENAI_SUPPORTED_MODELS
+        KIMI_SUPPORTED_MODELS
     }
 
     async fn generate<'a>(

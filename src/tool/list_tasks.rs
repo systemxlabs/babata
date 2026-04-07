@@ -2,10 +2,10 @@ use serde_json::{Value, json};
 
 use crate::{
     BabataResult,
-    agent::babata::{Tool, ToolContext, ToolSpec},
     error::BabataError,
     http::ListTasksResponse,
     task::{TaskStatus, TaskStore},
+    tool::{Tool, ToolContext, ToolSpec},
 };
 
 #[derive(Debug)]

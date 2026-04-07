@@ -5,9 +5,9 @@ use serde_json::{Value, json};
 
 use crate::{
     BabataResult,
-    agent::babata::{Tool, ToolContext, ToolSpec},
     error::BabataError,
     task::task_dir,
+    tool::{Tool, ToolContext, ToolSpec},
 };
 
 const DEFAULT_TIMEOUT_SECS: u64 = 300;

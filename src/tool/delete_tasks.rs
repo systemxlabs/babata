@@ -4,9 +4,9 @@ use uuid::Uuid;
 
 use crate::{
     BabataResult,
-    agent::babata::{Tool, ToolContext, ToolSpec},
     error::BabataError,
     http::DEFAULT_HTTP_BASE_URL,
+    tool::{Tool, ToolContext, ToolSpec},
 };
 
 #[derive(Debug)]
