@@ -1,7 +1,8 @@
-﻿use log::{debug, warn};
+use log::{debug, warn};
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use uuid::Uuid;
 
 use crate::{
     BabataResult,
@@ -88,7 +89,11 @@ impl AnthropicCompatibleProvider {
                     }
                     ("user", blocks)
                 }
-                Message::AssistantToolCalls { calls, reasoning_content: _, .. } => {
+                Message::AssistantToolCalls {
+                    calls,
+                    reasoning_content: _,
+                    ..
+                } => {
                     let blocks = calls
                         .iter()
                         .map(|call| {
@@ -103,7 +108,11 @@ impl AnthropicCompatibleProvider {
                         .collect();
                     ("assistant", blocks)
                 }
-                Message::AssistantResponse { content, reasoning_content: _, .. } => {
+                Message::AssistantResponse {
+                    content,
+                    reasoning_content: _,
+                    ..
+                } => {
                     let mut blocks = Vec::new();
                     for part in content {
                         match self.format_content_block(part) {
@@ -237,7 +246,7 @@ impl AnthropicCompatibleProvider {
             };
             return Ok(GenerationResponse {
                 message: Message::AssistantToolCalls {
-                    task_id: String::new(),
+                    task_id: Uuid::nil(),
                     calls: tool_calls,
                     reasoning_content,
                 },
@@ -250,7 +259,7 @@ impl AnthropicCompatibleProvider {
 
         Ok(GenerationResponse {
             message: Message::AssistantResponse {
-                    task_id: String::new(),
+                task_id: Uuid::nil(),
                 content: text_content,
                 reasoning_content: None,
             },
@@ -388,6 +397,3 @@ mod tests {
         );
     }
 }
-
-
-

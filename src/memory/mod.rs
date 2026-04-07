@@ -96,7 +96,11 @@ This file stores important information that should persist across sessions.
             Message::UserSteering { content, .. } => {
                 format!("[steer]\n{}", Self::render_content(content))
             }
-            Message::AssistantResponse { content, reasoning_content, .. } => {
+            Message::AssistantResponse {
+                content,
+                reasoning_content,
+                ..
+            } => {
                 let mut lines = Vec::new();
                 lines.push("[assistant]".to_string());
                 if let Some(reasoning_content) = reasoning_content
@@ -107,7 +111,11 @@ This file stores important information that should persist across sessions.
                 lines.push(Self::render_content(content));
                 lines.join("\n")
             }
-            Message::AssistantToolCalls { calls, reasoning_content, .. } => {
+            Message::AssistantToolCalls {
+                calls,
+                reasoning_content,
+                ..
+            } => {
                 let mut lines = Vec::new();
                 lines.push("[assistant_tool_calls]".to_string());
                 if let Some(reasoning_content) = reasoning_content
@@ -206,7 +214,7 @@ mod tests {
     #[test]
     fn message_json_has_type_tag() {
         let message = Message::UserPrompt {
-            task_id: "test-task-id".to_string(),
+            task_id: Uuid::new_v4(),
             content: vec![Content::Text {
                 text: "hello".to_string(),
             }],
@@ -230,13 +238,13 @@ mod tests {
         memory
             .append_messages(&[
                 Message::UserPrompt {
-                    task_id: "test-task-id-1".to_string(),
+                    task_id: Uuid::new_v4(),
                     content: vec![Content::Text {
                         text: "hello".to_string(),
                     }],
                 },
                 Message::AssistantResponse {
-                    task_id: "test-task-id-2".to_string(),
+                    task_id: Uuid::new_v4(),
                     content: vec![Content::Text {
                         text: "world".to_string(),
                     }],

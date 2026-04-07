@@ -2,6 +2,7 @@
 use reqwest::{Client, StatusCode, header::USER_AGENT};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use uuid::Uuid;
 
 use crate::{
     BabataResult,
@@ -119,7 +120,11 @@ impl OpenAICompatibleProvider {
 
                     request_messages.push(ChatCompletionMessageParam::User { content: parts });
                 }
-                Message::AssistantToolCalls { calls, reasoning_content, .. } => {
+                Message::AssistantToolCalls {
+                    calls,
+                    reasoning_content,
+                    ..
+                } => {
                     let tool_calls = calls
                         .iter()
                         .map(|call| ChatCompletionMessageToolCall::Function {
@@ -137,7 +142,11 @@ impl OpenAICompatibleProvider {
                         tool_calls: Some(tool_calls),
                     });
                 }
-                Message::AssistantResponse { content, reasoning_content, .. } => {
+                Message::AssistantResponse {
+                    content,
+                    reasoning_content,
+                    ..
+                } => {
                     let mut parts = Vec::with_capacity(content.len());
                     for part in content {
                         match part {
@@ -251,7 +260,7 @@ impl OpenAICompatibleProvider {
             if !parsed_calls.is_empty() {
                 return Ok(GenerationResponse {
                     message: Message::AssistantToolCalls {
-                        task_id: String::new(),
+                        task_id: Uuid::nil(),
                         calls: parsed_calls,
                         reasoning_content: choice.message.reasoning_content,
                     },
@@ -265,7 +274,7 @@ impl OpenAICompatibleProvider {
 
         Ok(GenerationResponse {
             message: Message::AssistantResponse {
-                    task_id: String::new(),
+                task_id: Uuid::nil(),
                 content: vec![Content::Text { text: content }],
                 reasoning_content: choice.message.reasoning_content,
             },
@@ -435,6 +444,7 @@ pub struct ChatCompletionsMessageToolCallFunction {
 #[cfg(test)]
 mod tests {
     use serde_json::json;
+    use uuid::Uuid;
 
     use crate::{
         message::{Content, MediaType, Message},
@@ -470,7 +480,7 @@ mod tests {
     fn format_messages_maps_audio_data_to_input_audio() {
         let provider = OpenAICompatibleProvider::new("test-key", "https://example.com/v1");
         let messages = vec![Message::UserPrompt {
-            task_id: "test-task-id".to_string(),
+            task_id: Uuid::nil(),
             content: vec![Content::AudioData {
                 data: "base64-audio".to_string(),
                 media_type: MediaType::AudioMp3,
@@ -498,7 +508,7 @@ mod tests {
     fn format_messages_places_context_before_prompts() {
         let provider = OpenAICompatibleProvider::new("test-key", "https://example.com/v1");
         let prompts = vec![Message::UserPrompt {
-            task_id: "test-task-id".to_string(),
+            task_id: Uuid::nil(),
             content: vec![Content::Text {
                 text: "latest prompt".to_string(),
             }],
@@ -520,7 +530,7 @@ mod tests {
         let provider = OpenAICompatibleProvider::new("test-key", "https://example.com/v1");
         let system_prompts = vec!["first rules".to_string(), "second rules".to_string()];
         let prompts = vec![Message::UserPrompt {
-            task_id: "test-task-id".to_string(),
+            task_id: Uuid::nil(),
             content: vec![Content::Text {
                 text: "latest prompt".to_string(),
             }],
@@ -546,7 +556,7 @@ mod tests {
             .with_combined_system_prompt(true);
         let system_prompts = vec!["first rules".to_string(), "second rules".to_string()];
         let prompts = vec![Message::UserPrompt {
-            task_id: "test-task-id".to_string(),
+            task_id: Uuid::nil(),
             content: vec![Content::Text {
                 text: "latest prompt".to_string(),
             }],
@@ -565,12 +575,5 @@ mod tests {
         assert_eq!(payload[1]["role"], json!("user"));
     }
 }
-
-
-
-
-
-
-
 
 
