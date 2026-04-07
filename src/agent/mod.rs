@@ -69,11 +69,21 @@ impl Agent {
     }
 
     fn collect_tool_specs(&self) -> Vec<ToolSpec> {
-        let mut specs: Vec<ToolSpec> = self
-            .tools
-            .values()
-            .map(|tool| tool.spec().clone())
-            .collect();
+        let allowed = &self.definition.frontmatter.allowed_tools;
+
+        // If allowed_tools contains exactly one element "*", allow all tools
+        let allow_all = allowed.len() == 1 && allowed[0] == "*";
+
+        let mut specs: Vec<ToolSpec> = if allow_all {
+            self.tools.values().map(|tool| tool.spec().clone()).collect()
+        } else {
+            self.tools
+                .values()
+                .filter(|tool| allowed.contains(&tool.spec().name))
+                .map(|tool| tool.spec().clone())
+                .collect()
+        };
+
         specs.sort_by(|a, b| a.name.cmp(&b.name));
         specs
     }

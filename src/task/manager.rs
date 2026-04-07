@@ -631,15 +631,20 @@ mod tests {
         let _workspace = temp_root.join("workspace");
         fs::create_dir_all(&_workspace).expect("create workspace");
 
+        // Create agent home directory and AGENT.md
+        let agent_home = temp_root.join("agents").join("test-agent");
+        fs::create_dir_all(&agent_home).expect("create agent home directory");
+        let agent_md_path = agent_home.join("AGENT.md");
+        fs::write(&agent_md_path, "---\nname: test-agent\n---\n").expect("create AGENT.md");
+
         let agent_defs = vec![AgentDefinition {
-            path: PathBuf::from("test"),
+            path: agent_md_path,
             frontmatter: AgentFrontmatter {
                 name: "test-agent".to_string(),
                 description: "Test agent".to_string(),
                 provider: "openai".to_string(),
                 model: "gpt-4".to_string(),
-                memory: None,
-                allowed_tools: vec![],
+                allowed_tools: vec!["*".to_string()],
                 default: Some(true),
             },
             body: String::new(),

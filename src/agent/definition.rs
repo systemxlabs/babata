@@ -10,7 +10,6 @@ pub struct AgentFrontmatter {
     pub description: String,
     pub provider: String,
     pub model: String,
-    pub memory: Option<String>,
     pub allowed_tools: Vec<String>,
     pub default: Option<bool>,
 }
@@ -93,6 +92,24 @@ fn load_agent_definitions_from_dir(dir: &Path) -> BabataResult<Vec<AgentDefiniti
     }
 
     definitions.sort_by(|a, b| a.path.cmp(&b.path));
+
+    // Validate exactly one default agent
+    let default_count = definitions
+        .iter()
+        .filter(|d| d.frontmatter.default == Some(true))
+        .count();
+    if default_count == 0 {
+        return Err(BabataError::config(
+            "No default agent found. Exactly one agent must have 'default: true' in its frontmatter.",
+        ));
+    }
+    if default_count > 1 {
+        return Err(BabataError::config(format!(
+            "Multiple default agents found ({}). Exactly one agent must have 'default: true' in its frontmatter.",
+            default_count
+        )));
+    }
+
     Ok(definitions)
 }
 
