@@ -15,14 +15,78 @@ use crate::{
 pub struct MessageRecord {
     pub id: i64,
     pub message_type: MessageType,
-    pub content: Option<String>,
+    #[serde(with = "option_json_string")]
+    pub content: Option<Vec<Content>>,
     pub reasoning_content: Option<String>,
-    pub tool_calls: Option<String>,
+    #[serde(with = "option_json_string")]
+    pub tool_calls: Option<Vec<ToolCall>>,
     pub call_id: Option<String>,
     pub tool_name: Option<String>,
     pub args: Option<String>,
     pub result: Option<String>,
     pub created_at: DateTime<Utc>,
+}
+
+mod option_json_string {
+    use serde::de::{DeserializeOwned, Visitor};
+    use serde::{Deserializer, Serialize, Serializer};
+
+    pub fn serialize<T, S>(value: &Option<T>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        T: Serialize,
+        S: Serializer,
+    {
+        match value {
+            Some(v) => {
+                let json = serde_json::to_string(v).map_err(serde::ser::Error::custom)?;
+                serializer.serialize_some(&json)
+            }
+            None => serializer.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
+    where
+        T: DeserializeOwned,
+        D: Deserializer<'de>,
+    {
+        struct JsonStringVisitor<T>(std::marker::PhantomData<T>);
+
+        impl<'de, T> Visitor<'de> for JsonStringVisitor<T>
+        where
+            T: DeserializeOwned,
+        {
+            type Value = Option<T>;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a JSON string or null")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                let parsed = serde_json::from_str(value).map_err(serde::de::Error::custom)?;
+                Ok(Some(parsed))
+            }
+
+            fn visit_none<E>(self) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(None)
+            }
+
+            fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+            where
+                D: Deserializer<'de>,
+            {
+                deserializer.deserialize_str(self)
+            }
+        }
+
+        deserializer.deserialize_option(JsonStringVisitor(std::marker::PhantomData))
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -38,9 +102,9 @@ pub enum MessageType {
 /// Database fields extracted from a Message for storage.
 struct MessageFields {
     message_type: MessageType,
-    content: Option<String>,
+    content: Option<Vec<Content>>,
     reasoning_content: Option<String>,
-    tool_calls: Option<String>,
+    tool_calls: Option<Vec<ToolCall>>,
     call_id: Option<String>,
     tool_name: Option<String>,
     args: Option<String>,
@@ -130,9 +194,7 @@ impl MessageStore {
         let fields = match message {
             Message::UserPrompt { content: c, .. } => MessageFields {
                 message_type: MessageType::UserPrompt,
-                content: Some(serde_json::to_string(c).map_err(|e| {
-                    BabataError::memory(format!("Failed to serialize content: {}", e))
-                })?),
+                content: Some(c.clone()),
                 reasoning_content: None,
                 tool_calls: None,
                 call_id: None,
@@ -143,9 +205,7 @@ impl MessageStore {
             },
             Message::UserSteering { content: c, .. } => MessageFields {
                 message_type: MessageType::UserSteering,
-                content: Some(serde_json::to_string(c).map_err(|e| {
-                    BabataError::memory(format!("Failed to serialize content: {}", e))
-                })?),
+                content: Some(c.clone()),
                 reasoning_content: None,
                 tool_calls: None,
                 call_id: None,
@@ -160,9 +220,7 @@ impl MessageStore {
                 ..
             } => MessageFields {
                 message_type: MessageType::AssistantResponse,
-                content: Some(serde_json::to_string(c).map_err(|e| {
-                    BabataError::memory(format!("Failed to serialize content: {}", e))
-                })?),
+                content: Some(c.clone()),
                 reasoning_content: r.clone(),
                 tool_calls: None,
                 call_id: None,
@@ -179,9 +237,7 @@ impl MessageStore {
                 message_type: MessageType::AssistantToolCalls,
                 content: None,
                 reasoning_content: r.clone(),
-                tool_calls: Some(serde_json::to_string(calls).map_err(|e| {
-                    BabataError::memory(format!("Failed to serialize tool calls: {}", e))
-                })?),
+                tool_calls: Some(calls.clone()),
                 call_id: None,
                 tool_name: None,
                 args: None,
@@ -212,48 +268,21 @@ impl MessageStore {
 
         let message = match record.message_type {
             MessageType::UserPrompt => {
-                let content: Vec<Content> = record
-                    .content
-                    .as_ref()
-                    .map(|c| {
-                        serde_json::from_str(c).map_err(|e| {
-                            BabataError::memory(format!("Failed to deserialize content: {}", e))
-                        })
-                    })
-                    .transpose()?
-                    .unwrap_or_default();
+                let content = record.content.clone().unwrap_or_default();
                 Message::UserPrompt {
                     content,
                     created_at,
                 }
             }
             MessageType::UserSteering => {
-                let content: Vec<Content> = record
-                    .content
-                    .as_ref()
-                    .map(|c| {
-                        serde_json::from_str(c).map_err(|e| {
-                            BabataError::memory(format!("Failed to deserialize content: {}", e))
-                        })
-                    })
-                    .transpose()?
-                    .unwrap_or_default();
+                let content = record.content.clone().unwrap_or_default();
                 Message::UserSteering {
                     content,
                     created_at,
                 }
             }
             MessageType::AssistantResponse => {
-                let content: Vec<Content> = record
-                    .content
-                    .as_ref()
-                    .map(|c| {
-                        serde_json::from_str(c).map_err(|e| {
-                            BabataError::memory(format!("Failed to deserialize content: {}", e))
-                        })
-                    })
-                    .transpose()?
-                    .unwrap_or_default();
+                let content = record.content.clone().unwrap_or_default();
                 Message::AssistantResponse {
                     content,
                     reasoning_content: record.reasoning_content.clone(),
@@ -261,16 +290,7 @@ impl MessageStore {
                 }
             }
             MessageType::AssistantToolCalls => {
-                let calls: Vec<ToolCall> = record
-                    .tool_calls
-                    .as_ref()
-                    .map(|c| {
-                        serde_json::from_str(c).map_err(|e| {
-                            BabataError::memory(format!("Failed to deserialize tool calls: {}", e))
-                        })
-                    })
-                    .transpose()?
-                    .unwrap_or_default();
+                let calls = record.tool_calls.clone().unwrap_or_default();
                 Message::AssistantToolCalls {
                     calls,
                     reasoning_content: record.reasoning_content.clone(),
@@ -316,11 +336,22 @@ impl MessageStore {
             })?;
             let message_type_str = message_type_str.trim_matches('"').to_string();
 
+            let content_json = fields
+                .content
+                .as_ref()
+                .map(|c| serde_json::to_string(c).map_err(|e| BabataError::memory(format!("Failed to serialize content: {}", e))))
+                .transpose()?;
+            let tool_calls_json = fields
+                .tool_calls
+                .as_ref()
+                .map(|c| serde_json::to_string(c).map_err(|e| BabataError::memory(format!("Failed to serialize tool calls: {}", e))))
+                .transpose()?;
+
             stmt.execute(params![
                 message_type_str,
-                fields.content,
+                content_json,
                 fields.reasoning_content,
-                fields.tool_calls,
+                tool_calls_json,
                 fields.call_id,
                 fields.tool_name,
                 fields.args,
@@ -369,7 +400,7 @@ impl MessageStore {
             let message_type_str: String = row.get(1).map_err(|err| {
                 BabataError::memory(format!("Failed to read message_type from row: {}", err))
             })?;
-            let content: Option<String> = row.get(2).map_err(|err| {
+            let content_json: Option<String> = row.get(2).map_err(|err| {
                 BabataError::memory(format!("Failed to read content from row: {}", err))
             })?;
             let reasoning_content: Option<String> = row.get(3).map_err(|err| {
@@ -378,7 +409,7 @@ impl MessageStore {
                     err
                 ))
             })?;
-            let tool_calls: Option<String> = row.get(4).map_err(|err| {
+            let tool_calls_json: Option<String> = row.get(4).map_err(|err| {
                 BabataError::memory(format!("Failed to read tool_calls from row: {}", err))
             })?;
             let call_id: Option<String> = row.get(5).map_err(|err| {
@@ -417,6 +448,16 @@ impl MessageStore {
                     )));
                 }
             };
+
+            // Deserialize content and tool_calls from JSON strings
+            let content: Option<Vec<Content>> = content_json
+                .as_ref()
+                .map(|c| serde_json::from_str(c).map_err(|e| BabataError::memory(format!("Failed to deserialize content: {}", e))))
+                .transpose()?;
+            let tool_calls: Option<Vec<ToolCall>> = tool_calls_json
+                .as_ref()
+                .map(|c| serde_json::from_str(c).map_err(|e| BabataError::memory(format!("Failed to deserialize tool_calls: {}", e))))
+                .transpose()?;
 
             let record = MessageRecord {
                 id,
