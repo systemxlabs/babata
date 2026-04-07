@@ -1,4 +1,4 @@
-﻿use log::{debug, warn};
+use log::{debug, warn};
 use reqwest::{Client, StatusCode, header::USER_AGENT};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -575,5 +575,3 @@ mod tests {
         assert_eq!(payload[1]["role"], json!("user"));
     }
 }
-
-

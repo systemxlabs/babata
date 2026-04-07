@@ -20,6 +20,8 @@ pub(crate) use openai_compatible::*;
 
 use std::{collections::HashMap, fmt::Debug, sync::Arc};
 
+use uuid::Uuid;
+
 use crate::{
     BabataResult,
     config::{Config, ProviderConfig},
@@ -46,6 +48,7 @@ pub trait Provider: Debug + Send + Sync {
 }
 
 pub struct GenerationRequest<'a> {
+    pub task_id: Uuid,
     pub system_prompts: &'a [String],
     pub model: &'a str,
     pub prompts: &'a [Message],

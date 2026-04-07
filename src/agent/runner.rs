@@ -89,6 +89,7 @@ impl AgentTask {
         for _ in 0..max_steps {
             let message = generate_with_retry(
                 provider.as_ref(),
+                self.task_id,
                 &model,
                 &system_prompts,
                 &conversation,
@@ -192,6 +193,7 @@ impl AgentTask {
 
 async fn generate_with_retry(
     provider: &dyn Provider,
+    task_id: Uuid,
     model: &str,
     system_prompts: &[String],
     prompts: &[Message],
@@ -206,6 +208,7 @@ async fn generate_with_retry(
     (|| async {
         let response = provider
             .generate(GenerationRequest {
+                task_id,
                 system_prompts,
                 model,
                 prompts,
