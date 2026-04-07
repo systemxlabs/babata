@@ -1,6 +1,7 @@
 use std::{collections::HashMap, fmt::Debug, sync::Arc, time::Duration};
 
 use backon::{ExponentialBuilder, Retryable};
+use chrono::Utc;
 use futures::future::join_all;
 use log::{info, warn};
 use uuid::Uuid;
@@ -51,6 +52,7 @@ impl AgentTask {
         let context = self.memory.build_context(&self.prompt).await?;
         let mut conversation = vec![Message::UserPrompt {
             content: self.prompt.clone(),
+            created_at: Utc::now(),
         }];
 
         let mut success = false;
@@ -103,7 +105,11 @@ impl AgentTask {
                                 format!("Unknown tool: {}", call.tool_name)
                             };
 
-                            Message::ToolResult { call, result }
+                            Message::ToolResult {
+                                call,
+                                result,
+                                created_at: Utc::now(),
+                            }
                         }
                     });
 

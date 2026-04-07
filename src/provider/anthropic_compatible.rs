@@ -1,3 +1,4 @@
+﻿use chrono::Utc;
 use log::{debug, warn};
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
@@ -247,6 +248,7 @@ impl AnthropicCompatibleProvider {
                 message: Message::AssistantToolCalls {
                     calls: tool_calls,
                     reasoning_content,
+                    created_at: Utc::now(),
                 },
             });
         }
@@ -259,6 +261,7 @@ impl AnthropicCompatibleProvider {
             message: Message::AssistantResponse {
                 content: text_content,
                 reasoning_content: None,
+                created_at: Utc::now(),
             },
         })
     }

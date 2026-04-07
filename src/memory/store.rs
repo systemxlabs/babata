@@ -1,8 +1,99 @@
 use std::path::{Path, PathBuf};
 
+use chrono::{DateTime, Utc};
 use rusqlite::{Connection, params};
+use serde::{Deserialize, Serialize};
 
-use crate::{BabataResult, error::BabataError, message::Message};
+use crate::{
+    BabataResult,
+    error::BabataError,
+    message::{Content, Message, ToolCall},
+};
+
+/// Database record structure that maps 1:1 with the messages table schema.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MessageRecord {
+    pub message_type: MessageType,
+    #[serde(with = "option_json_string")]
+    pub content: Option<Vec<Content>>,
+    pub reasoning_content: Option<String>,
+    #[serde(with = "option_json_string")]
+    pub tool_calls: Option<Vec<ToolCall>>,
+    pub result: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+mod option_json_string {
+    use serde::de::{DeserializeOwned, Visitor};
+    use serde::{Deserializer, Serialize, Serializer};
+
+    pub fn serialize<T, S>(value: &Option<T>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        T: Serialize,
+        S: Serializer,
+    {
+        match value {
+            Some(v) => {
+                let json = serde_json::to_string(v).map_err(serde::ser::Error::custom)?;
+                serializer.serialize_some(&json)
+            }
+            None => serializer.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
+    where
+        T: DeserializeOwned,
+        D: Deserializer<'de>,
+    {
+        struct JsonStringVisitor<T>(std::marker::PhantomData<T>);
+
+        impl<'de, T> Visitor<'de> for JsonStringVisitor<T>
+        where
+            T: DeserializeOwned,
+        {
+            type Value = Option<T>;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a JSON string or null")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                let parsed = serde_json::from_str(value).map_err(serde::de::Error::custom)?;
+                Ok(Some(parsed))
+            }
+
+            fn visit_none<E>(self) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(None)
+            }
+
+            fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+            where
+                D: Deserializer<'de>,
+            {
+                deserializer.deserialize_str(self)
+            }
+        }
+
+        deserializer.deserialize_option(JsonStringVisitor(std::marker::PhantomData))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MessageType {
+    UserPrompt,
+    UserSteering,
+    AssistantResponse,
+    AssistantToolCalls,
+    ToolResult,
+}
 
 #[derive(Debug)]
 pub struct MessageStore {
@@ -49,8 +140,12 @@ impl MessageStore {
         })?;
         conn.execute(
             "CREATE TABLE IF NOT EXISTS messages (
-                message TEXT NOT NULL,
-                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+                message_type TEXT NOT NULL,
+                content TEXT,
+                reasoning_content TEXT,
+                tool_calls TEXT,
+                result TEXT,
+                created_at TEXT NOT NULL
             )",
             [],
         )
@@ -71,6 +166,123 @@ impl MessageStore {
         })
     }
 
+    /// Convert Message to MessageRecord
+    fn message_to_record(message: &Message) -> BabataResult<MessageRecord> {
+        let created_at = *message.created_at();
+
+        let record = match message {
+            Message::UserPrompt { content: c, .. } => MessageRecord {
+                message_type: MessageType::UserPrompt,
+                content: Some(c.clone()),
+                reasoning_content: None,
+                tool_calls: None,
+                result: None,
+                created_at,
+            },
+            Message::UserSteering { content: c, .. } => MessageRecord {
+                message_type: MessageType::UserSteering,
+                content: Some(c.clone()),
+                reasoning_content: None,
+                tool_calls: None,
+                result: None,
+                created_at,
+            },
+            Message::AssistantResponse {
+                content: c,
+                reasoning_content: r,
+                ..
+            } => MessageRecord {
+                message_type: MessageType::AssistantResponse,
+                content: Some(c.clone()),
+                reasoning_content: r.clone(),
+                tool_calls: None,
+                result: None,
+                created_at,
+            },
+            Message::AssistantToolCalls {
+                calls,
+                reasoning_content: r,
+                ..
+            } => MessageRecord {
+                message_type: MessageType::AssistantToolCalls,
+                content: None,
+                reasoning_content: r.clone(),
+                tool_calls: Some(calls.clone()),
+                result: None,
+                created_at,
+            },
+            Message::ToolResult {
+                call, result: res, ..
+            } => MessageRecord {
+                message_type: MessageType::ToolResult,
+                content: None,
+                reasoning_content: None,
+                tool_calls: Some(vec![call.clone()]),
+                result: Some(res.clone()),
+                created_at,
+            },
+        };
+
+        Ok(record)
+    }
+
+    /// Convert database record to Message
+    fn record_to_message(record: &MessageRecord) -> BabataResult<Message> {
+        let created_at = record.created_at;
+
+        let message = match record.message_type {
+            MessageType::UserPrompt => {
+                let content = record.content.clone().unwrap_or_default();
+                Message::UserPrompt {
+                    content,
+                    created_at,
+                }
+            }
+            MessageType::UserSteering => {
+                let content = record.content.clone().unwrap_or_default();
+                Message::UserSteering {
+                    content,
+                    created_at,
+                }
+            }
+            MessageType::AssistantResponse => {
+                let content = record.content.clone().unwrap_or_default();
+                Message::AssistantResponse {
+                    content,
+                    reasoning_content: record.reasoning_content.clone(),
+                    created_at,
+                }
+            }
+            MessageType::AssistantToolCalls => {
+                let calls = record.tool_calls.clone().unwrap_or_default();
+                Message::AssistantToolCalls {
+                    calls,
+                    reasoning_content: record.reasoning_content.clone(),
+                    created_at,
+                }
+            }
+            MessageType::ToolResult => {
+                let call = record
+                    .tool_calls
+                    .as_ref()
+                    .and_then(|calls| calls.first())
+                    .cloned()
+                    .unwrap_or(ToolCall {
+                        call_id: String::new(),
+                        tool_name: String::new(),
+                        args: String::new(),
+                    });
+                Message::ToolResult {
+                    call,
+                    result: record.result.clone().unwrap_or_default(),
+                    created_at,
+                }
+            }
+        };
+
+        Ok(message)
+    }
+
     pub fn append_messages(&self, messages: &[Message]) -> BabataResult<()> {
         if messages.is_empty() {
             return Ok(());
@@ -78,7 +290,7 @@ impl MessageStore {
 
         let conn = self.connect()?;
         let mut stmt = conn
-            .prepare("INSERT INTO messages (message) VALUES (?1)")
+            .prepare("INSERT INTO messages (message_type, content, reasoning_content, tool_calls, result, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)")
             .map_err(|err| {
                 BabataError::memory(format!(
                     "Failed to prepare message insert statement: {}",
@@ -87,15 +299,40 @@ impl MessageStore {
             })?;
 
         for message in messages {
-            let payload = serde_json::to_string(message).map_err(|err| {
-                BabataError::memory(format!(
-                    "Failed to serialize message payload into JSON: {}",
-                    err
-                ))
+            let record = Self::message_to_record(message)?;
+            let message_type_str = serde_json::to_string(&record.message_type).map_err(|e| {
+                BabataError::memory(format!("Failed to serialize message type: {}", e))
             })?;
-            stmt.execute(params![payload]).map_err(|err| {
-                BabataError::memory(format!("Failed to insert message row: {}", err))
-            })?;
+            let message_type_str = message_type_str.trim_matches('"').to_string();
+
+            let content_json = record
+                .content
+                .as_ref()
+                .map(|c| {
+                    serde_json::to_string(c).map_err(|e| {
+                        BabataError::memory(format!("Failed to serialize content: {}", e))
+                    })
+                })
+                .transpose()?;
+            let tool_calls_json = record
+                .tool_calls
+                .as_ref()
+                .map(|c| {
+                    serde_json::to_string(c).map_err(|e| {
+                        BabataError::memory(format!("Failed to serialize tool calls: {}", e))
+                    })
+                })
+                .transpose()?;
+
+            stmt.execute(params![
+                message_type_str,
+                content_json,
+                record.reasoning_content,
+                tool_calls_json,
+                record.result,
+                record.created_at.to_rfc3339()
+            ])
+            .map_err(|err| BabataError::memory(format!("Failed to insert message row: {}", err)))?;
         }
 
         Ok(())
@@ -108,8 +345,9 @@ impl MessageStore {
             return Ok(Vec::new());
         }
 
-        let query = "SELECT message FROM (
-            SELECT message, created_at, rowid
+        let query =
+            "SELECT message_type, content, reasoning_content, tool_calls, result, created_at FROM (
+            SELECT message_type, content, reasoning_content, tool_calls, result, created_at, rowid
             FROM messages
             ORDER BY datetime(created_at) DESC, rowid DESC
             LIMIT ?1
@@ -131,18 +369,78 @@ impl MessageStore {
         while let Some(row) = rows.next().map_err(|err| {
             BabataError::memory(format!("Failed to scan sqlite message row: {}", err))
         })? {
-            let payload: String = row.get(0).map_err(|err| {
-                BabataError::memory(format!("Failed to read message payload from row: {}", err))
+            let message_type_str: String = row.get(0).map_err(|err| {
+                BabataError::memory(format!("Failed to read message_type from row: {}", err))
             })?;
-
-            let parsed: Message = serde_json::from_str(&payload).map_err(|err| {
+            let content_json: Option<String> = row.get(1).map_err(|err| {
+                BabataError::memory(format!("Failed to read content from row: {}", err))
+            })?;
+            let reasoning_content: Option<String> = row.get(2).map_err(|err| {
                 BabataError::memory(format!(
-                    "Failed to parse message payload JSON '{}': {}",
-                    payload, err
+                    "Failed to read reasoning_content from row: {}",
+                    err
+                ))
+            })?;
+            let tool_calls_json: Option<String> = row.get(3).map_err(|err| {
+                BabataError::memory(format!("Failed to read tool_calls from row: {}", err))
+            })?;
+            let result: Option<String> = row.get(4).map_err(|err| {
+                BabataError::memory(format!("Failed to read result from row: {}", err))
+            })?;
+            let created_at_str: String = row.get(5).map_err(|err| {
+                BabataError::memory(format!("Failed to read created_at from row: {}", err))
+            })?;
+            let created_at = created_at_str.parse::<DateTime<Utc>>().map_err(|err| {
+                BabataError::memory(format!(
+                    "Failed to parse created_at '{}': {}",
+                    created_at_str, err
                 ))
             })?;
 
-            messages.push(parsed);
+            // Parse message_type from string
+            let message_type: MessageType = match message_type_str.as_str() {
+                "user_prompt" => MessageType::UserPrompt,
+                "user_steering" => MessageType::UserSteering,
+                "assistant_response" => MessageType::AssistantResponse,
+                "assistant_tool_calls" => MessageType::AssistantToolCalls,
+                "tool_result" => MessageType::ToolResult,
+                _ => {
+                    return Err(BabataError::memory(format!(
+                        "Unknown message type: {}",
+                        message_type_str
+                    )));
+                }
+            };
+
+            // Deserialize content and tool_calls from JSON strings
+            let content: Option<Vec<Content>> = content_json
+                .as_ref()
+                .map(|c| {
+                    serde_json::from_str(c).map_err(|e| {
+                        BabataError::memory(format!("Failed to deserialize content: {}", e))
+                    })
+                })
+                .transpose()?;
+            let tool_calls: Option<Vec<ToolCall>> = tool_calls_json
+                .as_ref()
+                .map(|c| {
+                    serde_json::from_str(c).map_err(|e| {
+                        BabataError::memory(format!("Failed to deserialize tool_calls: {}", e))
+                    })
+                })
+                .transpose()?;
+
+            let record = MessageRecord {
+                message_type,
+                content,
+                reasoning_content,
+                tool_calls,
+                result,
+                created_at,
+            };
+
+            let message = Self::record_to_message(&record)?;
+            messages.push(message);
         }
 
         Ok(messages)
@@ -151,6 +449,7 @@ impl MessageStore {
 
 #[cfg(test)]
 mod tests {
+    use chrono::Utc;
     use uuid::Uuid;
 
     use crate::message::{Content, MediaType, Message, ToolCall};
@@ -165,11 +464,13 @@ mod tests {
 
         let store = MessageStore::open(&db_path).expect("open sqlite message store");
 
+        let now = Utc::now();
         let messages = vec![
             Message::UserPrompt {
                 content: vec![Content::Text {
                     text: "hello".to_string(),
                 }],
+                created_at: now,
             },
             Message::AssistantToolCalls {
                 calls: vec![ToolCall {
@@ -178,6 +479,7 @@ mod tests {
                     args: r#"{"path": "README.md"}"#.to_string(),
                 }],
                 reasoning_content: None,
+                created_at: now,
             },
             Message::ToolResult {
                 call: ToolCall {
@@ -186,6 +488,7 @@ mod tests {
                     args: r#"{ "path": "README.md" }"#.to_string(),
                 },
                 result: "file content".to_string(),
+                created_at: now,
             },
             Message::AssistantResponse {
                 content: vec![
@@ -198,6 +501,7 @@ mod tests {
                     },
                 ],
                 reasoning_content: None,
+                created_at: now,
             },
         ];
 
@@ -220,21 +524,25 @@ mod tests {
             .join(format!("message-store-{}.db", Uuid::new_v4()));
 
         let store = MessageStore::open(&db_path).expect("open sqlite message store");
+        let now = Utc::now();
         let messages = vec![
             Message::UserPrompt {
                 content: vec![Content::Text {
                     text: "m1".to_string(),
                 }],
+                created_at: now,
             },
             Message::UserPrompt {
                 content: vec![Content::Text {
                     text: "m2".to_string(),
                 }],
+                created_at: now + chrono::Duration::seconds(1),
             },
             Message::UserPrompt {
                 content: vec![Content::Text {
                     text: "m3".to_string(),
                 }],
+                created_at: now + chrono::Duration::seconds(2),
             },
         ];
 

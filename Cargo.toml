@@ -17,7 +17,7 @@ axum = { version = "0.8", features = ["json"] }
 backon = "1.6"
 base64 = "0.22"
 block-padding = "0.3"
-chrono = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5", features = ["derive"] }
 comfy-table = "7"
 ecb = "0.1"

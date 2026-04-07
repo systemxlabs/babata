@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize, de::value::StringDeserializer};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -5,22 +6,39 @@ use serde::{Deserialize, Serialize, de::value::StringDeserializer};
 pub enum Message {
     UserPrompt {
         content: Vec<Content>,
+        created_at: DateTime<Utc>,
     },
     UserSteering {
         content: Vec<Content>,
+        created_at: DateTime<Utc>,
     },
     AssistantResponse {
         content: Vec<Content>,
         reasoning_content: Option<String>,
+        created_at: DateTime<Utc>,
     },
     AssistantToolCalls {
         calls: Vec<ToolCall>,
         reasoning_content: Option<String>,
+        created_at: DateTime<Utc>,
     },
     ToolResult {
         call: ToolCall,
         result: String,
+        created_at: DateTime<Utc>,
     },
+}
+
+impl Message {
+    pub fn created_at(&self) -> &DateTime<Utc> {
+        match self {
+            Message::UserPrompt { created_at, .. } => created_at,
+            Message::UserSteering { created_at, .. } => created_at,
+            Message::AssistantResponse { created_at, .. } => created_at,
+            Message::AssistantToolCalls { created_at, .. } => created_at,
+            Message::ToolResult { created_at, .. } => created_at,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

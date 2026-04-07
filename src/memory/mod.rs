@@ -205,6 +205,7 @@ This file stores important information that should persist across sessions.
 
 #[cfg(test)]
 mod tests {
+    use chrono::Utc;
     use uuid::Uuid;
 
     use crate::message::{Content, Message};
@@ -217,6 +218,7 @@ mod tests {
             content: vec![Content::Text {
                 text: "hello".to_string(),
             }],
+            created_at: Utc::now(),
         };
 
         let payload = serde_json::to_value(&message).expect("serialize message into json");
@@ -234,18 +236,21 @@ mod tests {
             MessageStore::open(agent_home.join("message.db")).expect("open sqlite message store");
         let memory = Memory { store, agent_home };
 
+        let now = Utc::now();
         memory
             .append_messages(&[
                 Message::UserPrompt {
                     content: vec![Content::Text {
                         text: "hello".to_string(),
                     }],
+                    created_at: now,
                 },
                 Message::AssistantResponse {
                     content: vec![Content::Text {
                         text: "world".to_string(),
                     }],
                     reasoning_content: None,
+                    created_at: now,
                 },
             ])
             .expect("insert messages into sqlite");
