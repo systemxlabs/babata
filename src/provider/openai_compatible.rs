@@ -1,3 +1,4 @@
+use chrono::Utc;
 use log::{debug, warn};
 use reqwest::{Client, StatusCode, header::USER_AGENT};
 use serde::{Deserialize, Serialize};
@@ -261,6 +262,7 @@ impl OpenAICompatibleProvider {
                     message: Message::AssistantToolCalls {
                         calls: parsed_calls,
                         reasoning_content: choice.message.reasoning_content,
+                        created_at: Utc::now(),
                     },
                 });
             }
@@ -274,6 +276,7 @@ impl OpenAICompatibleProvider {
             message: Message::AssistantResponse {
                 content: vec![Content::Text { text: content }],
                 reasoning_content: choice.message.reasoning_content,
+                created_at: Utc::now(),
             },
         })
     }
@@ -440,6 +443,7 @@ pub struct ChatCompletionsMessageToolCallFunction {
 
 #[cfg(test)]
 mod tests {
+    use chrono::Utc;
     use serde_json::json;
 
     use crate::{
@@ -480,6 +484,7 @@ mod tests {
                 data: "base64-audio".to_string(),
                 media_type: MediaType::AudioMp3,
             }],
+            created_at: Utc::now(),
         }];
 
         let payload = provider
@@ -506,6 +511,7 @@ mod tests {
             content: vec![Content::Text {
                 text: "latest prompt".to_string(),
             }],
+            created_at: Utc::now(),
         }];
 
         let payload = provider
@@ -527,6 +533,7 @@ mod tests {
             content: vec![Content::Text {
                 text: "latest prompt".to_string(),
             }],
+            created_at: Utc::now(),
         }];
 
         let payload = provider
@@ -552,6 +559,7 @@ mod tests {
             content: vec![Content::Text {
                 text: "latest prompt".to_string(),
             }],
+            created_at: Utc::now(),
         }];
 
         let payload = provider
