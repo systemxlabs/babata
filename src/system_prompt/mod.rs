@@ -11,16 +11,16 @@ use crate::{
 };
 use chrono::Local;
 
-const SOUL_PROMPT: &str = include_str!("SOUL.md");
 pub const BABATA_SYSTEM_DESCRIPTION: &str = include_str!("SYSTEM.md");
 
 pub fn build_system_prompts(
     config: &Config,
     agents: &HashMap<String, Arc<Agent>>,
     skills: &[Skill],
+    agent_body: &str,
 ) -> BabataResult<Vec<String>> {
     let mut sections = vec![
-        SOUL_PROMPT.to_string(),
+        agent_body.to_string(),
         BABATA_SYSTEM_DESCRIPTION.to_string(),
         build_runtime_prompt()?,
         build_agents_prompt(agents),
