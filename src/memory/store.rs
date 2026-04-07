@@ -1,4 +1,8 @@
-use std::path::{Path, PathBuf};
+use std::{
+    fmt,
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, params};
@@ -93,6 +97,34 @@ pub enum MessageType {
     AssistantResponse,
     AssistantToolCalls,
     ToolResult,
+}
+
+impl fmt::Display for MessageType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            MessageType::UserPrompt => "user_prompt",
+            MessageType::UserSteering => "user_steering",
+            MessageType::AssistantResponse => "assistant_response",
+            MessageType::AssistantToolCalls => "assistant_tool_calls",
+            MessageType::ToolResult => "tool_result",
+        };
+        write!(f, "{}", s)
+    }
+}
+
+impl FromStr for MessageType {
+    type Err = BabataError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "user_prompt" => Ok(MessageType::UserPrompt),
+            "user_steering" => Ok(MessageType::UserSteering),
+            "assistant_response" => Ok(MessageType::AssistantResponse),
+            "assistant_tool_calls" => Ok(MessageType::AssistantToolCalls),
+            "tool_result" => Ok(MessageType::ToolResult),
+            _ => Err(BabataError::memory(format!("Unknown message type: {}", s))),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -300,10 +332,7 @@ impl MessageStore {
 
         for message in messages {
             let record = Self::message_to_record(message)?;
-            let message_type_str = serde_json::to_string(&record.message_type).map_err(|e| {
-                BabataError::memory(format!("Failed to serialize message type: {}", e))
-            })?;
-            let message_type_str = message_type_str.trim_matches('"').to_string();
+            let message_type_str = record.message_type.to_string();
 
             let content_json = record
                 .content
@@ -398,19 +427,7 @@ impl MessageStore {
             })?;
 
             // Parse message_type from string
-            let message_type: MessageType = match message_type_str.as_str() {
-                "user_prompt" => MessageType::UserPrompt,
-                "user_steering" => MessageType::UserSteering,
-                "assistant_response" => MessageType::AssistantResponse,
-                "assistant_tool_calls" => MessageType::AssistantToolCalls,
-                "tool_result" => MessageType::ToolResult,
-                _ => {
-                    return Err(BabataError::memory(format!(
-                        "Unknown message type: {}",
-                        message_type_str
-                    )));
-                }
-            };
+            let message_type: MessageType = message_type_str.parse()?;
 
             // Deserialize content and tool_calls from JSON strings
             let content: Option<Vec<Content>> = content_json
