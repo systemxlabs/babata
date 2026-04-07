@@ -1,25 +1,5 @@
 use serde::{Deserialize, Serialize, de::value::StringDeserializer};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Role {
-    // User question / instruction
-    User,
-    // Assistant answer / thinking / tool call instruction
-    Assistant,
-    // Tool call result
-    Tool,
-}
-
-impl std::fmt::Display for Role {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Role::User => write!(f, "user"),
-            Role::Assistant => write!(f, "assistant"),
-            Role::Tool => write!(f, "tool"),
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Message {
@@ -41,18 +21,6 @@ pub enum Message {
         call: ToolCall,
         result: String,
     },
-}
-
-impl Message {
-    pub fn role(&self) -> Role {
-        match self {
-            Message::UserPrompt { .. } => Role::User,
-            Message::UserSteering { .. } => Role::User,
-            Message::AssistantResponse { .. } => Role::Assistant,
-            Message::AssistantToolCalls { .. } => Role::Assistant,
-            Message::ToolResult { .. } => Role::Tool,
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
