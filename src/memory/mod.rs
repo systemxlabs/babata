@@ -93,6 +93,9 @@ This file stores important information that should persist across sessions.
             Message::UserPrompt { content } => {
                 format!("[user]\n{}", Self::render_content(content))
             }
+            Message::UserSteering { content } => {
+                format!("[steer]\n{}", Self::render_content(content))
+            }
             Message::AssistantResponse {
                 content,
                 reasoning_content,

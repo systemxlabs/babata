@@ -109,7 +109,9 @@ impl AgentTask {
                     let results = join_all(tool_futures).await;
                     conversation.extend(results);
                 }
-                Message::UserPrompt { .. } | Message::ToolResult { .. } => {
+                Message::UserPrompt { .. }
+                | Message::UserSteering { .. }
+                | Message::ToolResult { .. } => {
                     return Err(BabataError::provider(
                         "Provider returned unsupported message type",
                     ));

@@ -86,7 +86,7 @@ impl OpenAICompatibleProvider {
 
         for message in prompts {
             match message {
-                Message::UserPrompt { content } => {
+                Message::UserPrompt { content } | Message::UserSteering { content } => {
                     let parts = content
                         .iter()
                         .map(|part| match part {

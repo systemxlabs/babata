@@ -75,7 +75,7 @@ impl AnthropicCompatibleProvider {
 
         for message in prompts {
             let (role, blocks) = match message {
-                Message::UserPrompt { content } => {
+                Message::UserPrompt { content } | Message::UserSteering { content } => {
                     let mut blocks = Vec::new();
                     for part in content {
                         match self.format_content_block(part) {

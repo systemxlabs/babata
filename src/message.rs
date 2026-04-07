@@ -26,6 +26,9 @@ pub enum Message {
     UserPrompt {
         content: Vec<Content>,
     },
+    UserSteering {
+        content: Vec<Content>,
+    },
     AssistantResponse {
         content: Vec<Content>,
         reasoning_content: Option<String>,
@@ -44,6 +47,7 @@ impl Message {
     pub fn role(&self) -> Role {
         match self {
             Message::UserPrompt { .. } => Role::User,
+            Message::UserSteering { .. } => Role::User,
             Message::AssistantResponse { .. } => Role::Assistant,
             Message::AssistantToolCalls { .. } => Role::Assistant,
             Message::ToolResult { .. } => Role::Tool,
