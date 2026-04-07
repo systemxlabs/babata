@@ -49,7 +49,6 @@ impl MessageStore {
         })?;
         conn.execute(
             "CREATE TABLE IF NOT EXISTS messages (
-                role TEXT NOT NULL,
                 message TEXT NOT NULL,
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
             )",
@@ -79,7 +78,7 @@ impl MessageStore {
 
         let conn = self.connect()?;
         let mut stmt = conn
-            .prepare("INSERT INTO messages (role, message) VALUES (?1, ?2)")
+            .prepare("INSERT INTO messages (message) VALUES (?1)")
             .map_err(|err| {
                 BabataError::memory(format!(
                     "Failed to prepare message insert statement: {}",
@@ -88,14 +87,13 @@ impl MessageStore {
             })?;
 
         for message in messages {
-            let role = message.role().to_string();
             let payload = serde_json::to_string(message).map_err(|err| {
                 BabataError::memory(format!(
                     "Failed to serialize message payload into JSON: {}",
                     err
                 ))
             })?;
-            stmt.execute(params![role, payload]).map_err(|err| {
+            stmt.execute(params![payload]).map_err(|err| {
                 BabataError::memory(format!("Failed to insert message row: {}", err))
             })?;
         }
@@ -110,8 +108,8 @@ impl MessageStore {
             return Ok(Vec::new());
         }
 
-        let query = "SELECT role, message FROM (
-            SELECT role, message, created_at, rowid
+        let query = "SELECT message FROM (
+            SELECT message, created_at, rowid
             FROM messages
             ORDER BY datetime(created_at) DESC, rowid DESC
             LIMIT ?1
@@ -133,10 +131,7 @@ impl MessageStore {
         while let Some(row) = rows.next().map_err(|err| {
             BabataError::memory(format!("Failed to scan sqlite message row: {}", err))
         })? {
-            let role: String = row.get(0).map_err(|err| {
-                BabataError::memory(format!("Failed to read message role from row: {}", err))
-            })?;
-            let payload: String = row.get(1).map_err(|err| {
+            let payload: String = row.get(0).map_err(|err| {
                 BabataError::memory(format!("Failed to read message payload from row: {}", err))
             })?;
 
@@ -146,13 +141,6 @@ impl MessageStore {
                     payload, err
                 ))
             })?;
-            let expected = parsed.role().to_string();
-            if role != expected {
-                return Err(BabataError::memory(format!(
-                    "Corrupted message row: role '{}' does not match message payload role '{}'",
-                    role, expected
-                )));
-            }
 
             messages.push(parsed);
         }
