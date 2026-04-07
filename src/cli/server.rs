@@ -99,7 +99,7 @@ fn run_serve() -> BabataResult<()> {
     let agent_definitions = load_agent_definitions()?;
     let channels = build_channels(&config)?;
     let task_store = TaskStore::new()?;
-    let task_launcher = TaskLauncher::new(&config, &agent_definitions, channels.clone())?;
+    let task_launcher = TaskLauncher::new(&agent_definitions, channels.clone())?;
     let task_manager = Arc::new(TaskManager::new(task_store, task_launcher)?);
 
     let http_app = HttpApp::new(task_manager.clone());

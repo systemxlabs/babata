@@ -14,7 +14,7 @@ use crate::{
     channel::Channel,
     config::Config,
     error::BabataError,
-    memory::{Memory, build_memory},
+    memory::Memory,
     message::{Content, Message},
     provider::{GenerationRequest, Provider, create_provider},
     skill::load_skills,
@@ -35,13 +35,12 @@ pub struct AgentTask {
 }
 
 pub fn build_agents(
-    config: &Config,
     definitions: &[AgentDefinition],
     channels: HashMap<String, Arc<dyn Channel>>,
 ) -> BabataResult<HashMap<String, Arc<Agent>>> {
     let mut agents = HashMap::with_capacity(definitions.len());
     for def in definitions {
-        let agent = Agent::new(config, def.clone(), channels.clone())?;
+        let agent = Agent::new(def.clone(), channels.clone())?;
         agents.insert(def.frontmatter.name.clone(), Arc::new(agent));
     }
     Ok(agents)
@@ -50,20 +49,16 @@ pub fn build_agents(
 #[derive(Debug)]
 pub struct Agent {
     pub definition: AgentDefinition,
-    pub memory: Box<dyn Memory>,
+    pub memory: Memory,
     pub tools: HashMap<String, Arc<dyn Tool>>,
 }
 
 impl Agent {
     pub fn new(
-        config: &Config,
         definition: AgentDefinition,
         channels: HashMap<String, Arc<dyn Channel>>,
     ) -> BabataResult<Self> {
-        let memory = build_memory(
-            config,
-            definition.frontmatter.memory.as_deref().unwrap_or("simple"),
-        )?;
+        let memory = Memory::new()?;
         let tools = build_tools(channels)?;
 
         Ok(Self {
@@ -171,7 +166,7 @@ impl Agent {
         }
 
         if success {
-            self.memory.append_messages(conversation).await?;
+            self.memory.append_messages(&conversation)?;
             Ok(())
         } else {
             Err(BabataError::provider(format!(

@@ -182,7 +182,6 @@ mod tests {
                     user_id: "wxid_123".to_string(),
                 }),
             ],
-            memory: Vec::new(),
         };
 
         let prompt = build_channels_prompt(&config).unwrap();
@@ -200,7 +199,6 @@ mod tests {
         let config = Config {
             providers: Vec::new(),
             channels: Vec::new(),
-            memory: Vec::new(),
         };
 
         let prompt = build_channels_prompt(&config).unwrap();

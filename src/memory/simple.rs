@@ -4,14 +4,14 @@ use rusqlite::{Connection, params};
 
 use crate::message::Content;
 use crate::utils::babata_dir;
-use crate::{BabataResult, error::BabataError, memory::Memory, message::Message};
+use crate::{BabataResult, error::BabataError, message::Message};
 
 #[derive(Debug)]
-pub struct SimpleMemory {
+pub struct Memory {
     db_path: PathBuf,
 }
 
-impl SimpleMemory {
+impl Memory {
     const CONTEXT_LIMIT: usize = 50;
     const TOOL_RESULT_CHAR_LIMIT: usize = 1_000;
 
@@ -124,7 +124,7 @@ This file stores important information that should persist across sessions.
         })
     }
 
-    fn insert_messages_inner(&self, messages: &[Message]) -> BabataResult<()> {
+    pub fn append_messages(&self, messages: &[Message]) -> BabataResult<()> {
         if messages.is_empty() {
             return Ok(());
         }
@@ -310,19 +310,8 @@ This file stores important information that should persist across sessions.
         let truncated: String = text.chars().take(limit).collect();
         format!("{truncated}...")
     }
-}
 
-#[async_trait::async_trait]
-impl Memory for SimpleMemory {
-    fn name() -> &'static str {
-        "simple"
-    }
-
-    async fn append_messages(&self, messages: Vec<Message>) -> BabataResult<()> {
-        self.insert_messages_inner(&messages)
-    }
-
-    async fn build_context(&self, _prompts: &[Content]) -> BabataResult<String> {
+    pub async fn build_context(&self, _prompts: &[Content]) -> BabataResult<String> {
         let mut context_parts = Vec::new();
 
         // Load long-term memory from MEMORY.md
@@ -369,7 +358,7 @@ mod tests {
             .join("babata-tests")
             .join(format!("message-store-{}.db", Uuid::new_v4()));
 
-        let memory = SimpleMemory::open(&db_path).expect("open sqlite message store");
+        let memory = Memory::open(&db_path).expect("open sqlite message store");
 
         let messages = vec![
             Message::UserPrompt {
@@ -408,7 +397,7 @@ mod tests {
         ];
 
         memory
-            .insert_messages_inner(&messages)
+            .append_messages(&messages)
             .expect("insert messages into sqlite");
         let scanned = memory
             .scan_messages(None)
@@ -425,7 +414,7 @@ mod tests {
             .join("babata-tests")
             .join(format!("message-store-{}.db", Uuid::new_v4()));
 
-        let memory = SimpleMemory::open(&db_path).expect("open sqlite message store");
+        let memory = Memory::open(&db_path).expect("open sqlite message store");
         let messages = vec![
             Message::UserPrompt {
                 content: vec![Content::Text {
@@ -445,7 +434,7 @@ mod tests {
         ];
 
         memory
-            .insert_messages_inner(&messages)
+            .append_messages(&messages)
             .expect("insert messages into sqlite");
 
         let scanned = memory
@@ -481,9 +470,9 @@ mod tests {
             .join("babata-tests")
             .join(format!("message-store-{}.db", Uuid::new_v4()));
 
-        let memory = SimpleMemory::open(&db_path).expect("open sqlite message store");
+        let memory = Memory::open(&db_path).expect("open sqlite message store");
         memory
-            .insert_messages_inner(&[
+            .append_messages(&[
                 Message::UserPrompt {
                     content: vec![Content::Text {
                         text: "hello".to_string(),

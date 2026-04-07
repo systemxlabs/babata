@@ -589,7 +589,7 @@ fn render_prompt_markdown(prompt: &[Content]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::Config;
+    use crate::agent::{AgentDefinition, AgentFrontmatter};
     use std::{collections::HashMap, fs, path::PathBuf};
     use uuid::Uuid;
 
@@ -601,7 +601,7 @@ mod tests {
         TaskRecord {
             task_id,
             description: "test task".to_string(),
-            agent: Some("babata".to_string()),
+            agent: Some("test-agent".to_string()),
             status: TaskStatus::Running,
             parent_task_id: None,
             root_task_id: task_id,
@@ -614,7 +614,7 @@ mod tests {
         TaskRecord {
             task_id: Uuid::new_v4(),
             description: "test subtask".to_string(),
-            agent: Some("babata".to_string()),
+            agent: Some("test-agent".to_string()),
             status: TaskStatus::Running,
             parent_task_id: Some(parent_task_id),
             root_task_id,
@@ -631,19 +631,22 @@ mod tests {
         let _workspace = temp_root.join("workspace");
         fs::create_dir_all(&_workspace).expect("create workspace");
 
-        let config = Config {
-            providers: vec![crate::config::ProviderConfig::OpenAI(
-                crate::config::OpenAIProviderConfig {
-                    api_key: "test-key".to_string(),
-                },
-            )],
-            channels: Vec::new(),
-            memory: Vec::new(),
-        };
+        let agent_defs = vec![AgentDefinition {
+            path: PathBuf::from("test"),
+            frontmatter: AgentFrontmatter {
+                name: "test-agent".to_string(),
+                description: "Test agent".to_string(),
+                provider: "openai".to_string(),
+                model: "gpt-4".to_string(),
+                memory: None,
+                allowed_tools: vec![],
+                default: Some(true),
+            },
+            body: String::new(),
+        }];
 
         let store = TaskStore::open(temp_root.join("task.db")).expect("open temp task store");
-        let launcher =
-            TaskLauncher::new(&config, &[], HashMap::new()).expect("build task launcher");
+        let launcher = TaskLauncher::new(&agent_defs, HashMap::new()).expect("build task launcher");
         TaskManager::new(store, launcher).expect("build task manager")
     }
 

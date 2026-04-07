@@ -1,19 +1,12 @@
 mod channel;
-mod memory;
 mod provider;
 
 pub use channel::*;
-pub use memory::*;
 pub use provider::*;
 
 use std::collections::HashSet;
 
-use crate::{
-    BabataResult,
-    error::BabataError,
-    memory::{Memory, SimpleMemory},
-    utils::babata_dir,
-};
+use crate::{BabataResult, error::BabataError, utils::babata_dir};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -21,8 +14,6 @@ pub struct Config {
     pub providers: Vec<ProviderConfig>,
     #[serde(default)]
     pub channels: Vec<ChannelConfig>,
-    #[serde(default)]
-    pub memory: Vec<MemoryConfig>,
 }
 
 impl Config {
@@ -38,7 +29,6 @@ impl Config {
             Ok(Self {
                 providers: Vec::new(),
                 channels: Vec::new(),
-                memory: Vec::new(),
             })
         }
     }
@@ -138,28 +128,6 @@ impl Config {
         }
 
         self.channels.push(channel_config);
-    }
-
-    pub fn upsert_memory(&mut self, memory_config: MemoryConfig) {
-        if let Some(existing) = self.memory.iter_mut().find(|existing| {
-            matches!(
-                (&**existing, &memory_config),
-                (MemoryConfig::Simple, MemoryConfig::Simple)
-                    | (MemoryConfig::Hybrid(_), MemoryConfig::Hybrid(_))
-            )
-        }) {
-            *existing = memory_config;
-            return;
-        }
-
-        self.memory.push(memory_config);
-    }
-
-    pub fn get_memory(&self, memory_name: &str) -> Option<&MemoryConfig> {
-        self.memory.iter().find(|memory| match memory {
-            MemoryConfig::Simple => memory_name.eq_ignore_ascii_case(SimpleMemory::name()),
-            MemoryConfig::Hybrid(_) => memory_name.eq_ignore_ascii_case("hybrid"),
-        })
     }
 
     pub fn get_provider(&self, provider_name: &str) -> BabataResult<&ProviderConfig> {

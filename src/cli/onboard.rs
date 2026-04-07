@@ -5,10 +5,8 @@ use crate::{
     channel::{Channel, TelegramChannel, WechatChannel},
     config::{
         AnthropicProviderConfig, ChannelConfig, CompatibleApi, Config, CustomProviderConfig,
-        DeepSeekProviderConfig, EmbeddingConfig, HybridMemoryConfig, KimiProviderConfig,
-        LocalEmbeddingConfig, MemoryConfig, MiniMaxProviderConfig, MoonshotProviderConfig,
-        OpenAIProviderConfig, ProviderConfig, RemoteEmbeddingConfig, TelegramChannelConfig,
-        WechatChannelConfig,
+        DeepSeekProviderConfig, KimiProviderConfig, MiniMaxProviderConfig, MoonshotProviderConfig,
+        OpenAIProviderConfig, ProviderConfig, TelegramChannelConfig, WechatChannelConfig,
     },
     error::BabataError,
     provider::{
@@ -36,10 +34,6 @@ fn run_onboard() -> BabataResult<()> {
 
     if let Some(provider_config) = prompt_provider_setup()? {
         config.upsert_provider(provider_config);
-    }
-
-    if let Some(memory_config) = prompt_memory_setup()? {
-        config.upsert_memory(memory_config);
     }
 
     if let Some(channel_config) = prompt_channel_setup()? {
@@ -285,67 +279,6 @@ fn prompt_background_service_setup() -> BabataResult<bool> {
         "Y" | "y" | "yes" => Ok(true),
         _ => Err(BabataError::config("Invalid selection")),
     }
-}
-
-fn prompt_memory_setup() -> BabataResult<Option<MemoryConfig>> {
-    println!("Configure memory:");
-    println!("1. simple (default)");
-    println!("2. hybrid (semantic search with embeddings)");
-    println!("3. skip");
-
-    let selection = prompt_line("Choice (1-3, or press Enter to skip)")?;
-    let selection = selection.trim();
-
-    if selection.is_empty() || selection == "3" || selection.eq_ignore_ascii_case("skip") {
-        return Ok(None);
-    }
-
-    match selection {
-        "1" => Ok(Some(MemoryConfig::Simple)),
-        "2" => Ok(Some(MemoryConfig::Hybrid(prompt_hybrid_memory_config()?))),
-        _ => Err(BabataError::config("Invalid memory selection")),
-    }
-}
-
-fn prompt_hybrid_memory_config() -> BabataResult<HybridMemoryConfig> {
-    println!("Embedding type:");
-    println!("1. local (default: baai/bge-m3)");
-    println!("2. remote (OpenAI-compatible API)");
-
-    let selection = prompt_line("Choice (1-2, or press Enter for local default)")?;
-    let selection = selection.trim();
-
-    let embedding = match selection {
-        "" | "1" => {
-            let model_raw =
-                prompt_line("Local embedding model (press Enter for default baai/bge-m3)")?;
-            let model = if model_raw.trim().is_empty() {
-                "baai/bge-m3".to_string()
-            } else {
-                model_raw.trim().to_string()
-            };
-            EmbeddingConfig::Local(LocalEmbeddingConfig { model })
-        }
-        "2" => {
-            let base_url = prompt_line("Embedding base URL")?;
-            let model = prompt_line("Embedding model")?;
-            let dimension_raw = prompt_line("Embedding dimension")?;
-            let dimension = dimension_raw
-                .trim()
-                .parse::<usize>()
-                .map_err(|_| BabataError::config("Invalid embedding dimension"))?;
-            let api_key = prompt_line("Embedding API key")?;
-            EmbeddingConfig::Remote(RemoteEmbeddingConfig {
-                api_key,
-                base_url,
-                model,
-                dimension,
-            })
-        }
-        _ => return Err(BabataError::config("Invalid embedding type selection")),
-    };
-
-    Ok(HybridMemoryConfig { embedding })
 }
 
 fn prompt_line(label: &str) -> BabataResult<String> {

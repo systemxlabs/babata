@@ -7,7 +7,6 @@ use crate::{
     BabataResult,
     agent::{Agent, AgentDefinition, AgentTask, build_agents},
     channel::Channel,
-    config::Config,
     error::BabataError,
     message::Content,
     task::{RunningTask, TaskExitEvent, TaskRecord, task_dir},
@@ -21,11 +20,10 @@ pub struct TaskLauncher {
 
 impl TaskLauncher {
     pub fn new(
-        config: &Config,
         agent_definitions: &[AgentDefinition],
         channels: HashMap<String, Arc<dyn Channel>>,
     ) -> BabataResult<Self> {
-        let agents = build_agents(config, agent_definitions, channels)?;
+        let agents = build_agents(agent_definitions, channels)?;
         let default_agent = agents
             .values()
             .find(|agent| matches!(agent.definition.frontmatter.default, Some(true)))
