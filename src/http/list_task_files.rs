@@ -23,15 +23,6 @@ pub(crate) struct FileEntry {
     pub(crate) modified: Option<u64>,
 }
 
-/// Response for listing task files
-#[derive(Debug, Serialize)]
-pub(crate) struct ListTaskFilesResponse {
-    /// Task ID
-    pub(crate) task_id: String,
-    /// All files and directories in the task directory (recursively)
-    pub(crate) files: Vec<FileEntry>,
-}
-
 /// Handle GET /tasks/{task_id}/files
 pub(super) async fn handle(State(state): State<HttpApp>, Path(task_id): Path<String>) -> Response {
     // Parse task ID
@@ -56,22 +47,12 @@ pub(super) async fn handle(State(state): State<HttpApp>, Path(task_id): Path<Str
 
     // Check if task directory exists
     if !task_dir.exists() {
-        return Json(ListTaskFilesResponse {
-            task_id: task_id.to_string(),
-            files: vec![],
-        })
-        .into_response();
+        return Json(Vec::<FileEntry>::new()).into_response();
     }
 
     // Recursively read all files
     match read_directory_recursive(&task_dir).await {
-        Ok(files) => {
-            let response = ListTaskFilesResponse {
-                task_id: task_id.to_string(),
-                files,
-            };
-            Json(response).into_response()
-        }
+        Ok(files) => Json(files).into_response(),
         Err(err) => {
             ApiError::bad_request(format!("Failed to read directory: {}", err)).into_response()
         }
