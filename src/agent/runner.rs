@@ -18,36 +18,6 @@ use crate::{
     tool::{Tool, ToolContext, ToolSpec},
 };
 
-fn add_task_id_to_message(message: Message, task_id: Uuid) -> Message {
-    match message {
-        Message::UserPrompt { content, .. } => Message::UserPrompt { task_id, content },
-        Message::UserSteering { content, .. } => Message::UserSteering { task_id, content },
-        Message::AssistantResponse {
-            content,
-            reasoning_content,
-            ..
-        } => Message::AssistantResponse {
-            task_id,
-            content,
-            reasoning_content,
-        },
-        Message::AssistantToolCalls {
-            calls,
-            reasoning_content,
-            ..
-        } => Message::AssistantToolCalls {
-            task_id,
-            calls,
-            reasoning_content,
-        },
-        Message::ToolResult { call, result, .. } => Message::ToolResult {
-            task_id,
-            call,
-            result,
-        },
-    }
-}
-
 const PROVIDER_RETRY_MAX_TIMES: usize = 3;
 const PROVIDER_RETRY_MIN_DELAY_MS: u64 = 200;
 const PROVIDER_RETRY_MAX_DELAY_SECS: u64 = 2;
@@ -80,7 +50,6 @@ impl AgentTask {
 
         let context = self.memory.build_context(&self.prompt).await?;
         let mut conversation = vec![Message::UserPrompt {
-            task_id: self.task_id,
             content: self.prompt.clone(),
         }];
 
@@ -98,7 +67,6 @@ impl AgentTask {
             )
             .await?;
             info!("Provider returned message: {:?}", message);
-            let message = add_task_id_to_message(message, self.task_id);
             conversation.push(message.clone());
 
             match message {
@@ -135,11 +103,7 @@ impl AgentTask {
                                 format!("Unknown tool: {}", call.tool_name)
                             };
 
-                            Message::ToolResult {
-                                task_id: self.task_id,
-                                call,
-                                result,
-                            }
+                            Message::ToolResult { call, result }
                         }
                     });
 

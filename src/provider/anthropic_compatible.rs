@@ -2,7 +2,6 @@ use log::{debug, warn};
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use uuid::Uuid;
 
 use crate::{
     BabataResult,
@@ -246,7 +245,6 @@ impl AnthropicCompatibleProvider {
             };
             return Ok(GenerationResponse {
                 message: Message::AssistantToolCalls {
-                    task_id: Uuid::nil(),
                     calls: tool_calls,
                     reasoning_content,
                 },
@@ -259,7 +257,6 @@ impl AnthropicCompatibleProvider {
 
         Ok(GenerationResponse {
             message: Message::AssistantResponse {
-                task_id: Uuid::nil(),
                 content: text_content,
                 reasoning_content: None,
             },

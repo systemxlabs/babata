@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize, de::value::StringDeserializer};
-use uuid::Uuid;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Role {
@@ -25,25 +24,20 @@ impl std::fmt::Display for Role {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Message {
     UserPrompt {
-        task_id: Uuid,
         content: Vec<Content>,
     },
     UserSteering {
-        task_id: Uuid,
         content: Vec<Content>,
     },
     AssistantResponse {
-        task_id: Uuid,
         content: Vec<Content>,
         reasoning_content: Option<String>,
     },
     AssistantToolCalls {
-        task_id: Uuid,
         calls: Vec<ToolCall>,
         reasoning_content: Option<String>,
     },
     ToolResult {
-        task_id: Uuid,
         call: ToolCall,
         result: String,
     },

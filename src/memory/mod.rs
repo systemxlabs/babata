@@ -214,7 +214,6 @@ mod tests {
     #[test]
     fn message_json_has_type_tag() {
         let message = Message::UserPrompt {
-            task_id: Uuid::new_v4(),
             content: vec![Content::Text {
                 text: "hello".to_string(),
             }],
@@ -238,13 +237,11 @@ mod tests {
         memory
             .append_messages(&[
                 Message::UserPrompt {
-                    task_id: Uuid::new_v4(),
                     content: vec![Content::Text {
                         text: "hello".to_string(),
                     }],
                 },
                 Message::AssistantResponse {
-                    task_id: Uuid::new_v4(),
                     content: vec![Content::Text {
                         text: "world".to_string(),
                     }],
