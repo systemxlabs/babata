@@ -90,15 +90,16 @@ This file stores important information that should persist across sessions.
 
     fn render_message(message: &Message) -> String {
         match message {
-            Message::UserPrompt { content } => {
+            Message::UserPrompt { content, .. } => {
                 format!("[user]\n{}", Self::render_content(content))
             }
-            Message::UserSteering { content } => {
+            Message::UserSteering { content, .. } => {
                 format!("[steer]\n{}", Self::render_content(content))
             }
             Message::AssistantResponse {
                 content,
                 reasoning_content,
+                ..
             } => {
                 let mut lines = Vec::new();
                 lines.push("[assistant]".to_string());
@@ -113,6 +114,7 @@ This file stores important information that should persist across sessions.
             Message::AssistantToolCalls {
                 calls,
                 reasoning_content,
+                ..
             } => {
                 let mut lines = Vec::new();
                 lines.push("[assistant_tool_calls]".to_string());
@@ -127,7 +129,7 @@ This file stores important information that should persist across sessions.
                 }
                 lines.join("\n")
             }
-            Message::ToolResult { call, result } => {
+            Message::ToolResult { call, result, .. } => {
                 format!(
                     "[tool_result:{}]\n{}",
                     call.tool_name,

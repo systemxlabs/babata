@@ -75,7 +75,7 @@ impl AnthropicCompatibleProvider {
 
         for message in prompts {
             let (role, blocks) = match message {
-                Message::UserPrompt { content } | Message::UserSteering { content } => {
+                Message::UserPrompt { content, .. } | Message::UserSteering { content, .. } => {
                     let mut blocks = Vec::new();
                     for part in content {
                         match self.format_content_block(part) {
@@ -91,6 +91,7 @@ impl AnthropicCompatibleProvider {
                 Message::AssistantToolCalls {
                     calls,
                     reasoning_content: _,
+                    ..
                 } => {
                     let blocks = calls
                         .iter()
@@ -109,6 +110,7 @@ impl AnthropicCompatibleProvider {
                 Message::AssistantResponse {
                     content,
                     reasoning_content: _,
+                    ..
                 } => {
                     let mut blocks = Vec::new();
                     for part in content {
@@ -122,7 +124,7 @@ impl AnthropicCompatibleProvider {
                     }
                     ("assistant", blocks)
                 }
-                Message::ToolResult { call, result } => (
+                Message::ToolResult { call, result, .. } => (
                     "user",
                     vec![AnthropicContentBlock::ToolResult {
                         tool_use_id: call.call_id.clone(),

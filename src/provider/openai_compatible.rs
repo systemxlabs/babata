@@ -86,7 +86,7 @@ impl OpenAICompatibleProvider {
 
         for message in prompts {
             match message {
-                Message::UserPrompt { content } | Message::UserSteering { content } => {
+                Message::UserPrompt { content, .. } | Message::UserSteering { content, .. } => {
                     let parts = content
                         .iter()
                         .map(|part| match part {
@@ -122,6 +122,7 @@ impl OpenAICompatibleProvider {
                 Message::AssistantToolCalls {
                     calls,
                     reasoning_content,
+                    ..
                 } => {
                     let tool_calls = calls
                         .iter()
@@ -143,6 +144,7 @@ impl OpenAICompatibleProvider {
                 Message::AssistantResponse {
                     content,
                     reasoning_content,
+                    ..
                 } => {
                     let mut parts = Vec::with_capacity(content.len());
                     for part in content {
@@ -166,7 +168,7 @@ impl OpenAICompatibleProvider {
                         tool_calls: None,
                     });
                 }
-                Message::ToolResult { call, result } => {
+                Message::ToolResult { call, result, .. } => {
                     request_messages.push(ChatCompletionMessageParam::Tool {
                         tool_call_id: call.call_id.clone(),
                         content: result.clone(),
