@@ -589,7 +589,7 @@ fn render_prompt_markdown(prompt: &[Content]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::agent::{AgentDefinition, AgentFrontmatter};
+    use crate::agent::{Agent, AgentFrontmatter};
     use std::{collections::HashMap, fs, path::PathBuf};
     use uuid::Uuid;
 
@@ -637,21 +637,25 @@ mod tests {
         let agent_md_path = agent_home.join("AGENT.md");
         fs::write(&agent_md_path, "---\nname: test-agent\n---\n").expect("create AGENT.md");
 
-        let agent_defs = vec![AgentDefinition {
-            path: agent_md_path,
-            frontmatter: AgentFrontmatter {
-                name: "test-agent".to_string(),
-                description: "Test agent".to_string(),
-                provider: "openai".to_string(),
-                model: "gpt-4".to_string(),
-                allowed_tools: vec!["*".to_string()],
-                default: Some(true),
-            },
-            body: String::new(),
-        }];
+        let mut agents = HashMap::new();
+        agents.insert(
+            "test-agent".to_string(),
+            Arc::new(Agent {
+                path: agent_md_path,
+                frontmatter: AgentFrontmatter {
+                    name: "test-agent".to_string(),
+                    description: "Test agent".to_string(),
+                    provider: "openai".to_string(),
+                    model: "gpt-4".to_string(),
+                    allowed_tools: vec!["*".to_string()],
+                    default: Some(true),
+                },
+                body: String::new(),
+            }),
+        );
 
         let store = TaskStore::open(temp_root.join("task.db")).expect("open temp task store");
-        let launcher = TaskLauncher::new(&agent_defs, HashMap::new()).expect("build task launcher");
+        let launcher = TaskLauncher::new(agents, HashMap::new()).expect("build task launcher");
         TaskManager::new(store, launcher).expect("build task manager")
     }
 

@@ -5,33 +5,44 @@ use tokio::sync::mpsc;
 
 use crate::{
     BabataResult,
-    agent::{Agent, AgentDefinition, AgentTask, build_agents},
+    agent::{Agent, AgentTask},
     channel::Channel,
     error::BabataError,
+    memory::Memory,
     message::Content,
     task::{RunningTask, TaskExitEvent, TaskRecord, task_dir},
+    tool::{Tool, build_tools},
 };
 
 #[derive(Debug)]
 pub struct TaskLauncher {
     default_agent: Arc<Agent>,
     agents: HashMap<String, Arc<Agent>>,
+    memories: HashMap<String, Arc<Memory>>,
+    all_tools: HashMap<String, Arc<dyn Tool>>,
 }
 
 impl TaskLauncher {
     pub fn new(
-        agent_definitions: &[AgentDefinition],
+        agents: HashMap<String, Arc<Agent>>,
         channels: HashMap<String, Arc<dyn Channel>>,
     ) -> BabataResult<Self> {
-        let agents = build_agents(agent_definitions, channels)?;
         let default_agent = agents
             .values()
-            .find(|agent| matches!(agent.definition.frontmatter.default, Some(true)))
+            .find(|agent| matches!(agent.frontmatter.default, Some(true)))
             .ok_or(BabataError::internal("No default agent"))?
             .clone();
+        let mut memories = HashMap::with_capacity(agents.len());
+        for (name, agent) in &agents {
+            let memory = Memory::new(agent.home()?)?;
+            memories.insert(name.clone(), Arc::new(memory));
+        }
+        let all_tools = build_tools(channels)?;
         Ok(Self {
             default_agent,
             agents,
+            memories,
+            all_tools,
         })
     }
 
@@ -68,15 +79,24 @@ impl TaskLauncher {
                 task.task_id, task
             ),
         }
-        let agent_name = match task.agent.as_deref() {
-            Some(agent_name) => agent_name,
-            None => &self.default_agent.definition.frontmatter.name,
+        let agent = match task.agent.as_deref() {
+            Some(agent_name) => self
+                .agents
+                .get(agent_name)
+                .ok_or_else(|| BabataError::config(format!("Agent '{}' not found", agent_name)))?
+                .clone(),
+            None => self.default_agent.clone(),
         };
 
-        let agent = self
-            .agents
-            .get(agent_name)
-            .ok_or_else(|| BabataError::config(format!("Agent '{}' not found", agent_name)))?
+        let memory = self
+            .memories
+            .get(&agent.frontmatter.name)
+            .ok_or_else(|| {
+                BabataError::config(format!(
+                    "Agent memory '{}' not found",
+                    agent.frontmatter.name
+                ))
+            })?
             .clone();
 
         let task_id = task.task_id;
@@ -86,9 +106,12 @@ impl TaskLauncher {
             parent_task_id: task.parent_task_id,
             root_task_id: task.root_task_id,
             prompt,
+            agent,
+            memory,
+            all_tools: self.all_tools.clone(),
         };
         let handle = tokio::spawn(async move {
-            let result = agent.execute(agent_task).await;
+            let result = agent_task.run().await;
             let event = match result {
                 Ok(()) => TaskExitEvent::Completed { task_id },
                 Err(error) => TaskExitEvent::Failed { task_id, error },

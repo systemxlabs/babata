@@ -1,4 +1,8 @@
-use std::path::{Path, PathBuf};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use serde::Deserialize;
 
@@ -15,31 +19,31 @@ pub struct AgentFrontmatter {
 }
 
 #[derive(Debug, Clone)]
-pub struct AgentDefinition {
+pub struct Agent {
     pub path: PathBuf,
     pub frontmatter: AgentFrontmatter,
     pub body: String,
 }
 
-impl AgentDefinition {
-    pub fn agent_home(&self) -> BabataResult<PathBuf> {
+impl Agent {
+    pub fn home(&self) -> BabataResult<PathBuf> {
         let home = self
             .path
             .parent()
-            .ok_or_else(|| BabataError::config("Invalid agent definition path"))?
+            .ok_or_else(|| BabataError::config("Invalid agent path"))?
             .to_path_buf();
         Ok(home)
     }
 }
 
-pub fn load_agent_definitions() -> BabataResult<Vec<AgentDefinition>> {
+pub fn load_agents() -> BabataResult<HashMap<String, Arc<Agent>>> {
     let dir = babata_dir()?.join("agents");
-    load_agent_definitions_from_dir(&dir)
+    load_agents_from_dir(&dir)
 }
 
-fn load_agent_definitions_from_dir(dir: &Path) -> BabataResult<Vec<AgentDefinition>> {
+fn load_agents_from_dir(dir: &Path) -> BabataResult<HashMap<String, Arc<Agent>>> {
     if !dir.exists() {
-        return Ok(Vec::new());
+        return Ok(HashMap::new());
     }
 
     if !dir.is_dir() {
@@ -49,7 +53,7 @@ fn load_agent_definitions_from_dir(dir: &Path) -> BabataResult<Vec<AgentDefiniti
         )));
     }
 
-    let mut definitions = Vec::new();
+    let mut agents = HashMap::new();
     let entries = std::fs::read_dir(dir).map_err(|err| {
         BabataError::config(format!(
             "Failed to read agents directory '{}': {}",
@@ -84,18 +88,18 @@ fn load_agent_definitions_from_dir(dir: &Path) -> BabataResult<Vec<AgentDefiniti
             ))
         })?;
         let (frontmatter, body) = parse_agent_content(&content, &agent_path)?;
-        definitions.push(AgentDefinition {
+        let agent_name = frontmatter.name.clone();
+        let agent = Agent {
             path: agent_path,
             frontmatter,
             body,
-        });
+        };
+        agents.insert(agent_name, Arc::new(agent));
     }
 
-    definitions.sort_by(|a, b| a.path.cmp(&b.path));
-
     // Validate exactly one default agent
-    let default_count = definitions
-        .iter()
+    let default_count = agents
+        .values()
         .filter(|d| d.frontmatter.default == Some(true))
         .count();
     if default_count == 0 {
@@ -110,7 +114,7 @@ fn load_agent_definitions_from_dir(dir: &Path) -> BabataResult<Vec<AgentDefiniti
         )));
     }
 
-    Ok(definitions)
+    Ok(agents)
 }
 
 fn parse_agent_content(content: &str, path: &Path) -> BabataResult<(AgentFrontmatter, String)> {

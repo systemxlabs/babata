@@ -1,6 +1,8 @@
+use std::{collections::HashMap, sync::Arc};
+
 use crate::{
     BabataResult,
-    agent::AgentDefinition,
+    agent::Agent,
     channel::load_wechat_latest_context_token,
     config::{ChannelConfig, Config},
     error::BabataError,
@@ -14,14 +16,14 @@ pub const BABATA_SYSTEM_DESCRIPTION: &str = include_str!("SYSTEM.md");
 
 pub fn build_system_prompts(
     config: &Config,
-    agent_definitions: &[AgentDefinition],
+    agents: &HashMap<String, Arc<Agent>>,
     skills: &[Skill],
 ) -> BabataResult<Vec<String>> {
     let mut sections = vec![
         SOUL_PROMPT.to_string(),
         BABATA_SYSTEM_DESCRIPTION.to_string(),
         build_runtime_prompt()?,
-        build_agents_prompt(agent_definitions),
+        build_agents_prompt(agents),
         build_channels_prompt(config)?,
     ];
 
@@ -55,12 +57,12 @@ pub fn build_runtime_prompt() -> BabataResult<String> {
     ))
 }
 
-pub fn build_agents_prompt(agent_definitions: &[AgentDefinition]) -> String {
-    let mut agent_sections = Vec::with_capacity(agent_definitions.len());
-    for def in agent_definitions {
+pub fn build_agents_prompt(agents: &HashMap<String, Arc<Agent>>) -> String {
+    let mut agent_sections = Vec::with_capacity(agents.len());
+    for agent in agents.values() {
         agent_sections.push(format!(
             "- `{}`: {}",
-            def.frontmatter.name, def.frontmatter.description,
+            agent.frontmatter.name, agent.frontmatter.description,
         ));
     }
 
