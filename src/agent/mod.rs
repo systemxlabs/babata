@@ -58,7 +58,7 @@ impl Agent {
         definition: AgentDefinition,
         channels: HashMap<String, Arc<dyn Channel>>,
     ) -> BabataResult<Self> {
-        let memory = Memory::new()?;
+        let memory = Memory::new(definition.agent_home()?)?;
         let tools = build_tools(channels)?;
 
         Ok(Self {

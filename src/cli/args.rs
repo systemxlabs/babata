@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand};
 #[derive(Parser, Debug)]
 #[command(
     version,
-    about = "Babata agent CLI",
+    about = "Babata CLI",
     long_about = None,
     arg_required_else_help = true
 )]

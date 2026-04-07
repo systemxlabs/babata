@@ -4,13 +4,6 @@ use serde::Deserialize;
 
 use crate::{BabataResult, error::BabataError, utils::babata_dir};
 
-#[derive(Debug, Clone)]
-pub struct AgentDefinition {
-    pub path: PathBuf,
-    pub frontmatter: AgentFrontmatter,
-    pub body: String,
-}
-
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct AgentFrontmatter {
     pub name: String,
@@ -20,6 +13,24 @@ pub struct AgentFrontmatter {
     pub memory: Option<String>,
     pub allowed_tools: Vec<String>,
     pub default: Option<bool>,
+}
+
+#[derive(Debug, Clone)]
+pub struct AgentDefinition {
+    pub path: PathBuf,
+    pub frontmatter: AgentFrontmatter,
+    pub body: String,
+}
+
+impl AgentDefinition {
+    pub fn agent_home(&self) -> BabataResult<PathBuf> {
+        let home = self
+            .path
+            .parent()
+            .ok_or_else(|| BabataError::config("Invalid agent definition path"))?
+            .to_path_buf();
+        Ok(home)
+    }
 }
 
 pub fn load_agent_definitions() -> BabataResult<Vec<AgentDefinition>> {
