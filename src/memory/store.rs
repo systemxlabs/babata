@@ -2,12 +2,38 @@
 
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, params};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     BabataResult,
     error::BabataError,
-    message::{Content, Message, MessageRecord, MessageType, ToolCall},
+    message::{Content, Message, ToolCall},
 };
+
+/// Database record structure that maps 1:1 with the messages table schema.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MessageRecord {
+    pub id: i64,
+    pub message_type: MessageType,
+    pub content: Option<String>,
+    pub reasoning_content: Option<String>,
+    pub tool_calls: Option<String>,
+    pub call_id: Option<String>,
+    pub tool_name: Option<String>,
+    pub args: Option<String>,
+    pub result: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MessageType {
+    UserPrompt,
+    UserSteering,
+    AssistantResponse,
+    AssistantToolCalls,
+    ToolResult,
+}
 
 /// Database fields extracted from a Message for storage.
 struct MessageFields {
