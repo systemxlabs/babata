@@ -95,8 +95,6 @@ pub enum MessageType {
     ToolResult,
 }
 
-
-
 #[derive(Debug)]
 pub struct MessageStore {
     db_path: PathBuf,
@@ -170,7 +168,7 @@ impl MessageStore {
 
     /// Convert Message to MessageRecord
     fn message_to_record(message: &Message) -> BabataResult<MessageRecord> {
-        let created_at = message.created_at().clone();
+        let created_at = *message.created_at();
 
         let record = match message {
             Message::UserPrompt { content: c, .. } => MessageRecord {
@@ -310,12 +308,20 @@ impl MessageStore {
             let content_json = record
                 .content
                 .as_ref()
-                .map(|c| serde_json::to_string(c).map_err(|e| BabataError::memory(format!("Failed to serialize content: {}", e))))
+                .map(|c| {
+                    serde_json::to_string(c).map_err(|e| {
+                        BabataError::memory(format!("Failed to serialize content: {}", e))
+                    })
+                })
                 .transpose()?;
             let tool_calls_json = record
                 .tool_calls
                 .as_ref()
-                .map(|c| serde_json::to_string(c).map_err(|e| BabataError::memory(format!("Failed to serialize tool calls: {}", e))))
+                .map(|c| {
+                    serde_json::to_string(c).map_err(|e| {
+                        BabataError::memory(format!("Failed to serialize tool calls: {}", e))
+                    })
+                })
                 .transpose()?;
 
             stmt.execute(params![
@@ -339,7 +345,8 @@ impl MessageStore {
             return Ok(Vec::new());
         }
 
-        let query = "SELECT message_type, content, reasoning_content, tool_calls, result, created_at FROM (
+        let query =
+            "SELECT message_type, content, reasoning_content, tool_calls, result, created_at FROM (
             SELECT message_type, content, reasoning_content, tool_calls, result, created_at, rowid
             FROM messages
             ORDER BY datetime(created_at) DESC, rowid DESC
@@ -408,11 +415,19 @@ impl MessageStore {
             // Deserialize content and tool_calls from JSON strings
             let content: Option<Vec<Content>> = content_json
                 .as_ref()
-                .map(|c| serde_json::from_str(c).map_err(|e| BabataError::memory(format!("Failed to deserialize content: {}", e))))
+                .map(|c| {
+                    serde_json::from_str(c).map_err(|e| {
+                        BabataError::memory(format!("Failed to deserialize content: {}", e))
+                    })
+                })
                 .transpose()?;
             let tool_calls: Option<Vec<ToolCall>> = tool_calls_json
                 .as_ref()
-                .map(|c| serde_json::from_str(c).map_err(|e| BabataError::memory(format!("Failed to deserialize tool_calls: {}", e))))
+                .map(|c| {
+                    serde_json::from_str(c).map_err(|e| {
+                        BabataError::memory(format!("Failed to deserialize tool_calls: {}", e))
+                    })
+                })
                 .transpose()?;
 
             let record = MessageRecord {
