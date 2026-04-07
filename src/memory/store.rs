@@ -1,4 +1,4 @@
-﻿use std::path::{Path, PathBuf};
+use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, params};
@@ -13,16 +13,12 @@ use crate::{
 /// Database record structure that maps 1:1 with the messages table schema.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MessageRecord {
-    pub id: i64,
     pub message_type: MessageType,
     #[serde(with = "option_json_string")]
     pub content: Option<Vec<Content>>,
     pub reasoning_content: Option<String>,
     #[serde(with = "option_json_string")]
     pub tool_calls: Option<Vec<ToolCall>>,
-    pub call_id: Option<String>,
-    pub tool_name: Option<String>,
-    pub args: Option<String>,
     pub result: Option<String>,
     pub created_at: DateTime<Utc>,
 }
@@ -99,18 +95,7 @@ pub enum MessageType {
     ToolResult,
 }
 
-/// Database fields extracted from a Message for storage.
-struct MessageFields {
-    message_type: MessageType,
-    content: Option<Vec<Content>>,
-    reasoning_content: Option<String>,
-    tool_calls: Option<Vec<ToolCall>>,
-    call_id: Option<String>,
-    tool_name: Option<String>,
-    args: Option<String>,
-    result: Option<String>,
-    created_at: String,
-}
+
 
 #[derive(Debug)]
 pub struct MessageStore {
@@ -157,14 +142,10 @@ impl MessageStore {
         })?;
         conn.execute(
             "CREATE TABLE IF NOT EXISTS messages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
                 message_type TEXT NOT NULL,
                 content TEXT,
                 reasoning_content TEXT,
                 tool_calls TEXT,
-                call_id TEXT,
-                tool_name TEXT,
-                args TEXT,
                 result TEXT,
                 created_at TEXT NOT NULL
             )",
@@ -188,75 +169,69 @@ impl MessageStore {
     }
 
     /// Convert Message to database fields
-    fn message_to_record_fields(message: &Message) -> BabataResult<MessageFields> {
+    fn message_to_record_fields(
+        message: &Message,
+    ) -> BabataResult<(
+        MessageType,
+        Option<Vec<Content>>,
+        Option<String>,
+        Option<Vec<ToolCall>>,
+        Option<String>,
+        String,
+    )> {
         let created_at = message.created_at().to_rfc3339();
 
         let fields = match message {
-            Message::UserPrompt { content: c, .. } => MessageFields {
-                message_type: MessageType::UserPrompt,
-                content: Some(c.clone()),
-                reasoning_content: None,
-                tool_calls: None,
-                call_id: None,
-                tool_name: None,
-                args: None,
-                result: None,
+            Message::UserPrompt { content: c, .. } => (
+                MessageType::UserPrompt,
+                Some(c.clone()),
+                None,
+                None,
+                None,
                 created_at,
-            },
-            Message::UserSteering { content: c, .. } => MessageFields {
-                message_type: MessageType::UserSteering,
-                content: Some(c.clone()),
-                reasoning_content: None,
-                tool_calls: None,
-                call_id: None,
-                tool_name: None,
-                args: None,
-                result: None,
+            ),
+            Message::UserSteering { content: c, .. } => (
+                MessageType::UserSteering,
+                Some(c.clone()),
+                None,
+                None,
+                None,
                 created_at,
-            },
+            ),
             Message::AssistantResponse {
                 content: c,
                 reasoning_content: r,
                 ..
-            } => MessageFields {
-                message_type: MessageType::AssistantResponse,
-                content: Some(c.clone()),
-                reasoning_content: r.clone(),
-                tool_calls: None,
-                call_id: None,
-                tool_name: None,
-                args: None,
-                result: None,
+            } => (
+                MessageType::AssistantResponse,
+                Some(c.clone()),
+                r.clone(),
+                None,
+                None,
                 created_at,
-            },
+            ),
             Message::AssistantToolCalls {
                 calls,
                 reasoning_content: r,
                 ..
-            } => MessageFields {
-                message_type: MessageType::AssistantToolCalls,
-                content: None,
-                reasoning_content: r.clone(),
-                tool_calls: Some(calls.clone()),
-                call_id: None,
-                tool_name: None,
-                args: None,
-                result: None,
+            } => (
+                MessageType::AssistantToolCalls,
+                None,
+                r.clone(),
+                Some(calls.clone()),
+                None,
                 created_at,
-            },
+            ),
             Message::ToolResult {
                 call, result: res, ..
-            } => MessageFields {
-                message_type: MessageType::ToolResult,
-                content: None,
-                reasoning_content: None,
-                tool_calls: None,
-                call_id: Some(call.call_id.clone()),
-                tool_name: Some(call.tool_name.clone()),
-                args: Some(call.args.clone()),
-                result: Some(res.clone()),
+            } => (
+                MessageType::ToolResult,
+                None,
+                None,
+                Some(vec![call.clone()]),
+                Some(res.clone()),
                 created_at,
-            },
+            ),
         };
 
         Ok(fields)
@@ -298,11 +273,16 @@ impl MessageStore {
                 }
             }
             MessageType::ToolResult => {
-                let call = ToolCall {
-                    call_id: record.call_id.clone().unwrap_or_default(),
-                    tool_name: record.tool_name.clone().unwrap_or_default(),
-                    args: record.args.clone().unwrap_or_default(),
-                };
+                let call = record
+                    .tool_calls
+                    .as_ref()
+                    .and_then(|calls| calls.first())
+                    .cloned()
+                    .unwrap_or(ToolCall {
+                        call_id: String::new(),
+                        tool_name: String::new(),
+                        args: String::new(),
+                    });
                 Message::ToolResult {
                     call,
                     result: record.result.clone().unwrap_or_default(),
@@ -321,7 +301,7 @@ impl MessageStore {
 
         let conn = self.connect()?;
         let mut stmt = conn
-            .prepare("INSERT INTO messages (message_type, content, reasoning_content, tool_calls, call_id, tool_name, args, result, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)")
+            .prepare("INSERT INTO messages (message_type, content, reasoning_content, tool_calls, result, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)")
             .map_err(|err| {
                 BabataError::memory(format!(
                     "Failed to prepare message insert statement: {}",
@@ -330,19 +310,24 @@ impl MessageStore {
             })?;
 
         for message in messages {
-            let fields = Self::message_to_record_fields(message)?;
-            let message_type_str = serde_json::to_string(&fields.message_type).map_err(|e| {
+            let (
+                message_type,
+                content,
+                reasoning_content,
+                tool_calls,
+                result,
+                created_at,
+            ) = Self::message_to_record_fields(message)?;
+            let message_type_str = serde_json::to_string(&message_type).map_err(|e| {
                 BabataError::memory(format!("Failed to serialize message type: {}", e))
             })?;
             let message_type_str = message_type_str.trim_matches('"').to_string();
 
-            let content_json = fields
-                .content
+            let content_json = content
                 .as_ref()
                 .map(|c| serde_json::to_string(c).map_err(|e| BabataError::memory(format!("Failed to serialize content: {}", e))))
                 .transpose()?;
-            let tool_calls_json = fields
-                .tool_calls
+            let tool_calls_json = tool_calls
                 .as_ref()
                 .map(|c| serde_json::to_string(c).map_err(|e| BabataError::memory(format!("Failed to serialize tool calls: {}", e))))
                 .transpose()?;
@@ -350,13 +335,10 @@ impl MessageStore {
             stmt.execute(params![
                 message_type_str,
                 content_json,
-                fields.reasoning_content,
+                reasoning_content,
                 tool_calls_json,
-                fields.call_id,
-                fields.tool_name,
-                fields.args,
-                fields.result,
-                fields.created_at
+                result,
+                created_at
             ])
             .map_err(|err| BabataError::memory(format!("Failed to insert message row: {}", err)))?;
         }
@@ -371,8 +353,8 @@ impl MessageStore {
             return Ok(Vec::new());
         }
 
-        let query = "SELECT id, message_type, content, reasoning_content, tool_calls, call_id, tool_name, args, result, created_at FROM (
-            SELECT id, message_type, content, reasoning_content, tool_calls, call_id, tool_name, args, result, created_at, rowid
+        let query = "SELECT message_type, content, reasoning_content, tool_calls, result, created_at FROM (
+            SELECT message_type, content, reasoning_content, tool_calls, result, created_at, rowid
             FROM messages
             ORDER BY datetime(created_at) DESC, rowid DESC
             LIMIT ?1
@@ -394,37 +376,25 @@ impl MessageStore {
         while let Some(row) = rows.next().map_err(|err| {
             BabataError::memory(format!("Failed to scan sqlite message row: {}", err))
         })? {
-            let id: i64 = row.get(0).map_err(|err| {
-                BabataError::memory(format!("Failed to read id from row: {}", err))
-            })?;
-            let message_type_str: String = row.get(1).map_err(|err| {
+            let message_type_str: String = row.get(0).map_err(|err| {
                 BabataError::memory(format!("Failed to read message_type from row: {}", err))
             })?;
-            let content_json: Option<String> = row.get(2).map_err(|err| {
+            let content_json: Option<String> = row.get(1).map_err(|err| {
                 BabataError::memory(format!("Failed to read content from row: {}", err))
             })?;
-            let reasoning_content: Option<String> = row.get(3).map_err(|err| {
+            let reasoning_content: Option<String> = row.get(2).map_err(|err| {
                 BabataError::memory(format!(
                     "Failed to read reasoning_content from row: {}",
                     err
                 ))
             })?;
-            let tool_calls_json: Option<String> = row.get(4).map_err(|err| {
+            let tool_calls_json: Option<String> = row.get(3).map_err(|err| {
                 BabataError::memory(format!("Failed to read tool_calls from row: {}", err))
             })?;
-            let call_id: Option<String> = row.get(5).map_err(|err| {
-                BabataError::memory(format!("Failed to read call_id from row: {}", err))
-            })?;
-            let tool_name: Option<String> = row.get(6).map_err(|err| {
-                BabataError::memory(format!("Failed to read tool_name from row: {}", err))
-            })?;
-            let args: Option<String> = row.get(7).map_err(|err| {
-                BabataError::memory(format!("Failed to read args from row: {}", err))
-            })?;
-            let result: Option<String> = row.get(8).map_err(|err| {
+            let result: Option<String> = row.get(4).map_err(|err| {
                 BabataError::memory(format!("Failed to read result from row: {}", err))
             })?;
-            let created_at_str: String = row.get(9).map_err(|err| {
+            let created_at_str: String = row.get(5).map_err(|err| {
                 BabataError::memory(format!("Failed to read created_at from row: {}", err))
             })?;
             let created_at = created_at_str.parse::<DateTime<Utc>>().map_err(|err| {
@@ -460,14 +430,10 @@ impl MessageStore {
                 .transpose()?;
 
             let record = MessageRecord {
-                id,
                 message_type,
                 content,
                 reasoning_content,
                 tool_calls,
-                call_id,
-                tool_name,
-                args,
                 result,
                 created_at,
             };
