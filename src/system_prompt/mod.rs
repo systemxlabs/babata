@@ -24,7 +24,7 @@ pub fn build_system_prompts(
     let mut sections = vec![
         agent_body.to_string(),
         BABATA_SYSTEM_DESCRIPTION.to_string(),
-        build_runtime_prompt()?,
+        build_environment_prompt()?,
         build_agents_prompt(agents),
         build_channels_prompt(config)?,
     ];
@@ -44,18 +44,25 @@ pub fn build_system_prompts(
     Ok(sections)
 }
 
-pub fn build_runtime_prompt() -> BabataResult<String> {
+pub fn build_environment_prompt() -> BabataResult<String> {
     let now = Local::now();
     Ok(format!(
-        r#"Runtime context:
+        r#"# Environment
 - User home directory(USER_HOME): {}
 - Babata home directory(BABATA_HOME): {}
+- Current working directory(CWD): {}
 - Current local time: {}
 - User time zone: {}
 - Operating system: {}
 - CPU architecture: {}"#,
         resolve_home_dir()?.display(),
         babata_dir()?.display(),
+        std::env::current_dir()
+            .map_err(|err| BabataError::config(format!(
+                "Failed to resolve current directory: {}",
+                err
+            )))?
+            .display(),
         now.to_rfc3339(),
         now.format("%Z (%:z)"),
         std::env::consts::OS,
@@ -73,7 +80,7 @@ pub fn build_agents_prompt(agents: &HashMap<String, Arc<Agent>>) -> String {
     }
 
     format!(
-        r#"Configured agents:
+        r#"# Configured agents
 {}
 
 You can chose an agent from the list above to use for tasks."#,
@@ -86,14 +93,14 @@ pub fn build_channels_prompt(config: &Config) -> BabataResult<String> {
     for channel in &config.channels {
         let description = match channel {
             ChannelConfig::Telegram(telegram) => format!(
-                "`telegram`: receives messages from Telegram user_id `{}`",
-                telegram.user_id
+                "telegram: receives messages from Telegram user (id: {}) via bot (token: {})",
+                telegram.user_id, telegram.bot_token
             ),
             ChannelConfig::Wechat(wechat) => {
                 let latest_context_token = load_wechat_latest_context_token()?
                     .unwrap_or_else(|| "unavailable".to_string());
                 format!(
-                    "`wechat`: receives messages from Wechat user_id `{}`; bot token: `{}`; latest context token: `{}`",
+                    "wechat: receives messages from Wechat user (id: {}) via Wechat iLink bot (token: {}). latest context token is `{}`",
                     wechat.user_id, wechat.bot_token, latest_context_token
                 )
             }
@@ -101,14 +108,9 @@ pub fn build_channels_prompt(config: &Config) -> BabataResult<String> {
         channel_sections.push(format!("- {description}"));
     }
 
-    if channel_sections.is_empty() {
-        return Ok("Configured channels:\n- none".to_string());
-    }
-
     Ok(format!(
-        r#"Configured channels:
-{}
-"#,
+        r#"# Configured channels
+{}"#,
         channel_sections.join("\n")
     ))
 }
@@ -117,10 +119,10 @@ pub fn build_skills_prompt(skills: &[Skill]) -> Option<String> {
     let mut skill_summaries = Vec::with_capacity(skills.len());
     for skill in skills {
         let title = format!(
-            "{}: {}\n  path: {}",
+            "{} (from {}): {}",
             skill.frontmatter.name,
+            skill.path.display(),
             skill.frontmatter.description,
-            skill.path.display()
         );
         skill_summaries.push(format!("- {title}"));
     }
@@ -129,7 +131,11 @@ pub fn build_skills_prompt(skills: &[Skill]) -> Option<String> {
         return None;
     }
 
-    Some(format!("Available skills:\n{}", skill_summaries.join("\n")))
+    Some(format!(
+        r#"# Available skills
+{}"#,
+        skill_summaries.join("\n")
+    ))
 }
 
 pub fn build_tools_prompt(tool_specs: &[ToolSpec]) -> Option<String> {
@@ -142,7 +148,11 @@ pub fn build_tools_prompt(tool_specs: &[ToolSpec]) -> Option<String> {
         tool_summaries.push(format!("- `{}`: {}", tool.name, tool.description));
     }
 
-    Some(format!("Available tools:\n{}", tool_summaries.join("\n")))
+    Some(format!(
+        r#"# Available tools
+{}"#,
+        tool_summaries.join("\n")
+    ))
 }
 
 pub fn load_workspace_prompt() -> BabataResult<Option<String>> {
@@ -171,7 +181,7 @@ mod tests {
     use std::path::PathBuf;
 
     use super::{
-        build_channels_prompt, build_runtime_prompt, build_skills_prompt, build_tools_prompt,
+        build_channels_prompt, build_environment_prompt, build_skills_prompt, build_tools_prompt,
     };
     use crate::{
         config::{ChannelConfig, Config, TelegramChannelConfig, WechatChannelConfig},
@@ -181,12 +191,13 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn build_runtime_prompt_includes_runtime_fields() {
-        let prompt = build_runtime_prompt().expect("build runtime prompt");
+    fn build_environment_prompt_includes_environment_fields() {
+        let prompt = build_environment_prompt().expect("build environment prompt");
 
-        assert!(prompt.contains("Runtime context:"));
+        assert!(prompt.contains("# Environment"));
         assert!(prompt.contains("User home directory(USER_HOME):"));
         assert!(prompt.contains("Babata home directory(BABATA_HOME):"));
+        assert!(prompt.contains("Current working directory(CWD):"));
         assert!(prompt.contains("Current local time:"));
         assert!(prompt.contains("User time zone:"));
         assert!(prompt.contains("Operating system:"));
@@ -211,16 +222,15 @@ mod tests {
 
         let prompt = build_channels_prompt(&config).unwrap();
 
-        assert!(prompt.contains("Configured channels:"));
-        assert!(prompt.contains("`telegram`"));
-        assert!(prompt.contains("Telegram user_id `123456`"));
-        assert!(prompt.contains("`wechat`"));
-        assert!(prompt.contains("Wechat user_id `wxid_123`"));
-        assert!(prompt.contains("latest context token: `"));
+        assert!(prompt.contains("# Configured channels"));
+        assert!(prompt.contains("telegram: receives messages from Telegram user (id: 123456)"));
+        assert!(prompt.contains("via bot (token: token)"));
+        assert!(prompt.contains("wechat: receives messages from Wechat user (id: wxid_123)"));
+        assert!(prompt.contains("latest context token is `"));
     }
 
     #[test]
-    fn build_channels_prompt_returns_none_config_when_empty() {
+    fn build_channels_prompt_returns_header_when_empty() {
         let config = Config {
             providers: Vec::new(),
             channels: Vec::new(),
@@ -228,7 +238,7 @@ mod tests {
 
         let prompt = build_channels_prompt(&config).unwrap();
 
-        assert_eq!(prompt, "Configured channels:\n- none");
+        assert_eq!(prompt, "# Configured channels\n");
     }
 
     #[test]
@@ -253,11 +263,14 @@ mod tests {
         ])
         .expect("build skills prompt");
 
-        assert!(prompt.contains("Available skills:"));
-        assert!(prompt.contains("- research: Find primary sources"));
-        assert!(prompt.contains("path: /tmp/skills/research/SKILL.md"));
-        assert!(prompt.contains("- coding: Implement code changes"));
-        assert!(prompt.contains("path: /tmp/skills/coding/SKILL.md"));
+        assert!(prompt.contains("# Available skills"));
+        assert!(
+            prompt
+                .contains("- research (from /tmp/skills/research/SKILL.md): Find primary sources")
+        );
+        assert!(
+            prompt.contains("- coding (from /tmp/skills/coding/SKILL.md): Implement code changes")
+        );
     }
 
     #[test]
@@ -291,7 +304,7 @@ mod tests {
         ])
         .expect("build tools prompt");
 
-        assert!(prompt.contains("Available tools:"));
+        assert!(prompt.contains("# Available tools"));
         assert!(prompt.contains("- `read_file`: Read a file"));
         assert!(prompt.contains("- `create_task`: Create a task"));
     }
