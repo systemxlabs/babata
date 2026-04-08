@@ -21,7 +21,6 @@ use serde_json::json;
 
 use crate::{BabataResult, error::BabataError, task::TaskManager};
 
-pub(crate) use control_task::RelaunchTaskRequest;
 pub(crate) use count_tasks::CountTasksResponse;
 pub(crate) use error::ApiError;
 pub(crate) use get_task::TaskResponse;
@@ -81,10 +80,6 @@ fn router(task_manager: Arc<TaskManager>) -> Router {
         .route("/api/tasks/{task_id}/pause", post(control_task::pause))
         .route("/api/tasks/{task_id}/resume", post(control_task::resume))
         .route("/api/tasks/{task_id}/cancel", post(control_task::cancel))
-        .route(
-            "/api/tasks/{task_id}/relaunch",
-            post(control_task::relaunch),
-        )
         .route("/api/tasks/{task_id}/steer", post(steer_task::handle))
         .with_state(HttpApp { task_manager })
 }

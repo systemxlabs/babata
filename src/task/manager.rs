@@ -227,36 +227,6 @@ impl TaskManager {
         Ok(())
     }
 
-    pub fn relaunch_task(&self, task_id: Uuid, reason: &str) -> BabataResult<()> {
-        let reason = reason.trim();
-        if reason.is_empty() {
-            return Err(BabataError::config("Relaunch reason cannot be empty"));
-        }
-
-        info!("Relaunching task {} with reason: {}", task_id, reason);
-        let task = self.store.get_task(task_id)?;
-        if task.status != TaskStatus::Running {
-            return Err(BabataError::config(format!(
-                "Task '{}' cannot be relaunched from status '{}'; only running tasks can be relaunched",
-                task_id, task.status
-            )));
-        }
-
-        if let Some(running_task) = self.running_tasks.lock().remove(&task_id) {
-            running_task.handle.abort();
-        }
-
-        let running_task = self
-            .launcher
-            .relaunch(&task, self.exit_tx.clone(), reason)?;
-        {
-            let mut guard = self.running_tasks.lock();
-            guard.insert(task_id, running_task);
-        }
-
-        Ok(())
-    }
-
     pub fn cancel_task(&self, task_id: Uuid) -> BabataResult<()> {
         info!("Cancelling task {}", task_id);
         let task = self.store.get_task(task_id)?;

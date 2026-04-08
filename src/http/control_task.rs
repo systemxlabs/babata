@@ -1,9 +1,7 @@
 use axum::{
-    Json,
     extract::{Path, State},
     response::{IntoResponse, Response},
 };
-use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::{ApiError, HttpApp};
@@ -20,19 +18,6 @@ pub(super) async fn cancel(State(state): State<HttpApp>, Path(task_id): Path<Str
     control_task(state, &task_id, TaskAction::Cancel).into_response()
 }
 
-pub(super) async fn relaunch(
-    State(state): State<HttpApp>,
-    Path(task_id): Path<String>,
-    Json(request): Json<RelaunchTaskRequest>,
-) -> Response {
-    let reason = request.reason.trim();
-    if reason.is_empty() {
-        return ApiError::bad_request("reason cannot be empty").into_response();
-    }
-
-    relaunch_task(state, &task_id, reason).into_response()
-}
-
 fn control_task(state: HttpApp, task_id: &str, action: TaskAction) -> Result<(), ApiError> {
     let task_id = parse_task_id(task_id)?;
 
@@ -42,16 +27,6 @@ fn control_task(state: HttpApp, task_id: &str, action: TaskAction) -> Result<(),
         TaskAction::Cancel => state.task_manager.cancel_task(task_id),
     }
     .map_err(ApiError::from_babata_error)?;
-
-    Ok(())
-}
-
-fn relaunch_task(state: HttpApp, task_id: &str, reason: &str) -> Result<(), ApiError> {
-    let task_id = parse_task_id(task_id)?;
-    state
-        .task_manager
-        .relaunch_task(task_id, reason)
-        .map_err(ApiError::from_babata_error)?;
 
     Ok(())
 }
@@ -74,9 +49,4 @@ enum TaskAction {
     Pause,
     Resume,
     Cancel,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub(crate) struct RelaunchTaskRequest {
-    pub(crate) reason: String,
 }

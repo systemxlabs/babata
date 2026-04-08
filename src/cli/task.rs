@@ -6,10 +6,7 @@ use uuid::Uuid;
 use crate::{
     BabataResult,
     error::BabataError,
-    http::{
-        CountTasksResponse, DEFAULT_HTTP_BASE_URL, ListTasksResponse, RelaunchTaskRequest,
-        TaskResponse,
-    },
+    http::{CountTasksResponse, DEFAULT_HTTP_BASE_URL, ListTasksResponse, TaskResponse},
     message::Content,
     task::CreateTaskRequest,
 };
@@ -30,13 +27,6 @@ pub fn resume(task_id: &str) {
 
 pub fn cancel(task_id: &str) {
     if let Err(err) = run_control("cancel", task_id) {
-        eprintln!("{err}");
-        std::process::exit(1);
-    }
-}
-
-pub fn relaunch(task_id: &str, reason: &str) {
-    if let Err(err) = run_relaunch(task_id, reason) {
         eprintln!("{err}");
         std::process::exit(1);
     }
@@ -96,43 +86,6 @@ fn run_control(action: &str, task_id: &str) -> BabataResult<()> {
         }
 
         println!("Task '{}' {} completed", task_id, action);
-        Ok(())
-    })
-}
-
-fn run_relaunch(task_id: &str, reason: &str) -> BabataResult<()> {
-    if reason.trim().is_empty() {
-        return Err(BabataError::config("reason cannot be empty"));
-    }
-
-    let runtime = build_runtime()?;
-    runtime.block_on(async move {
-        let response = Client::new()
-            .post(format!(
-                "{DEFAULT_HTTP_BASE_URL}/api/tasks/{task_id}/relaunch"
-            ))
-            .json(&RelaunchTaskRequest {
-                reason: reason.to_string(),
-            })
-            .send()
-            .await
-            .map_err(|err| {
-                BabataError::internal(format!(
-                    "Failed to call local HTTP API for task relaunch '{}': {}",
-                    task_id, err
-                ))
-            })?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(BabataError::internal(format!(
-                "Task relaunch request failed with status {}: {}",
-                status, body
-            )));
-        }
-
-        println!("Task '{}' relaunch completed", task_id);
         Ok(())
     })
 }
@@ -429,13 +382,5 @@ mod tests {
         assert!(lines[0].contains("\"task_id\":\"12345678-1234-1234-1234-123456789abc\""));
         assert!(lines[0].contains("\"never_ends\":true"));
         assert!(lines[1].contains("\"task_id\":\"abcdefab-cdef-cdef-cdef-abcdefabcdef\""));
-    }
-
-    #[test]
-    fn run_relaunch_rejects_empty_reason() {
-        let error = run_relaunch("12345678-1234-1234-1234-123456789abc", "   ")
-            .expect_err("empty reason should fail");
-
-        assert!(error.to_string().contains("reason cannot be empty"));
     }
 }

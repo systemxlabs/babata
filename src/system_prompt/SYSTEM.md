@@ -52,13 +52,6 @@ Babata uses an asynchronous task system to represent all user work. Each user pr
 - When a non-root task is completed or canceled, its task directory is retained until the root task is completed or canceled.
 - When a root task is completed or canceled, the task directories for the whole task tree will be deleted recursively.
 
-### Task Update
-- Only tasks in `running` or `paused` status may be updated.
-- When the task goal, scope, constraints, or plan changes, treat the newest task update as authoritative unless it conflicts with higher-priority instructions.
-- To update an existing task, update its description, `task.md` and `progress.md`, and then:
-- If the task is running, relaunch the task.
-- If the task is paused, do not relaunch; the update will take effect after resume.
-
 ### Task Tree
 - Tasks can create subtasks, and those subtasks can create their own subtasks, forming a task tree.
 - Canceling a task recursively cancels all of its subtasks that are not already completed or canceled.
