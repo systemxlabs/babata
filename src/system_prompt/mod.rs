@@ -180,6 +180,9 @@ pub fn load_workspace_prompt() -> BabataResult<Option<String>> {
 mod tests {
     use std::path::PathBuf;
 
+    use schemars::JsonSchema;
+    use serde::Deserialize;
+
     use super::{
         build_channels_prompt, build_environment_prompt, build_skills_prompt, build_tools_prompt,
     };
@@ -188,7 +191,6 @@ mod tests {
         skill::{Skill, SkillFrontmatter},
         tool::ToolSpec,
     };
-    use serde_json::json;
 
     #[test]
     fn build_environment_prompt_includes_environment_fields() {
@@ -280,26 +282,28 @@ mod tests {
 
     #[test]
     fn build_tools_prompt_includes_tool_summaries() {
+        #[allow(dead_code)]
+        #[derive(Deserialize, JsonSchema)]
+        struct ReadFileArgs {
+            path: String,
+        }
+
+        #[allow(dead_code)]
+        #[derive(Deserialize, JsonSchema)]
+        struct CreateTaskArgs {
+            prompt: String,
+        }
+
         let prompt = build_tools_prompt(&[
             ToolSpec {
                 name: "read_file".to_string(),
                 description: "Read a file".to_string(),
-                parameters: json!({
-                    "type": "object",
-                    "properties": {
-                        "path": { "type": "string" }
-                    }
-                }),
+                parameters: schemars::schema_for!(ReadFileArgs),
             },
             ToolSpec {
                 name: "create_task".to_string(),
                 description: "Create a task".to_string(),
-                parameters: json!({
-                    "type": "object",
-                    "properties": {
-                        "prompt": { "type": "string" }
-                    }
-                }),
+                parameters: schemars::schema_for!(CreateTaskArgs),
             },
         ])
         .expect("build tools prompt");

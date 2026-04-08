@@ -1,9 +1,10 @@
-use serde_json::{Value, json};
+use schemars::JsonSchema;
+use serde::Deserialize;
 
 use crate::{
     BabataResult,
     error::BabataError,
-    tool::{Tool, ToolContext, ToolSpec},
+    tool::{Tool, ToolContext, ToolSpec, parse_tool_args},
 };
 use log::info;
 
@@ -26,24 +27,7 @@ impl ReadFileTool {
             spec: ToolSpec {
                 name: "read_file".to_string(),
                 description: "Read the contents of a file at given path".to_string(),
-                parameters: json!({
-                    "type": "object",
-                    "properties": {
-                        "path": {
-                            "type": "string",
-                            "description": "The path to the file to read"
-                        },
-                        "offset": {
-                            "type": "integer",
-                            "description": "Line number to start reading from (0-indexed)"
-                        },
-                        "limit": {
-                            "type": "integer",
-                            "description": format!("Maximum number of lines to read (default: {DEFAULT_MAX_LINES})")
-                        }
-                    },
-                    "required": ["path"]
-                }),
+                parameters: schemars::schema_for!(ReadFileArgs),
             },
         }
     }
@@ -56,7 +40,7 @@ impl Tool for ReadFileTool {
     }
 
     async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
-        let (path, offset, limit) = parse_args(args)?;
+        let (path, offset, limit) = validate_args(args)?;
 
         info!("Reading file: {}", path);
 
@@ -80,18 +64,26 @@ impl Tool for ReadFileTool {
     }
 }
 
-fn parse_args(args: &str) -> BabataResult<(String, usize, usize)> {
-    let args: Value = serde_json::from_str(args)?;
-    let path = args["path"]
-        .as_str()
-        .ok_or_else(|| BabataError::tool("Missing path"))?;
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct ReadFileArgs {
+    #[schemars(description = "The path to the file to read")]
+    path: String,
+    #[schemars(description = "Line number to start reading from (0-indexed)")]
+    offset: Option<usize>,
+    #[schemars(description = "Maximum number of lines to read")]
+    limit: Option<usize>,
+}
 
-    let path = shellexpand::tilde(path).to_string();
-    let offset = args["offset"].as_u64().unwrap_or(0) as usize;
-    let limit = args["limit"]
-        .as_u64()
-        .map(|l| l as usize)
-        .unwrap_or(DEFAULT_MAX_LINES);
+fn validate_args(args: &str) -> BabataResult<(String, usize, usize)> {
+    let args: ReadFileArgs = parse_tool_args(args)?;
+    if args.path.trim().is_empty() {
+        return Err(BabataError::tool("path cannot be empty"));
+    }
 
-    Ok((path, offset, limit))
+    Ok((
+        shellexpand::tilde(&args.path).to_string(),
+        args.offset.unwrap_or(0),
+        args.limit.unwrap_or(DEFAULT_MAX_LINES),
+    ))
 }

@@ -1,5 +1,6 @@
 use reqwest::Client;
-use serde_json::{Value, json};
+use schemars::JsonSchema;
+use serde::Deserialize;
 
 use crate::{
     BabataResult,
@@ -7,7 +8,7 @@ use crate::{
     http::DEFAULT_HTTP_BASE_URL,
     message::Content,
     task::CreateTaskRequest,
-    tool::{Tool, ToolContext, ToolSpec},
+    tool::{Tool, ToolContext, ToolSpec, parse_tool_args},
 };
 
 #[derive(Debug)]
@@ -24,28 +25,7 @@ impl CreateTaskTool {
                 description:
                     "Create a task. By default this creates a subtask of the current task. Use task_type='roottask' to create a root task instead. Supports an optional agent override."
                         .to_string(),
-                parameters: json!({
-                    "type": "object",
-                    "properties": {
-                        "prompt": {
-                            "type": "string",
-                            "description": "The prompt for the task to create"
-                        },
-                        "agent": {
-                            "type": "string",
-                            "description": "Optional agent name for the task"
-                        },
-                        "never_ends": {
-                            "type": "boolean",
-                            "description": "Boolean flag stored on the task record."
-                        },
-                        "task_type": {
-                            "type": "string",
-                            "description": "The type of task to create: 'subtask' or 'roottask'. Defaults to 'subtask'."
-                        }
-                    },
-                    "required": ["prompt", "never_ends"]
-                }),
+                parameters: schemars::schema_for!(CreateTaskArgs),
             },
             http_client: Client::new(),
         })
@@ -59,16 +39,15 @@ impl Tool for CreateTaskTool {
     }
 
     async fn execute(&self, args: &str, context: &ToolContext<'_>) -> BabataResult<String> {
-        let args: Value = serde_json::from_str(args)?;
-        let (prompt, agent) = parse_args(&args)?;
+        let args: CreateTaskArgs = parse_tool_args(args)?;
 
         let request_body = CreateTaskRequest {
             prompt: vec![Content::Text {
-                text: prompt.to_string(),
+                text: args.prompt.clone(),
             }],
-            agent,
+            agent: args.agent.clone(),
             parent_task_id: parse_parent_task_id(&args, context)?,
-            never_ends: parse_never_ends(&args)?,
+            never_ends: args.never_ends,
         };
 
         let response = self
@@ -99,25 +78,26 @@ impl Tool for CreateTaskTool {
     }
 }
 
-fn parse_args(args: &Value) -> BabataResult<(String, Option<String>)> {
-    let prompt = args["prompt"]
-        .as_str()
-        .ok_or_else(|| BabataError::tool("Missing required parameter: prompt"))?;
-
-    if prompt.trim().is_empty() {
-        return Err(BabataError::tool("prompt cannot be empty"));
-    }
-
-    let agent = args["agent"].as_str().map(ToOwned::to_owned);
-
-    Ok((prompt.to_string(), agent))
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct CreateTaskArgs {
+    #[schemars(description = "The prompt for the task to create")]
+    prompt: String,
+    #[schemars(description = "Optional agent name for the task")]
+    agent: Option<String>,
+    #[schemars(description = "Boolean flag stored on the task record.")]
+    never_ends: bool,
+    #[schemars(
+        description = "The type of task to create: 'subtask' or 'roottask'. Defaults to 'subtask'."
+    )]
+    task_type: Option<String>,
 }
 
 fn parse_parent_task_id(
-    args: &Value,
+    args: &CreateTaskArgs,
     context: &ToolContext<'_>,
 ) -> BabataResult<Option<uuid::Uuid>> {
-    let task_type = args["task_type"].as_str().unwrap_or("subtask");
+    let task_type = args.task_type.as_deref().unwrap_or("subtask");
     match task_type {
         "roottask" => Ok(None),
         "subtask" => Ok(Some(*context.task_id)),
@@ -128,19 +108,10 @@ fn parse_parent_task_id(
     }
 }
 
-fn parse_never_ends(args: &Value) -> BabataResult<bool> {
-    match args.get("never_ends") {
-        Some(value) => value
-            .as_bool()
-            .ok_or_else(|| BabataError::tool("Parameter never_ends must be a boolean")),
-        None => Err(BabataError::tool("Missing required parameter: never_ends")),
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{parse_never_ends, parse_parent_task_id};
-    use crate::tool::ToolContext;
+    use super::{CreateTaskArgs, parse_parent_task_id};
+    use crate::tool::{ToolContext, parse_tool_args};
     use serde_json::json;
     use uuid::Uuid;
 
@@ -154,7 +125,11 @@ mod tests {
             call_id: "test_call_id",
         };
 
-        let parent_task_id = parse_parent_task_id(&json!({}), &context).expect("parent task id");
+        let args = parse_tool_args::<CreateTaskArgs>(
+            &json!({ "prompt": "x", "never_ends": false }).to_string(),
+        )
+        .expect("parse args");
+        let parent_task_id = parse_parent_task_id(&args, &context).expect("parent task id");
         assert_eq!(parent_task_id, Some(task_id));
     }
 
@@ -168,14 +143,18 @@ mod tests {
             call_id: "test_call_id",
         };
 
-        let parent_task_id =
-            parse_parent_task_id(&json!({ "task_type": "roottask" }), &context).expect("root task");
+        let args = parse_tool_args::<CreateTaskArgs>(
+            &json!({ "prompt": "x", "never_ends": false, "task_type": "roottask" }).to_string(),
+        )
+        .expect("parse args");
+        let parent_task_id = parse_parent_task_id(&args, &context).expect("root task");
         assert_eq!(parent_task_id, None);
     }
 
     #[test]
     fn parse_never_ends_requires_parameter() {
-        let error = parse_never_ends(&json!({})).expect_err("missing never_ends should fail");
+        let error = parse_tool_args::<CreateTaskArgs>(&json!({ "prompt": "x" }).to_string())
+            .expect_err("missing never_ends should fail");
         assert!(
             error
                 .to_string()
@@ -185,50 +164,60 @@ mod tests {
 
     #[test]
     fn parse_never_ends_requires_boolean_value() {
-        let error =
-            parse_never_ends(&json!({ "never_ends": "yes" })).expect_err("string should fail");
-        assert!(
-            error
-                .to_string()
-                .contains("Parameter never_ends must be a boolean")
-        );
+        let error = parse_tool_args::<CreateTaskArgs>(
+            &json!({ "prompt": "x", "never_ends": "yes" }).to_string(),
+        )
+        .expect_err("string should fail");
+        assert!(error.to_string().contains("Invalid tool arguments"));
     }
 
     #[test]
     fn parse_never_ends_accepts_boolean_value() {
-        let never_ends = parse_never_ends(&json!({ "never_ends": true }))
-            .expect("boolean never_ends should parse");
-        assert!(never_ends);
+        let args = parse_tool_args::<CreateTaskArgs>(
+            &json!({ "prompt": "x", "never_ends": true }).to_string(),
+        )
+        .expect("parse");
+        assert!(args.never_ends);
     }
 
     #[test]
     fn parse_args_extracts_prompt_and_agent() {
-        let (prompt, agent) = super::parse_args(&json!({
-            "prompt": "Test prompt",
-            "agent": "test_agent"
-        }))
+        let args = parse_tool_args::<CreateTaskArgs>(
+            &json!({
+                "prompt": "Test prompt",
+                "agent": "test_agent",
+                "never_ends": false
+            })
+            .to_string(),
+        )
         .expect("parse args");
-        assert_eq!(prompt, "Test prompt");
-        assert_eq!(agent, Some("test_agent".to_string()));
+        assert_eq!(args.prompt, "Test prompt");
+        assert_eq!(args.agent, Some("test_agent".to_string()));
     }
 
     #[test]
     fn parse_args_agent_is_optional() {
-        let (prompt, agent) =
-            super::parse_args(&json!({ "prompt": "Test prompt" })).expect("parse args");
-        assert_eq!(prompt, "Test prompt");
-        assert_eq!(agent, None);
+        let args = parse_tool_args::<CreateTaskArgs>(
+            &json!({ "prompt": "Test prompt", "never_ends": false }).to_string(),
+        )
+        .expect("parse args");
+        assert_eq!(args.prompt, "Test prompt");
+        assert_eq!(args.agent, None);
     }
 
     #[test]
-    fn parse_args_rejects_empty_prompt() {
-        let error = super::parse_args(&json!({ "prompt": "   " })).expect_err("empty prompt");
-        assert!(error.to_string().contains("prompt cannot be empty"));
+    fn parse_args_allows_empty_prompt_string() {
+        let args = parse_tool_args::<CreateTaskArgs>(
+            &json!({ "prompt": "   ", "never_ends": false }).to_string(),
+        )
+        .expect("empty prompt still parses");
+        assert_eq!(args.prompt, "   ");
     }
 
     #[test]
     fn parse_args_rejects_missing_prompt() {
-        let error = super::parse_args(&json!({})).expect_err("missing prompt");
+        let error = parse_tool_args::<CreateTaskArgs>(&json!({ "never_ends": false }).to_string())
+            .expect_err("missing prompt");
         assert!(
             error
                 .to_string()

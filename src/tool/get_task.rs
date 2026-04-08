@@ -1,12 +1,13 @@
 use reqwest::Client;
-use serde_json::{Value, json};
+use schemars::JsonSchema;
+use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::{
     BabataResult,
     error::BabataError,
     http::DEFAULT_HTTP_BASE_URL,
-    tool::{Tool, ToolContext, ToolSpec},
+    tool::{Tool, ToolContext, ToolSpec, parse_tool_args},
 };
 
 #[derive(Debug)]
@@ -21,16 +22,7 @@ impl GetTaskTool {
             spec: ToolSpec {
                 name: "get_task".to_string(),
                 description: "Get task metadata by id.".to_string(),
-                parameters: json!({
-                    "type": "object",
-                    "properties": {
-                        "task_id": {
-                            "type": "string",
-                            "description": "The UUID of the task to fetch"
-                        }
-                    },
-                    "required": ["task_id"]
-                }),
+                parameters: schemars::schema_for!(GetTaskArgs),
             },
             http_client: Client::new(),
         })
@@ -44,7 +36,8 @@ impl Tool for GetTaskTool {
     }
 
     async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
-        let task_id = parse_args(args)?;
+        let args: GetTaskArgs = parse_tool_args(args)?;
+        let task_id = args.task_id;
 
         let response = self
             .http_client
@@ -73,12 +66,9 @@ impl Tool for GetTaskTool {
     }
 }
 
-fn parse_args(args: &str) -> BabataResult<Uuid> {
-    let args: Value = serde_json::from_str(args)?;
-    let task_id = args["task_id"]
-        .as_str()
-        .ok_or_else(|| BabataError::tool("Missing required parameter: task_id"))?;
-
-    Uuid::parse_str(task_id)
-        .map_err(|err| BabataError::tool(format!("Invalid task_id '{}': {}", task_id, err)))
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct GetTaskArgs {
+    #[schemars(description = "The UUID of the task to fetch")]
+    task_id: Uuid,
 }

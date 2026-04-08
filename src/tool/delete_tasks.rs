@@ -1,12 +1,13 @@
 use reqwest::Client;
-use serde_json::{Value, json};
+use schemars::JsonSchema;
+use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::{
     BabataResult,
     error::BabataError,
     http::DEFAULT_HTTP_BASE_URL,
-    tool::{Tool, ToolContext, ToolSpec},
+    tool::{Tool, ToolContext, ToolSpec, parse_tool_args},
 };
 
 #[derive(Debug)]
@@ -21,20 +22,7 @@ impl DeleteTasksTool {
             spec: ToolSpec {
                 name: "delete_tasks".to_string(),
                 description: "Delete multiple tasks by their IDs. Each deletion is attempted and the result (success or failure) is returned for each task.".to_string(),
-                parameters: json!({
-                    "type": "object",
-                    "properties": {
-                        "tasks": {
-                            "type": "array",
-                            "description": "List of task IDs to delete",
-                            "items": {
-                                "type": "string",
-                                "description": "The UUID of the task to delete"
-                            }
-                        }
-                    },
-                    "required": ["tasks"]
-                }),
+                parameters: schemars::schema_for!(DeleteTasksArgs),
             },
             http_client: Client::new(),
         })
@@ -48,13 +36,13 @@ impl Tool for DeleteTasksTool {
     }
 
     async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
-        let task_ids = parse_args(args)?;
+        let args: DeleteTasksArgs = parse_tool_args(args)?;
 
         // Delete tasks
         let mut success_ids = Vec::new();
         let mut failures = Vec::new();
 
-        for task_id in task_ids {
+        for task_id in args.tasks {
             match delete_task(&self.http_client, task_id).await {
                 Ok(_) => success_ids.push(task_id.to_string()),
                 Err(err) => failures.push((task_id.to_string(), err.to_string())),
@@ -88,24 +76,11 @@ impl Tool for DeleteTasksTool {
     }
 }
 
-fn parse_args(args: &str) -> BabataResult<Vec<Uuid>> {
-    let args: Value = serde_json::from_str(args)?;
-    let tasks = args["tasks"]
-        .as_array()
-        .ok_or_else(|| BabataError::tool("Missing required parameter: tasks (array of task IDs)"))?
-        .iter()
-        .map(|v| {
-            v.as_str()
-                .ok_or_else(|| BabataError::tool("Each task_id must be a string"))
-                .and_then(|s| {
-                    Uuid::parse_str(s).map_err(|err| {
-                        BabataError::tool(format!("Invalid task_id '{}': {}", s, err))
-                    })
-                })
-        })
-        .collect::<BabataResult<Vec<_>>>()?;
-
-    Ok(tasks)
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct DeleteTasksArgs {
+    #[schemars(description = "List of task IDs to delete")]
+    tasks: Vec<Uuid>,
 }
 
 async fn delete_task(http_client: &Client, task_id: Uuid) -> BabataResult<String> {

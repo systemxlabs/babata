@@ -1,11 +1,11 @@
-use serde_json::{Value, json};
+use schemars::JsonSchema;
+use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::{
     BabataResult,
-    error::BabataError,
     task::TaskStore,
-    tool::{Tool, ToolContext, ToolSpec},
+    tool::{Tool, ToolContext, ToolSpec, parse_tool_args},
 };
 
 #[derive(Debug)]
@@ -20,15 +20,7 @@ impl ListSubtasksTool {
             spec: ToolSpec {
                 name: "list_subtasks".to_string(),
                 description: "List direct subtasks of a task. If parent_task_id is not provided, lists subtasks of the current task.".to_string(),
-                parameters: json!({
-                    "type": "object",
-                    "properties": {
-                        "parent_task_id": {
-                            "type": "string",
-                            "description": "Optional UUID of the parent task to list subtasks for"
-                        }
-                    }
-                }),
+                parameters: schemars::schema_for!(ListSubtasksArgs),
             },
             task_store: TaskStore::new()?,
         })
@@ -42,27 +34,17 @@ impl Tool for ListSubtasksTool {
     }
 
     async fn execute(&self, args: &str, context: &ToolContext<'_>) -> BabataResult<String> {
-        let parent_task_id = parse_args(args, context)?;
+        let args: ListSubtasksArgs = parse_tool_args(args)?;
+        let parent_task_id = args.parent_task_id.unwrap_or(*context.task_id);
 
         let tasks = self.task_store.list_subtasks(parent_task_id)?;
         serde_json::to_string(&tasks).map_err(Into::into)
     }
 }
 
-fn parse_args(args: &str, context: &ToolContext<'_>) -> BabataResult<Uuid> {
-    let args: Value = serde_json::from_str(args)?;
-
-    let parent_task_id = match args.get("parent_task_id") {
-        Some(value) => {
-            let task_id_str = value
-                .as_str()
-                .ok_or_else(|| BabataError::tool("Parameter 'parent_task_id' must be a string"))?;
-            Uuid::parse_str(task_id_str).map_err(|err| {
-                BabataError::tool(format!("Invalid parent_task_id '{}': {}", task_id_str, err))
-            })?
-        }
-        None => *context.task_id,
-    };
-
-    Ok(parent_task_id)
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct ListSubtasksArgs {
+    #[schemars(description = "Optional UUID of the parent task to list subtasks for")]
+    parent_task_id: Option<Uuid>,
 }

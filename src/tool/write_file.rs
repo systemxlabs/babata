@@ -1,9 +1,10 @@
-use serde_json::{Value, json};
+use schemars::JsonSchema;
+use serde::Deserialize;
 
 use crate::{
     BabataResult,
     error::BabataError,
-    tool::{Tool, ToolContext, ToolSpec},
+    tool::{Tool, ToolContext, ToolSpec, parse_tool_args},
 };
 use log::info;
 use std::path::Path;
@@ -25,20 +26,7 @@ impl WriteFileTool {
             spec: ToolSpec {
                 name: "write_file".to_string(),
                 description: "Create a new file or completely overwrite an existing one. Creates parent directories if they don't exist.".to_string(),
-                parameters: json!({
-                    "type": "object",
-                    "properties": {
-                        "path": {
-                            "type": "string",
-                            "description": "The path to the file to write"
-                        },
-                        "content": {
-                            "type": "string",
-                            "description": "The content to write to the file"
-                        }
-                    },
-                    "required": ["path", "content"]
-                }),
+                parameters: schemars::schema_for!(WriteFileArgs),
             },
         }
     }
@@ -51,7 +39,7 @@ impl Tool for WriteFileTool {
     }
 
     async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
-        let (path, content) = parse_args(args)?;
+        let (path, content) = validate_args(args)?;
 
         info!("Writing to file: {}", path);
 
@@ -75,19 +63,22 @@ impl Tool for WriteFileTool {
     }
 }
 
-fn parse_args(args: &str) -> BabataResult<(String, String)> {
-    let args: Value = serde_json::from_str(args)?;
-    let path = args["path"]
-        .as_str()
-        .ok_or_else(|| BabataError::tool("Missing required parameter: path"))?;
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct WriteFileArgs {
+    #[schemars(description = "The path to the file to write")]
+    path: String,
+    #[schemars(description = "The content to write to the file")]
+    content: String,
+}
 
-    let content = args["content"]
-        .as_str()
-        .ok_or_else(|| BabataError::tool("Missing required parameter: content"))?;
+fn validate_args(args: &str) -> BabataResult<(String, String)> {
+    let args: WriteFileArgs = parse_tool_args(args)?;
+    if args.path.trim().is_empty() {
+        return Err(BabataError::tool("path cannot be empty"));
+    }
 
-    let path = shellexpand::tilde(path).to_string();
-
-    Ok((path, content.to_string()))
+    Ok((shellexpand::tilde(&args.path).to_string(), args.content))
 }
 
 #[cfg(test)]

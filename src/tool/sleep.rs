@@ -1,12 +1,13 @@
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use serde_json::{Value, json};
+use schemars::JsonSchema;
+use serde::Deserialize;
 
 use crate::{
     BabataResult,
     error::BabataError,
-    tool::{Tool, ToolContext, ToolSpec},
+    tool::{Tool, ToolContext, ToolSpec, parse_tool_args},
 };
 
 #[derive(Debug, Clone)]
@@ -22,19 +23,7 @@ impl SleepTool {
                 description:
                     "Sleep for a period of time or until a specific time and return after the wait completes. Use this when you intentionally need to wait before the next step."
                         .to_string(),
-                parameters: json!({
-                    "type": "object",
-                    "properties": {
-                        "seconds": {
-                            "type": "number",
-                            "description": "Sleep duration in seconds"
-                        },
-                        "until": {
-                            "type": "string",
-                            "description": "Wake-up time in RFC3339 format with timezone, for example 2026-03-16T18:30:00+08:00"
-                        }
-                    }
-                }),
+                parameters: schemars::schema_for!(SleepArgs),
             },
         }
     }
@@ -53,7 +42,7 @@ impl Tool for SleepTool {
     }
 
     async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
-        let args: Value = serde_json::from_str(args)?;
+        let args: SleepArgs = parse_tool_args(args)?;
         let duration = parse_sleep_duration(&args)?;
 
         tokio::time::sleep(duration).await;
@@ -62,9 +51,20 @@ impl Tool for SleepTool {
     }
 }
 
-fn parse_sleep_duration(args: &Value) -> BabataResult<Duration> {
-    let seconds = args.get("seconds").and_then(Value::as_f64);
-    let until = args.get("until").and_then(Value::as_str);
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct SleepArgs {
+    #[schemars(description = "Sleep duration in seconds")]
+    seconds: Option<f64>,
+    #[schemars(
+        description = "Wake-up time in RFC3339 format with timezone, for example 2026-03-16T18:30:00+08:00"
+    )]
+    until: Option<String>,
+}
+
+fn parse_sleep_duration(args: &SleepArgs) -> BabataResult<Duration> {
+    let seconds = args.seconds;
+    let until = args.until.as_deref();
 
     match (seconds, until) {
         (Some(_), Some(_)) => Err(BabataError::tool("Provide exactly one of seconds or until")),
@@ -118,21 +118,24 @@ mod tests {
     use chrono::{TimeZone, Utc};
     use serde_json::json;
 
-    use super::{compute_sleep_until_duration, parse_sleep_duration};
+    use super::{SleepArgs, compute_sleep_until_duration, parse_sleep_duration};
 
     #[test]
     fn parse_sleep_duration_accepts_seconds() {
-        let duration = parse_sleep_duration(&json!({ "seconds": 1.5 })).expect("parse seconds");
+        let args =
+            serde_json::from_value::<SleepArgs>(json!({ "seconds": 1.5 })).expect("sleep args");
+        let duration = parse_sleep_duration(&args).expect("parse seconds");
         assert_eq!(duration, Duration::from_millis(1500));
     }
 
     #[test]
     fn parse_sleep_duration_rejects_both_seconds_and_until() {
-        let err = parse_sleep_duration(&json!({
+        let args = serde_json::from_value::<SleepArgs>(json!({
             "seconds": 1,
             "until": "2026-03-16T18:30:00+08:00"
         }))
-        .expect_err("reject conflicting inputs");
+        .expect("sleep args");
+        let err = parse_sleep_duration(&args).expect_err("reject conflicting inputs");
         assert!(
             err.to_string()
                 .contains("Provide exactly one of seconds or until")

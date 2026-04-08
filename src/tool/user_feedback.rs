@@ -1,4 +1,5 @@
-use serde_json::{Value, json};
+use schemars::JsonSchema;
+use serde::Deserialize;
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{
@@ -6,7 +7,7 @@ use crate::{
     channel::Channel,
     error::BabataError,
     message::Content,
-    tool::{Tool, ToolContext, ToolSpec},
+    tool::{Tool, ToolContext, ToolSpec, parse_tool_args},
 };
 
 #[derive(Debug, Clone)]
@@ -23,20 +24,7 @@ impl UserFeedbackTool {
                 description:
                     "Ask the user a question through the configured channel and block until the user replies. Use this only when you need user input. Do not use it for notification-only messages."
                         .to_string(),
-                parameters: json!({
-                    "type": "object",
-                    "properties": {
-                        "message": {
-                            "type": "string",
-                            "description": "The question to ask the user. This tool waits until the user replies."
-                        },
-                        "channel": {
-                            "type": "string",
-                            "description": "The channel name to use for asking the user"
-                        }
-                    },
-                    "required": ["message", "channel"]
-                }),
+                parameters: schemars::schema_for!(UserFeedbackArgs),
             },
             channels,
         }
@@ -50,16 +38,16 @@ impl Tool for UserFeedbackTool {
     }
 
     async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
-        let (message, channel_name) = parse_args(args)?;
+        let args: UserFeedbackArgs = parse_tool_args(args)?;
 
         let channel = self
             .channels
-            .get(&channel_name)
-            .ok_or_else(|| BabataError::tool(format!("Channel '{}' not found", channel_name)))?;
+            .get(&args.channel)
+            .ok_or_else(|| BabataError::tool(format!("Channel '{}' not found", args.channel)))?;
 
         let response = channel
             .feedback(vec![Content::Text {
-                text: format!("[Ask Feedback] {message}"),
+                text: format!("[Ask Feedback] {}", args.message),
             }])
             .await?;
 
@@ -72,18 +60,13 @@ impl Tool for UserFeedbackTool {
     }
 }
 
-fn parse_args(args: &str) -> BabataResult<(String, String)> {
-    let args: Value = serde_json::from_str(args)?;
-    let message = args["message"]
-        .as_str()
-        .ok_or_else(|| BabataError::tool("Missing required parameter: message"))?;
-    let channel_name = args["channel"]
-        .as_str()
-        .ok_or_else(|| BabataError::tool("Missing required parameter: channel"))?;
-
-    if message.trim().is_empty() {
-        return Err(BabataError::tool("message cannot be empty"));
-    }
-
-    Ok((message.to_string(), channel_name.to_string()))
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct UserFeedbackArgs {
+    #[schemars(
+        description = "The question to ask the user. This tool waits until the user replies."
+    )]
+    message: String,
+    #[schemars(description = "The channel name to use for asking the user")]
+    channel: String,
 }

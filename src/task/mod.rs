@@ -4,6 +4,7 @@ mod store;
 
 pub use launcher::*;
 pub use manager::*;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 pub use store::*;
 
@@ -73,7 +74,8 @@ mod tests {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
 pub enum TaskStatus {
     #[default]
     Running,
