@@ -12,6 +12,7 @@ mod read_file;
 mod relaunch_task;
 mod shell;
 mod sleep;
+mod steer_task;
 mod update_task;
 mod user_feedback;
 mod wait_task;
@@ -31,6 +32,7 @@ pub use read_file::*;
 pub use relaunch_task::*;
 pub use shell::*;
 pub use sleep::*;
+pub use steer_task::*;
 pub use update_task::*;
 pub use user_feedback::*;
 pub use wait_task::*;
@@ -98,6 +100,7 @@ pub fn build_tools(
         Arc::new(RelaunchTaskTool::new()?),
         Arc::new(WaitTaskTool::new()?),
         Arc::new(SleepTool::new()),
+        Arc::new(SteerTaskTool::new()),
         Arc::new(UpdateTaskTool::new()?),
         Arc::new(UserFeedbackTool::new(channels)),
     ];

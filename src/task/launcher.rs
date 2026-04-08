@@ -10,7 +10,7 @@ use crate::{
     error::BabataError,
     memory::Memory,
     message::Content,
-    task::{RunningTask, TaskExitEvent, TaskRecord, task_dir},
+    task::{RunningTask, SteerMessage, TaskExitEvent, TaskRecord, task_dir},
     tool::{Tool, build_tools},
 };
 
@@ -99,6 +99,9 @@ impl TaskLauncher {
             })?
             .clone();
 
+        // Create steer channel
+        let (steer_tx, steer_rx) = mpsc::channel::<SteerMessage>(128);
+
         let task_id = task.task_id;
         let prompt = build_task_prompt(task.task_id, reason)?;
         let agent_task = AgentTask {
@@ -109,8 +112,10 @@ impl TaskLauncher {
             agent,
             memory,
             all_tools: self.all_tools.clone(),
+            steer_rx,
         };
         let handle = tokio::spawn(async move {
+            let mut agent_task = agent_task;
             let result = agent_task.run().await;
             let event = match result {
                 Ok(()) => TaskExitEvent::Completed { task_id },
@@ -119,7 +124,11 @@ impl TaskLauncher {
             let _ = exit_tx.send(event).await;
         });
 
-        Ok(RunningTask { task_id, handle })
+        Ok(RunningTask {
+            task_id,
+            handle,
+            steer_tx,
+        })
     }
 }
 

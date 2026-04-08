@@ -11,6 +11,18 @@ use crate::{BabataResult, error::BabataError, message::Content, utils::babata_di
 use std::path::PathBuf;
 use uuid::Uuid;
 
+/// Steer message sent to a running task to influence its behavior.
+#[derive(Debug, Clone)]
+pub struct SteerMessage {
+    pub content: Vec<Content>,
+}
+
+impl SteerMessage {
+    pub fn new(content: Vec<Content>) -> Self {
+        Self { content }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CreateTaskRequest {
     pub prompt: Vec<Content>,

@@ -4,6 +4,7 @@ use backon::{ExponentialBuilder, Retryable};
 use chrono::Utc;
 use futures::future::join_all;
 use log::{info, warn};
+use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use crate::{
@@ -16,6 +17,7 @@ use crate::{
     provider::{GenerationRequest, Provider, create_provider},
     skill::load_skills,
     system_prompt::build_system_prompts,
+    task::SteerMessage,
     tool::{Tool, ToolContext, ToolSpec},
 };
 
@@ -23,7 +25,7 @@ const PROVIDER_RETRY_MAX_TIMES: usize = 3;
 const PROVIDER_RETRY_MIN_DELAY_MS: u64 = 200;
 const PROVIDER_RETRY_MAX_DELAY_SECS: u64 = 2;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct AgentTask {
     pub task_id: Uuid,
     pub parent_task_id: Option<Uuid>,
@@ -32,10 +34,11 @@ pub struct AgentTask {
     pub agent: Arc<Agent>,
     pub memory: Arc<Memory>,
     pub all_tools: HashMap<String, Arc<dyn Tool>>,
+    pub steer_rx: mpsc::Receiver<SteerMessage>,
 }
 
 impl AgentTask {
-    pub async fn run(&self) -> BabataResult<()> {
+    pub async fn run(&mut self) -> BabataResult<()> {
         let config = Config::load()?;
         let agents = load_agents()?;
 
@@ -58,6 +61,19 @@ impl AgentTask {
         let mut success = false;
         let max_steps = 100;
         for _ in 0..max_steps {
+            // Check for steer messages before calling the model
+            while let Ok(steer_msg) = self.steer_rx.try_recv() {
+                info!(
+                    "Task {} received steer message with {} content part(s)",
+                    self.task_id,
+                    steer_msg.content.len()
+                );
+                conversation.push(Message::UserSteering {
+                    content: steer_msg.content,
+                    created_at: Utc::now(),
+                });
+            }
+
             let message = generate_with_retry(
                 provider.as_ref(),
                 self.task_id,

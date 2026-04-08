@@ -8,6 +8,7 @@ mod get_task_file;
 mod get_task_logs;
 mod list_task_files;
 mod list_tasks;
+mod steer_task;
 
 use std::sync::Arc;
 
@@ -24,6 +25,7 @@ pub(crate) use control_task::RelaunchTaskRequest;
 pub(crate) use count_tasks::CountTasksResponse;
 pub(crate) use error::ApiError;
 pub(crate) use get_task::TaskResponse;
+pub(crate) use steer_task::SteerTaskRequest;
 
 pub(crate) use list_tasks::ListTasksResponse;
 
@@ -83,6 +85,7 @@ fn router(task_manager: Arc<TaskManager>) -> Router {
             "/api/tasks/{task_id}/relaunch",
             post(control_task::relaunch),
         )
+        .route("/api/tasks/{task_id}/steer", post(steer_task::handle))
         .with_state(HttpApp { task_manager })
 }
 

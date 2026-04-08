@@ -13,7 +13,7 @@ use crate::{
     error::BabataError,
     message::Content,
     task::{
-        CreateTaskRequest, TaskExitEvent, TaskRecord, TaskStatus, TaskStore,
+        CreateTaskRequest, SteerMessage, TaskExitEvent, TaskRecord, TaskStatus, TaskStore,
         launcher::TaskLauncher, task_dir,
     },
 };
@@ -36,6 +36,42 @@ impl TaskManager {
             exit_tx,
             exit_rx: Mutex::new(Some(exit_rx)),
         })
+    }
+
+    /// Send a steer message to a running task.
+    pub async fn steer_task(&self, task_id: Uuid, content: Vec<Content>) -> BabataResult<()> {
+        // Check if target task exists and is running
+        let target_task = self.store.get_task(task_id)?;
+        if !matches!(target_task.status, TaskStatus::Running) {
+            return Err(BabataError::tool(format!(
+                "Cannot steer task '{}': task is not running (status: {})",
+                task_id, target_task.status
+            )));
+        }
+
+        // Get the steer sender for the target task
+        let sender = self
+            .running_tasks
+            .lock()
+            .get(&task_id)
+            .map(|task| task.steer_tx.clone())
+            .ok_or_else(|| {
+                BabataError::tool(format!(
+                    "Cannot steer task '{}': task is not running or steer channel not available",
+                    task_id
+                ))
+            })?;
+
+        // Send the steer message
+        let steer_msg = SteerMessage::new(content);
+        sender.send(steer_msg).await.map_err(|_| {
+            BabataError::tool(format!(
+                "Failed to send steer message to task '{}'",
+                task_id
+            ))
+        })?;
+
+        Ok(())
     }
 
     pub fn start(self: &Arc<Self>) -> BabataResult<()> {
@@ -463,6 +499,7 @@ impl TaskManager {
 pub struct RunningTask {
     pub task_id: Uuid,
     pub handle: JoinHandle<()>,
+    pub steer_tx: mpsc::Sender<SteerMessage>,
 }
 
 fn ensure_task_dir(task_id: Uuid) -> BabataResult<()> {
@@ -666,6 +703,24 @@ mod tests {
         remove_task_dir(task_id);
     }
 
+    fn insert_dummy_running_task(
+        manager: &TaskManager,
+        task_id: Uuid,
+    ) -> mpsc::Receiver<SteerMessage> {
+        let (steer_tx, steer_rx) = mpsc::channel(1);
+        manager.running_tasks.lock().insert(
+            task_id,
+            RunningTask {
+                task_id,
+                handle: tokio::spawn(async move {
+                    std::future::pending::<()>().await;
+                }),
+                steer_tx,
+            },
+        );
+        steer_rx
+    }
+
     #[tokio::test]
     async fn handle_task_completed_relaunches_never_ending_task() {
         let temp_root = temp_test_root("manager-never-ends");
@@ -768,6 +823,150 @@ mod tests {
 
         cleanup_task_artifacts(&manager, task.task_id);
         remove_task_dir(subtask.task_id);
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[tokio::test]
+    async fn create_task_stores_steer_sender_in_running_task() {
+        let temp_root = temp_test_root("manager-create-stores-steer");
+        fs::create_dir_all(&temp_root).expect("create temp root");
+        let manager = build_test_manager(&temp_root);
+
+        let task_id = manager
+            .create_task(CreateTaskRequest {
+                prompt: vec![Content::Text {
+                    text: "test create task".to_string(),
+                }],
+                parent_task_id: None,
+                agent: Some("test-agent".to_string()),
+                never_ends: false,
+            })
+            .expect("create task");
+
+        {
+            let guard = manager.running_tasks.lock();
+            let running_task = guard.get(&task_id).expect("running task should exist");
+            let _sender = running_task.steer_tx.clone();
+        }
+
+        cleanup_task_artifacts(&manager, task_id);
+        let _ = manager.store.delete_task(task_id);
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[tokio::test]
+    async fn steer_task_sends_message_to_registered_sender() {
+        let temp_root = temp_test_root("manager-steer-sends-message");
+        fs::create_dir_all(&temp_root).expect("create temp root");
+        let manager = build_test_manager(&temp_root);
+        let task = task_record(false);
+        initialize_task_dir(
+            &task,
+            &[Content::Text {
+                text: "steer target".to_string(),
+            }],
+        )
+        .expect("initialize task dir");
+        manager
+            .store
+            .insert_task(task.clone())
+            .expect("insert task record");
+
+        let mut steer_rx = insert_dummy_running_task(&manager, task.task_id);
+
+        manager
+            .steer_task(
+                task.task_id,
+                vec![Content::Text {
+                    text: "focus on tests".to_string(),
+                }],
+            )
+            .await
+            .expect("steer running task");
+
+        let message = steer_rx.recv().await.expect("receive steer message");
+        assert_eq!(
+            message.content,
+            vec![Content::Text {
+                text: "focus on tests".to_string(),
+            }]
+        );
+
+        cleanup_task_artifacts(&manager, task.task_id);
+        remove_task_dir(task.task_id);
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[tokio::test]
+    async fn pause_task_removes_running_task_with_steer_sender() {
+        let temp_root = temp_test_root("manager-pause-removes-running-task");
+        fs::create_dir_all(&temp_root).expect("create temp root");
+        let manager = build_test_manager(&temp_root);
+        let task = task_record(false);
+        initialize_task_dir(
+            &task,
+            &[Content::Text {
+                text: "pause target".to_string(),
+            }],
+        )
+        .expect("initialize task dir");
+        manager
+            .store
+            .insert_task(task.clone())
+            .expect("insert task record");
+
+        drop(insert_dummy_running_task(&manager, task.task_id));
+
+        manager.pause_task(task.task_id).expect("pause task");
+
+        let stored_task = manager.store.get_task(task.task_id).expect("load task");
+        assert_eq!(stored_task.status, TaskStatus::Paused);
+        assert!(!manager.running_tasks.lock().contains_key(&task.task_id));
+
+        remove_task_dir(task.task_id);
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[tokio::test]
+    async fn delete_task_removes_running_tasks_for_root_and_subtasks() {
+        let temp_root = temp_test_root("manager-delete-removes-running-tasks");
+        fs::create_dir_all(&temp_root).expect("create temp root");
+        let manager = build_test_manager(&temp_root);
+        let task = task_record(false);
+        let subtask = subtask_record(task.task_id, task.root_task_id);
+        initialize_task_dir(
+            &task,
+            &[Content::Text {
+                text: "delete root".to_string(),
+            }],
+        )
+        .expect("initialize root task dir");
+        initialize_task_dir(
+            &subtask,
+            &[Content::Text {
+                text: "delete subtask".to_string(),
+            }],
+        )
+        .expect("initialize subtask dir");
+        manager
+            .store
+            .insert_task(task.clone())
+            .expect("insert root task");
+        manager
+            .store
+            .insert_task(subtask.clone())
+            .expect("insert subtask");
+
+        drop(insert_dummy_running_task(&manager, task.task_id));
+        drop(insert_dummy_running_task(&manager, subtask.task_id));
+
+        manager.delete_task(task.task_id).expect("delete root task");
+
+        assert!(!manager.running_tasks.lock().contains_key(&task.task_id));
+        assert!(!manager.running_tasks.lock().contains_key(&subtask.task_id));
+        assert!(manager.store.get_task(task.task_id).is_err());
+        assert!(manager.store.get_task(subtask.task_id).is_err());
+
         let _ = fs::remove_dir_all(&temp_root);
     }
 }
