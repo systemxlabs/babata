@@ -1,4 +1,4 @@
-mod control_task;
+﻿mod control_task;
 mod count_tasks;
 mod create_task;
 mod delete_tasks;
@@ -8,7 +8,7 @@ mod glob;
 mod grep;
 mod list_subtasks;
 mod list_tasks;
-mod query_tasks;
+
 mod read_file;
 mod shell;
 mod sleep;
@@ -28,7 +28,7 @@ pub use glob::*;
 pub use grep::*;
 pub use list_subtasks::*;
 pub use list_tasks::*;
-pub use query_tasks::*;
+
 pub use read_file::*;
 pub use shell::*;
 pub use sleep::*;
@@ -111,7 +111,7 @@ pub fn build_tools(
         Arc::new(ListTasksTool::new()?),
         Arc::new(CountTasksTool::new()?),
         Arc::new(ListSubtasksTool::new()?),
-        Arc::new(QueryTasksTool::new()?),
+        
         Arc::new(WaitTaskTool::new()?),
         Arc::new(SleepTool::new()),
         Arc::new(SteerTaskTool::new()),

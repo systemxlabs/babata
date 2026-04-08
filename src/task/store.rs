@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+﻿use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use serde::{Deserialize, Serialize};
@@ -271,53 +271,6 @@ impl TaskStore {
                 count, err
             ))
         })
-    }
-
-    /// Execute a raw SQL query and return results as JSON array
-    /// Note: This is intended for SELECT queries only. Results are returned as
-    /// an array of JSON objects where keys are column names and values are the data.
-    pub fn query_sql(
-        &self,
-        sql: &str,
-    ) -> BabataResult<Vec<serde_json::Map<String, serde_json::Value>>> {
-        let conn = self.connect()?;
-        let mut stmt = conn
-            .prepare(sql)
-            .map_err(|err| BabataError::tool(format!("Failed to prepare SQL query: {}", err)))?;
-
-        let column_names: Vec<String> = stmt
-            .column_names()
-            .into_iter()
-            .map(|s| s.to_string())
-            .collect();
-
-        let rows = stmt
-            .query_map([], |row| {
-                let mut obj = serde_json::Map::new();
-                for (idx, col_name) in column_names.iter().enumerate() {
-                    let value = match row.get_ref(idx) {
-                        Ok(rusqlite::types::ValueRef::Null) => serde_json::Value::Null,
-                        Ok(rusqlite::types::ValueRef::Integer(i)) => {
-                            serde_json::Value::Number(i.into())
-                        }
-                        Ok(rusqlite::types::ValueRef::Real(f)) => serde_json::Number::from_f64(f)
-                            .map_or(serde_json::Value::Null, serde_json::Value::Number),
-                        Ok(rusqlite::types::ValueRef::Text(s)) => {
-                            serde_json::Value::String(String::from_utf8_lossy(s).to_string())
-                        }
-                        Ok(rusqlite::types::ValueRef::Blob(_)) => {
-                            serde_json::Value::String("<blob>".to_string())
-                        }
-                        Err(_) => serde_json::Value::Null,
-                    };
-                    obj.insert(col_name.clone(), value);
-                }
-                Ok(obj)
-            })
-            .map_err(|err| BabataError::tool(format!("Failed to execute SQL query: {}", err)))?;
-
-        rows.map(|row| row.map_err(|err| BabataError::tool(format!("Failed to read row: {}", err))))
-            .collect()
     }
 
     pub fn list_subtasks(&self, parent_task_id: Uuid) -> BabataResult<Vec<TaskRecord>> {
