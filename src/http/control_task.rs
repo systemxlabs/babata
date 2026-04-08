@@ -2,6 +2,8 @@ use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
 };
+use schemars::JsonSchema;
+use serde::Deserialize;
 use uuid::Uuid;
 
 use super::{ApiError, HttpApp};
@@ -44,9 +46,21 @@ fn parse_task_id(task_id: &str) -> Result<Uuid, ApiError> {
     Ok(task_id)
 }
 
-#[derive(Debug, Clone, Copy)]
-enum TaskAction {
+#[derive(Debug, Clone, Copy, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum TaskAction {
     Pause,
     Resume,
     Cancel,
+}
+
+impl std::fmt::Display for TaskAction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let value = match self {
+            TaskAction::Pause => "pause",
+            TaskAction::Resume => "resume",
+            TaskAction::Cancel => "cancel",
+        };
+        f.write_str(value)
+    }
 }

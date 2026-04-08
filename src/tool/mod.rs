@@ -36,8 +36,9 @@ pub use user_feedback::*;
 pub use wait_task::*;
 pub use write_file::*;
 
-use crate::{BabataResult, channel::Channel};
-use serde_json::Value;
+use crate::{BabataResult, channel::Channel, error::BabataError};
+use schemars::Schema;
+use serde::de::DeserializeOwned;
 use std::{collections::HashMap, fmt::Debug, sync::Arc};
 use uuid::Uuid;
 
@@ -51,7 +52,7 @@ pub trait Tool: Debug + Send + Sync {
 pub struct ToolSpec {
     pub name: String,
     pub description: String,
-    pub parameters: Value,
+    pub parameters: Schema,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -76,6 +77,19 @@ impl ToolContext<'_> {
             call_id: "test_call_id",
         }
     }
+}
+
+pub fn parse_tool_args<T: DeserializeOwned>(args: &str) -> BabataResult<T> {
+    serde_json::from_str(args).map_err(|err| {
+        let message = err.to_string();
+        if let Some(field) = message
+            .strip_prefix("missing field `")
+            .and_then(|value| value.split('`').next())
+        {
+            return BabataError::tool(format!("Missing required parameter: {field}"));
+        }
+        BabataError::tool(format!("Invalid tool arguments: {message}"))
+    })
 }
 
 pub fn build_tools(

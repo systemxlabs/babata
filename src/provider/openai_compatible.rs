@@ -49,7 +49,7 @@ impl OpenAICompatibleProvider {
                 function: FunctionDefinition {
                     name: t.name.clone(),
                     description: t.description.clone(),
-                    parameters: Some(t.parameters.clone()),
+                    parameters: Some(t.parameters.clone().to_value()),
                     strict: None,
                 },
             })
@@ -444,6 +444,8 @@ pub struct ChatCompletionsMessageToolCallFunction {
 #[cfg(test)]
 mod tests {
     use chrono::Utc;
+    use schemars::JsonSchema;
+    use serde::Deserialize;
     use serde_json::json;
 
     use crate::{
@@ -455,17 +457,17 @@ mod tests {
 
     #[test]
     fn format_tools_uses_function_wrapper_shape() {
+        #[allow(dead_code)]
+        #[derive(Deserialize, JsonSchema)]
+        struct ReadFileArgs {
+            path: String,
+        }
+
         let provider = OpenAICompatibleProvider::new("test-key", "https://example.com/v1");
         let tools = vec![ToolSpec {
             name: "read_file".to_string(),
             description: "Read file".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "path": { "type": "string" }
-                },
-                "required": ["path"]
-            }),
+            parameters: schemars::schema_for!(ReadFileArgs),
         }];
 
         let payload =

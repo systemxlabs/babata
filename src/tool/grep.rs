@@ -2,13 +2,14 @@ use grep::{
     regex::RegexMatcherBuilder,
     searcher::{SearcherBuilder, sinks::UTF8},
 };
-use serde_json::{Value, json};
+use schemars::JsonSchema;
+use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
 use crate::{
     BabataResult,
     error::BabataError,
-    tool::{Tool, ToolContext, ToolSpec},
+    tool::{Tool, ToolContext, ToolSpec, parse_tool_args},
 };
 
 // skip these dirs to avoid noise
@@ -48,24 +49,7 @@ impl GrepTool {
                     "Search file contents with regex. Returns matching lines with file path and line number. Skips directories: {:?}. Returns at most {} matches.",
                     SKIP_DIRS, MAX_MATCHES
                 ),
-                parameters: json!({
-                    "type": "object",
-                    "properties": {
-                        "pattern": {
-                            "type": "string",
-                            "description": "Regex pattern to search for"
-                        },
-                        "path": {
-                            "type": "string",
-                            "description": "File or directory to search (default: current working directory)"
-                        },
-                        "include": {
-                            "type": "string",
-                            "description": "Only search files matching this glob (e.g. '*.py')"
-                        }
-                    },
-                    "required": ["pattern"]
-                }),
+                parameters: schemars::schema_for!(GrepArgs),
             },
         }
     }
@@ -112,7 +96,7 @@ impl Tool for GrepTool {
     }
 
     async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
-        let (pattern, path, include) = parse_args(args)?;
+        let (pattern, path, include) = validate_args(args)?;
 
         let matcher = RegexMatcherBuilder::new()
             .build(&pattern)
@@ -166,24 +150,29 @@ impl Tool for GrepTool {
     }
 }
 
-fn parse_args(args: &str) -> BabataResult<(String, String, Option<String>)> {
-    let args: Value = serde_json::from_str(args)?;
-    let pattern = args["pattern"]
-        .as_str()
-        .ok_or_else(|| BabataError::tool("Missing required parameter: pattern"))?;
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct GrepArgs {
+    #[schemars(description = "Regex pattern to search for")]
+    pattern: String,
+    #[schemars(description = "File or directory to search (default: current working directory)")]
+    path: Option<String>,
+    #[schemars(description = "Only search files matching this glob (e.g. '*.py')")]
+    include: Option<String>,
+}
 
-    let path = args["path"]
-        .as_str()
-        .map(|p| shellexpand::tilde(p).to_string())
+fn validate_args(args: &str) -> BabataResult<(String, String, Option<String>)> {
+    let args: GrepArgs = parse_tool_args(args)?;
+    let path = args
+        .path
+        .map(|p| shellexpand::tilde(&p).to_string())
         .unwrap_or_else(|| {
             std::env::current_dir()
                 .map(|p| p.to_string_lossy().to_string())
                 .unwrap_or_else(|_| ".".to_string())
         });
 
-    let include = args["include"].as_str().map(|s| s.to_string());
-
-    Ok((pattern.to_string(), path, include))
+    Ok((args.pattern, path, args.include))
 }
 
 #[cfg(test)]
@@ -197,36 +186,39 @@ mod tests {
     }
 
     #[test]
-    fn parse_args_extracts_pattern_path_and_include() {
-        let (pattern, path, include) =
-            parse_args(&json!({ "pattern": "foo", "path": "/tmp", "include": "*.rs" }).to_string())
-                .expect("parse args");
+    fn validate_args_extracts_pattern_path_and_include() {
+        let (pattern, path, include) = validate_args(
+            &json!({ "pattern": "foo", "path": "/tmp", "include": "*.rs" }).to_string(),
+        )
+        .expect("parse args");
         assert_eq!(pattern, "foo");
         assert_eq!(path, "/tmp");
         assert_eq!(include, Some("*.rs".to_string()));
     }
 
     #[test]
-    fn parse_args_expands_tilde_in_path() {
+    fn validate_args_expands_tilde_in_path() {
         let (pattern, path, include) =
-            parse_args(&json!({ "pattern": "test", "path": "~" }).to_string()).expect("parse args");
+            validate_args(&json!({ "pattern": "test", "path": "~" }).to_string())
+                .expect("parse args");
         assert_eq!(pattern, "test");
         assert!(!path.starts_with('~'));
         assert_eq!(include, None);
     }
 
     #[test]
-    fn parse_args_uses_cwd_when_path_missing() {
+    fn validate_args_uses_cwd_when_path_missing() {
         let (pattern, path, include) =
-            parse_args(&json!({ "pattern": "hello" }).to_string()).expect("parse args");
+            validate_args(&json!({ "pattern": "hello" }).to_string()).expect("parse args");
         assert_eq!(pattern, "hello");
         assert!(!path.is_empty());
         assert_eq!(include, None);
     }
 
     #[test]
-    fn parse_args_rejects_missing_pattern() {
-        let err = parse_args(&json!({ "path": "/tmp" }).to_string()).expect_err("missing pattern");
+    fn validate_args_rejects_missing_pattern() {
+        let err =
+            validate_args(&json!({ "path": "/tmp" }).to_string()).expect_err("missing pattern");
         assert!(
             err.to_string()
                 .contains("Missing required parameter: pattern")

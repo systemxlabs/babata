@@ -1,11 +1,12 @@
 use log::info;
-use serde_json::{Value, json};
+use schemars::JsonSchema;
+use serde::Deserialize;
 use similar::{ChangeTag, TextDiff};
 
 use crate::{
     BabataResult,
     error::BabataError,
-    tool::{Tool, ToolContext, ToolSpec},
+    tool::{Tool, ToolContext, ToolSpec, parse_tool_args},
 };
 
 #[derive(Debug, Clone)]
@@ -27,24 +28,7 @@ impl EditFileTool {
                 description:
                     "Edit a file by replacing an exact string match. old_string must appear exactly once in the file for safety. Include enough surrounding context to ensure uniqueness."
                         .to_string(),
-                parameters: json!({
-                    "type": "object",
-                    "properties": {
-                        "file_path": {
-                            "type": "string",
-                            "description": "Path to the file to edit"
-                        },
-                        "old_string": {
-                            "type": "string",
-                            "description": "Exact text to find (must be unique in file)"
-                        },
-                        "new_string": {
-                            "type": "string",
-                            "description": "Replacement text"
-                        }
-                    },
-                    "required": ["file_path", "old_string", "new_string"]
-                }),
+                parameters: schemars::schema_for!(EditFileArgs),
             },
         }
     }
@@ -57,7 +41,7 @@ impl Tool for EditFileTool {
     }
 
     async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
-        let (file_path, old_string, new_string) = parse_args(args)?;
+        let (file_path, old_string, new_string) = validate_args(args)?;
 
         info!("Editing file: {}", file_path);
 
@@ -99,21 +83,24 @@ impl Tool for EditFileTool {
     }
 }
 
-fn parse_args(args: &str) -> BabataResult<(String, String, String)> {
-    let args: Value = serde_json::from_str(args)?;
-    let file_path = args["file_path"]
-        .as_str()
-        .ok_or_else(|| BabataError::tool("Missing required parameter: file_path"))?;
-    let old_string = args["old_string"]
-        .as_str()
-        .ok_or_else(|| BabataError::tool("Missing required parameter: old_string"))?;
-    let new_string = args["new_string"]
-        .as_str()
-        .ok_or_else(|| BabataError::tool("Missing required parameter: new_string"))?;
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct EditFileArgs {
+    #[schemars(description = "Path to the file to edit")]
+    file_path: String,
+    #[schemars(description = "Exact text to find (must be unique in file)")]
+    old_string: String,
+    #[schemars(description = "Replacement text")]
+    new_string: String,
+}
 
-    let file_path = shellexpand::tilde(file_path).to_string();
-
-    Ok((file_path, old_string.to_string(), new_string.to_string()))
+fn validate_args(args: &str) -> BabataResult<(String, String, String)> {
+    let args: EditFileArgs = parse_tool_args(args)?;
+    Ok((
+        shellexpand::tilde(&args.file_path).to_string(),
+        args.old_string,
+        args.new_string,
+    ))
 }
 
 /// Generate a compact unified diff between old and new file content
@@ -306,8 +293,8 @@ mod tests {
     }
 
     #[test]
-    fn parse_args_extracts_file_path_and_strings() {
-        let (file_path, old_string, new_string) = parse_args(
+    fn validate_args_extracts_file_path_and_strings() {
+        let (file_path, old_string, new_string) = validate_args(
             &json!({ "file_path": "/tmp/test.txt", "old_string": "foo", "new_string": "bar" })
                 .to_string(),
         )
@@ -318,8 +305,8 @@ mod tests {
     }
 
     #[test]
-    fn parse_args_expands_tilde_in_file_path() {
-        let (file_path, _, _) = parse_args(
+    fn validate_args_expands_tilde_in_file_path() {
+        let (file_path, _, _) = validate_args(
             &json!({ "file_path": "~/test.txt", "old_string": "a", "new_string": "b" }).to_string(),
         )
         .expect("parse args");
@@ -327,8 +314,8 @@ mod tests {
     }
 
     #[test]
-    fn parse_args_rejects_missing_file_path() {
-        let err = parse_args(&json!({ "old_string": "a", "new_string": "b" }).to_string())
+    fn validate_args_rejects_missing_file_path() {
+        let err = validate_args(&json!({ "old_string": "a", "new_string": "b" }).to_string())
             .expect_err("missing file_path");
         assert!(
             err.to_string()
@@ -337,9 +324,9 @@ mod tests {
     }
 
     #[test]
-    fn parse_args_rejects_missing_old_string() {
+    fn validate_args_rejects_missing_old_string() {
         let err =
-            parse_args(&json!({ "file_path": "/tmp/test.txt", "new_string": "b" }).to_string())
+            validate_args(&json!({ "file_path": "/tmp/test.txt", "new_string": "b" }).to_string())
                 .expect_err("missing old_string");
         assert!(
             err.to_string()
@@ -348,9 +335,9 @@ mod tests {
     }
 
     #[test]
-    fn parse_args_rejects_missing_new_string() {
+    fn validate_args_rejects_missing_new_string() {
         let err =
-            parse_args(&json!({ "file_path": "/tmp/test.txt", "old_string": "a" }).to_string())
+            validate_args(&json!({ "file_path": "/tmp/test.txt", "old_string": "a" }).to_string())
                 .expect_err("missing new_string");
         assert!(
             err.to_string()

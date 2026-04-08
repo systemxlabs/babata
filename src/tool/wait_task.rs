@@ -1,6 +1,7 @@
 use std::time::Duration;
 
-use serde_json::{Value, json};
+use schemars::JsonSchema;
+use serde::Deserialize;
 use tokio::time::{Instant, sleep};
 use uuid::Uuid;
 
@@ -8,7 +9,7 @@ use crate::{
     BabataResult,
     error::BabataError,
     task::{TaskStatus, TaskStore},
-    tool::{Tool, ToolContext, ToolSpec},
+    tool::{Tool, ToolContext, ToolSpec, parse_tool_args},
 };
 
 const POLL_INTERVAL_SECS: u64 = 30;
@@ -27,29 +28,7 @@ impl WaitTaskTool {
                 description:
                     "Block until a task reaches any target status. Supports waiting for one or more statuses and an optional timeout. Use this when the next step depends on that task finishing or changing state."
                         .to_string(),
-                parameters: json!({
-                    "type": "object",
-                    "properties": {
-                        "task_id": {
-                            "type": "string",
-                            "description": "The UUID of the task to watch"
-                        },
-                        "task_statuses": {
-                            "type": "array",
-                            "description": "One or more target task statuses to wait for: running, done, canceled, or paused",
-                            "items": {
-                                "type": "string"
-                            },
-                            "minItems": 1
-                        },
-                        "timeout_secs": {
-                            "type": "integer",
-                            "description": "Optional timeout in seconds for the wait operation",
-                            "minimum": 0
-                        }
-                    },
-                    "required": ["task_id", "task_statuses"]
-                }),
+                parameters: schemars::schema_for!(WaitTaskArgs),
             },
             task_store: TaskStore::new()?,
         })
@@ -63,28 +42,30 @@ impl Tool for WaitTaskTool {
     }
 
     async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
-        let args: Value = serde_json::from_str(args)?;
-        let task_id = parse_task_id(&args)?;
-        let target_statuses = parse_target_statuses(&args)?;
-        let timeout = parse_timeout(&args)?;
+        let args: WaitTaskArgs = parse_tool_args(args)?;
+        let target_statuses = validate_target_statuses(&args)?;
+        let timeout = parse_timeout(&args);
         let deadline = timeout.map(|timeout| Instant::now() + timeout);
 
         loop {
-            let task = self.task_store.get_task(task_id).map_err(|err| {
-                BabataError::tool(format!("Failed to query task '{}': {}", task_id, err))
+            let task = self.task_store.get_task(args.task_id).map_err(|err| {
+                BabataError::tool(format!("Failed to query task '{}': {}", args.task_id, err))
             })?;
             let current_status = task.status;
 
             if target_statuses.contains(&current_status) {
                 return serde_json::to_string(&task).map_err(|err| {
-                    BabataError::tool(format!("Failed to serialize task '{}': {}", task_id, err))
+                    BabataError::tool(format!(
+                        "Failed to serialize task '{}': {}",
+                        args.task_id, err
+                    ))
                 });
             }
 
             if is_unreachable_terminal_status(current_status, &target_statuses) {
                 return Err(BabataError::tool(format!(
                     "Task '{}' reached terminal status '{}' before target statuses [{}]",
-                    task_id,
+                    args.task_id,
                     current_status,
                     format_target_statuses(&target_statuses)
                 )));
@@ -95,7 +76,7 @@ impl Tool for WaitTaskTool {
                 None => {
                     return Err(BabataError::tool(format!(
                         "Timed out waiting for task '{}' to reach statuses [{}]",
-                        task_id,
+                        args.task_id,
                         format_target_statuses(&target_statuses)
                     )));
                 }
@@ -105,31 +86,21 @@ impl Tool for WaitTaskTool {
     }
 }
 
-fn parse_task_id(args: &Value) -> BabataResult<Uuid> {
-    let task_id = args["task_id"]
-        .as_str()
-        .ok_or_else(|| BabataError::tool("Missing required parameter: task_id"))?;
-    Uuid::parse_str(task_id)
-        .map_err(|err| BabataError::tool(format!("Invalid task_id '{}': {}", task_id, err)))
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct WaitTaskArgs {
+    #[schemars(description = "The UUID of the task to watch")]
+    task_id: Uuid,
+    #[schemars(
+        description = "One or more target task statuses to wait for: running, done, canceled, or paused"
+    )]
+    task_statuses: Vec<TaskStatus>,
+    #[schemars(description = "Optional timeout in seconds for the wait operation")]
+    timeout_secs: Option<usize>,
 }
 
-fn parse_target_statuses(args: &Value) -> BabataResult<Vec<TaskStatus>> {
-    let task_statuses = args
-        .get("task_statuses")
-        .ok_or_else(|| BabataError::tool("Missing required parameter: task_statuses"))?;
-    let statuses = task_statuses
-        .as_array()
-        .ok_or_else(|| {
-            BabataError::tool("Parameter 'task_statuses' must be a non-empty array of strings")
-        })?
-        .iter()
-        .map(|value| {
-            let status = value.as_str().ok_or_else(|| {
-                BabataError::tool("Parameter 'task_statuses' must be a non-empty array of strings")
-            })?;
-            parse_task_status(status, "task_statuses")
-        })
-        .collect::<BabataResult<Vec<_>>>()?;
+fn validate_target_statuses(args: &WaitTaskArgs) -> BabataResult<Vec<TaskStatus>> {
+    let statuses = args.task_statuses.clone();
 
     if statuses.is_empty() {
         return Err(BabataError::tool(
@@ -140,21 +111,9 @@ fn parse_target_statuses(args: &Value) -> BabataResult<Vec<TaskStatus>> {
     Ok(statuses)
 }
 
-fn parse_task_status(value: &str, parameter_name: &str) -> BabataResult<TaskStatus> {
-    value.parse::<TaskStatus>().map_err(|err| {
-        BabataError::tool(format!("Invalid {} '{}': {}", parameter_name, value, err))
-    })
-}
-
-fn parse_timeout(args: &Value) -> BabataResult<Option<Duration>> {
-    let Some(timeout_secs) = args.get("timeout_secs") else {
-        return Ok(None);
-    };
-
-    let timeout_secs = timeout_secs.as_u64().ok_or_else(|| {
-        BabataError::tool("Parameter 'timeout_secs' must be a non-negative integer")
-    })?;
-    Ok(Some(Duration::from_secs(timeout_secs)))
+fn parse_timeout(args: &WaitTaskArgs) -> Option<Duration> {
+    args.timeout_secs
+        .map(|timeout_secs| Duration::from_secs(timeout_secs as u64))
 }
 
 fn is_unreachable_terminal_status(
@@ -193,50 +152,60 @@ fn format_target_statuses(target_statuses: &[TaskStatus]) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        POLL_INTERVAL_SECS, format_target_statuses, is_unreachable_terminal_status,
-        parse_target_statuses, parse_timeout, remaining_sleep,
+        POLL_INTERVAL_SECS, WaitTaskArgs, format_target_statuses, is_unreachable_terminal_status,
+        parse_timeout, remaining_sleep, validate_target_statuses,
     };
-    use crate::task::TaskStatus;
+    use crate::{task::TaskStatus, tool::parse_tool_args};
     use serde_json::json;
     use std::time::Duration;
     use tokio::time::Instant;
 
     #[test]
-    fn parse_target_statuses_accepts_plural_parameter() {
-        let args = json!({
+    fn validate_target_statuses_accepts_plural_parameter() {
+        let args = serde_json::from_value::<WaitTaskArgs>(json!({
+            "task_id": uuid::Uuid::new_v4(),
             "task_statuses": ["done", "canceled"]
-        });
+        }))
+        .expect("wait args");
 
-        let statuses = parse_target_statuses(&args).expect("task statuses");
+        let statuses = validate_target_statuses(&args).expect("task statuses");
         assert_eq!(statuses, vec![TaskStatus::Done, TaskStatus::Canceled]);
     }
 
     #[test]
-    fn parse_target_statuses_rejects_missing_status_parameters() {
-        let args = json!({});
-
-        let err = parse_target_statuses(&args).expect_err("missing status should fail");
+    fn validate_target_statuses_rejects_missing_status_parameters() {
+        let err = parse_tool_args::<WaitTaskArgs>(
+            &json!({ "task_id": uuid::Uuid::new_v4() }).to_string(),
+        )
+        .expect_err("missing status should fail");
         assert!(err.to_string().contains("task_statuses"));
     }
 
     #[test]
     fn parse_timeout_accepts_non_negative_integer() {
-        let args = json!({
+        let args = serde_json::from_value::<WaitTaskArgs>(json!({
+            "task_id": uuid::Uuid::new_v4(),
+            "task_statuses": ["done"],
             "timeout_secs": 15
-        });
+        }))
+        .expect("wait args");
 
-        let timeout = parse_timeout(&args).expect("timeout");
+        let timeout = parse_timeout(&args);
         assert_eq!(timeout, Some(Duration::from_secs(15)));
     }
 
     #[test]
     fn parse_timeout_rejects_invalid_type() {
-        let args = json!({
-            "timeout_secs": "15"
-        });
-
-        let err = parse_timeout(&args).expect_err("invalid timeout should fail");
-        assert!(err.to_string().contains("timeout_secs"));
+        let err = parse_tool_args::<WaitTaskArgs>(
+            &json!({
+                "task_id": uuid::Uuid::new_v4(),
+                "task_statuses": ["done"],
+                "timeout_secs": "15"
+            })
+            .to_string(),
+        )
+        .expect_err("invalid timeout should fail");
+        assert!(err.to_string().contains("Invalid tool arguments"));
     }
 
     #[test]

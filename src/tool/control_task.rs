@@ -1,12 +1,13 @@
 use reqwest::Client;
-use serde_json::{Value, json};
+use schemars::JsonSchema;
+use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::{
     BabataResult,
     error::BabataError,
-    http::DEFAULT_HTTP_BASE_URL,
-    tool::{Tool, ToolContext, ToolSpec},
+    http::{DEFAULT_HTTP_BASE_URL, TaskAction},
+    tool::{Tool, ToolContext, ToolSpec, parse_tool_args},
 };
 
 #[derive(Debug)]
@@ -23,20 +24,7 @@ impl ControlTaskTool {
                 description:
                     "Control a task through a high-level action. Supported actions: pause, resume, cancel."
                         .to_string(),
-                parameters: json!({
-                    "type": "object",
-                    "properties": {
-                        "task_id": {
-                            "type": "string",
-                            "description": "The UUID of the task to control"
-                        },
-                        "action": {
-                            "type": "string",
-                            "description": "The control action: pause, resume, or cancel"
-                        }
-                    },
-                    "required": ["task_id", "action"]
-                }),
+                parameters: schemars::schema_for!(ControlTaskArgs),
             },
             http_client: Client::new(),
         })
@@ -50,9 +38,12 @@ impl Tool for ControlTaskTool {
     }
 
     async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
-        let (task_id, action) = parse_args(args)?;
+        let args: ControlTaskArgs = parse_tool_args(args)?;
 
-        let url = format!("{DEFAULT_HTTP_BASE_URL}/api/tasks/{task_id}/{action}");
+        let url = format!(
+            "{DEFAULT_HTTP_BASE_URL}/api/tasks/{}/{}",
+            args.task_id, args.action
+        );
 
         let response = self.http_client.post(url).send().await.map_err(|err| {
             BabataError::tool(format!("Failed to call control_task HTTP API: {}", err))
@@ -67,32 +58,18 @@ impl Tool for ControlTaskTool {
             )));
         }
 
-        Ok(format!("Applied action '{}' to task '{}'", action, task_id))
+        Ok(format!(
+            "Applied action '{}' to task '{}'",
+            args.action, args.task_id
+        ))
     }
 }
 
-fn parse_args(args: &str) -> BabataResult<(Uuid, String)> {
-    let args: Value = serde_json::from_str(args)?;
-    let task_id = args["task_id"]
-        .as_str()
-        .ok_or_else(|| BabataError::tool("Missing required parameter: task_id"))?;
-    let action = args["action"]
-        .as_str()
-        .ok_or_else(|| BabataError::tool("Missing required parameter: action"))?;
-
-    let task_id = Uuid::parse_str(task_id)
-        .map_err(|err| BabataError::tool(format!("Invalid task_id '{}': {}", task_id, err)))?;
-    validate_action(action)?;
-
-    Ok((task_id, action.to_string()))
-}
-
-fn validate_action(action: &str) -> BabataResult<()> {
-    match action {
-        "pause" | "resume" | "cancel" => Ok(()),
-        _ => Err(BabataError::tool(format!(
-            "Invalid action '{}'; expected one of: pause, resume, cancel",
-            action
-        ))),
-    }
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct ControlTaskArgs {
+    #[schemars(description = "The UUID of the task to control")]
+    task_id: Uuid,
+    #[schemars(description = "The control action: pause, resume, or cancel")]
+    action: TaskAction,
 }

@@ -1,5 +1,6 @@
 use reqwest::Client;
-use serde_json::{Value, json};
+use schemars::JsonSchema;
+use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::{
@@ -7,7 +8,7 @@ use crate::{
     error::BabataError,
     http::{DEFAULT_HTTP_BASE_URL, SteerTaskRequest},
     message::Content,
-    tool::{Tool, ToolContext, ToolSpec},
+    tool::{Tool, ToolContext, ToolSpec, parse_tool_args},
 };
 
 #[derive(Debug)]
@@ -23,20 +24,7 @@ impl SteerTaskTool {
                 name: "steer_task".to_string(),
                 description: "Send a steering message to a running task to influence its behavior."
                     .to_string(),
-                parameters: json!({
-                    "type": "object",
-                    "properties": {
-                        "task_id": {
-                            "type": "string",
-                            "description": "The UUID of the task to steer (must be running)"
-                        },
-                        "content": {
-                            "type": "string",
-                            "description": "The steering message content"
-                        }
-                    },
-                    "required": ["task_id", "content"]
-                }),
+                parameters: schemars::schema_for!(SteerTaskArgs),
             },
             http_client: Client::new(),
         }
@@ -56,14 +44,17 @@ impl Tool for SteerTaskTool {
     }
 
     async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
-        let (task_id, content) = parse_args(args)?;
+        let args: SteerTaskArgs = parse_tool_args(args)?;
         let request = SteerTaskRequest {
-            content: vec![Content::Text { text: content }],
+            content: vec![Content::Text { text: args.content }],
         };
 
         let response = self
             .http_client
-            .post(format!("{DEFAULT_HTTP_BASE_URL}/api/tasks/{task_id}/steer"))
+            .post(format!(
+                "{DEFAULT_HTTP_BASE_URL}/api/tasks/{}/steer",
+                args.task_id
+            ))
             .json(&request)
             .send()
             .await
@@ -82,33 +73,18 @@ impl Tool for SteerTaskTool {
 
         Ok(format!(
             "Steer message sent successfully to task {}",
-            task_id
+            args.task_id
         ))
     }
 }
 
-fn parse_args(args: &str) -> BabataResult<(Uuid, String)> {
-    let args: Value = serde_json::from_str(args)?;
-
-    let task_id = args["task_id"]
-        .as_str()
-        .ok_or_else(|| BabataError::tool("Missing required parameter: task_id"))?;
-    let content = args["content"]
-        .as_str()
-        .ok_or_else(|| BabataError::tool("Missing required parameter: content"))?;
-
-    if content.trim().is_empty() {
-        return Err(BabataError::tool("content cannot be empty"));
-    }
-
-    let task_id = task_id.parse::<uuid::Uuid>().map_err(|_| {
-        BabataError::tool(format!(
-            "Invalid task_id '{}' - expected a valid UUID",
-            task_id
-        ))
-    })?;
-
-    Ok((task_id, content.to_string()))
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct SteerTaskArgs {
+    #[schemars(description = "The UUID of the task to steer (must be running)")]
+    task_id: Uuid,
+    #[schemars(description = "The steering message content")]
+    content: String,
 }
 
 #[cfg(test)]
@@ -124,7 +100,7 @@ mod tests {
         assert_eq!(spec.name, "steer_task");
         assert!(!spec.description.is_empty());
 
-        let params = &spec.parameters;
+        let params = serde_json::to_value(&spec.parameters).expect("serialize params");
         assert_eq!(params["type"], "object");
         assert_eq!(params["required"], json!(["task_id", "content"]));
     }
@@ -133,7 +109,7 @@ mod tests {
     fn parse_args_extracts_task_id_and_content() {
         let task_id = uuid::Uuid::new_v4();
 
-        let (parsed_task_id, content) = parse_args(
+        let args = parse_tool_args::<SteerTaskArgs>(
             &json!({
                 "task_id": task_id,
                 "content": "focus on tests",
@@ -142,21 +118,21 @@ mod tests {
         )
         .expect("parse args");
 
-        assert_eq!(parsed_task_id, task_id);
-        assert_eq!(content, "focus on tests");
+        assert_eq!(args.task_id, task_id);
+        assert_eq!(args.content, "focus on tests");
     }
 
     #[test]
-    fn parse_args_rejects_empty_content() {
-        let error = parse_args(
+    fn parse_args_allows_empty_content_string() {
+        let args = parse_tool_args::<SteerTaskArgs>(
             &json!({
                 "task_id": uuid::Uuid::new_v4(),
                 "content": "   ",
             })
             .to_string(),
         )
-        .expect_err("empty content should fail");
+        .expect("empty content still parses");
 
-        assert!(error.to_string().contains("content cannot be empty"));
+        assert_eq!(args.content, "   ");
     }
 }

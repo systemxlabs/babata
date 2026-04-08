@@ -1,10 +1,10 @@
-use serde_json::{Value, json};
+use schemars::JsonSchema;
+use serde::Deserialize;
 
 use crate::{
     BabataResult,
-    error::BabataError,
     task::{TaskStatus, TaskStore},
-    tool::{Tool, ToolContext, ToolSpec},
+    tool::{Tool, ToolContext, ToolSpec, parse_tool_args},
 };
 
 #[derive(Debug)]
@@ -19,15 +19,7 @@ impl CountTasksTool {
             spec: ToolSpec {
                 name: "count_tasks".to_string(),
                 description: "Count tasks. Supports optional status filter.".to_string(),
-                parameters: json!({
-                    "type": "object",
-                    "properties": {
-                        "status": {
-                            "type": "string",
-                            "description": "Optional task status filter"
-                        }
-                    }
-                }),
+                parameters: schemars::schema_for!(CountTasksArgs),
             },
             task_store: TaskStore::new()?,
         })
@@ -41,21 +33,16 @@ impl Tool for CountTasksTool {
     }
 
     async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
-        let status = parse_args(args)?;
+        let args: CountTasksArgs = parse_tool_args(args)?;
 
-        let count = self.task_store.count_tasks(status)?;
+        let count = self.task_store.count_tasks(args.status)?;
         Ok(count.to_string())
     }
 }
 
-fn parse_args(args: &str) -> BabataResult<Option<TaskStatus>> {
-    let args: Value = serde_json::from_str(args)?;
-    let status =
-        match args["status"].as_str() {
-            Some(status) => Some(status.parse::<TaskStatus>().map_err(|err| {
-                BabataError::tool(format!("Invalid status '{}': {}", status, err))
-            })?),
-            None => None,
-        };
-    Ok(status)
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct CountTasksArgs {
+    #[schemars(description = "Optional task status filter")]
+    status: Option<TaskStatus>,
 }

@@ -1,16 +1,17 @@
 use std::{path::PathBuf, process::Output, time::Duration};
 
 use log::info;
-use serde_json::{Value, json};
+use schemars::JsonSchema;
+use serde::Deserialize;
 
 use crate::{
     BabataResult,
     error::BabataError,
     task::task_dir,
-    tool::{Tool, ToolContext, ToolSpec},
+    tool::{Tool, ToolContext, ToolSpec, parse_tool_args},
 };
 
-const DEFAULT_TIMEOUT_SECS: u64 = 300;
+const DEFAULT_TIMEOUT_SECS: usize = 300;
 const DEFAULT_MAX_LINES: usize = 2000;
 
 #[derive(Debug)]
@@ -25,20 +26,7 @@ impl ShellTool {
             description: format!(
                 "Execute a shell command and return stdout and stderr. Output is truncated to last {DEFAULT_MAX_LINES} lines. If truncated, full output is saved to a temp file."
             ),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "command": {
-                        "type": "string",
-                        "description": "The shell command to execute (bash syntax on Linux/macOS, PowerShell syntax on Windows)"
-                    },
-                    "timeout_ms": {
-                        "type": "integer",
-                        "description": format!("Optional timeout in seconds (default: {DEFAULT_TIMEOUT_SECS})")
-                    }
-                },
-                "required": ["command"]
-            }),
+            parameters: schemars::schema_for!(ShellArgs),
         };
         Self { spec }
     }
@@ -53,7 +41,7 @@ impl Tool for ShellTool {
     async fn execute(&self, args: &str, context: &ToolContext<'_>) -> BabataResult<String> {
         info!("Executing shell command: {args}",);
 
-        let (command, timeout_secs) = parse_args(args)?;
+        let (command, timeout_secs) = validate_args(args)?;
 
         let output = exec_shell(&command, timeout_secs).await?;
 
@@ -85,21 +73,33 @@ impl Default for ShellTool {
     }
 }
 
-fn parse_args(args: &str) -> BabataResult<(String, u64)> {
-    let args: Value = serde_json::from_str(args)?;
-    let command = args["command"]
-        .as_str()
-        .ok_or_else(|| BabataError::tool("Missing command"))?;
-
-    let timeout_secs = args["timeout_ms"].as_u64().unwrap_or(DEFAULT_TIMEOUT_SECS);
-
-    Ok((command.to_string(), timeout_secs))
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct ShellArgs {
+    #[schemars(
+        description = "The shell command to execute (bash syntax on Linux/macOS, PowerShell syntax on Windows)"
+    )]
+    command: String,
+    #[schemars(description = "Optional timeout in seconds")]
+    timeout_ms: Option<usize>,
 }
 
-async fn exec_shell(command: &str, timeout_secs: u64) -> BabataResult<Output> {
+fn validate_args(args: &str) -> BabataResult<(String, usize)> {
+    let args: ShellArgs = parse_tool_args(args)?;
+    if args.command.trim().is_empty() {
+        return Err(BabataError::tool("command cannot be empty"));
+    }
+
+    Ok((
+        args.command,
+        args.timeout_ms.unwrap_or(DEFAULT_TIMEOUT_SECS),
+    ))
+}
+
+async fn exec_shell(command: &str, timeout_secs: usize) -> BabataResult<Output> {
     // Run command with timeout
     let mut cmd = create_command(command);
-    let output = tokio::time::timeout(Duration::from_secs(timeout_secs), cmd.output())
+    let output = tokio::time::timeout(Duration::from_secs(timeout_secs as u64), cmd.output())
         .await
         .map_err(|_| BabataError::tool(format!("Command timed out after {}s", timeout_secs)))?
         .map_err(|e| BabataError::tool(format!("Failed to execute command: {}", e)))?;
