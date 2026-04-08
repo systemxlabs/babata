@@ -7,6 +7,7 @@ use crate::{
     config::{ChannelConfig, Config},
     error::BabataError,
     skill::Skill,
+    tool::ToolSpec,
     utils::{babata_dir, resolve_home_dir},
 };
 use chrono::Local;
@@ -18,6 +19,7 @@ pub fn build_system_prompts(
     agents: &HashMap<String, Arc<Agent>>,
     skills: &[Skill],
     agent_body: &str,
+    tool_specs: &[ToolSpec],
 ) -> BabataResult<Vec<String>> {
     let mut sections = vec![
         agent_body.to_string(),
@@ -33,6 +35,10 @@ pub fn build_system_prompts(
 
     if let Some(skills_prompt) = build_skills_prompt(skills) {
         sections.push(skills_prompt);
+    }
+
+    if let Some(tools_prompt) = build_tools_prompt(tool_specs) {
+        sections.push(tools_prompt);
     }
 
     Ok(sections)
@@ -126,6 +132,19 @@ pub fn build_skills_prompt(skills: &[Skill]) -> Option<String> {
     Some(format!("Available skills:\n{}", skill_summaries.join("\n")))
 }
 
+pub fn build_tools_prompt(tool_specs: &[ToolSpec]) -> Option<String> {
+    if tool_specs.is_empty() {
+        return None;
+    }
+
+    let mut tool_summaries = Vec::with_capacity(tool_specs.len());
+    for tool in tool_specs {
+        tool_summaries.push(format!("- `{}`: {}", tool.name, tool.description));
+    }
+
+    Some(format!("Available tools:\n{}", tool_summaries.join("\n")))
+}
+
 pub fn load_workspace_prompt() -> BabataResult<Option<String>> {
     let babata_home = babata_dir()?;
     let workspace_prompt_path = babata_home.join("workspace").join("workspace.md");
@@ -151,11 +170,15 @@ pub fn load_workspace_prompt() -> BabataResult<Option<String>> {
 mod tests {
     use std::path::PathBuf;
 
-    use super::{build_channels_prompt, build_runtime_prompt, build_skills_prompt};
+    use super::{
+        build_channels_prompt, build_runtime_prompt, build_skills_prompt, build_tools_prompt,
+    };
     use crate::{
         config::{ChannelConfig, Config, TelegramChannelConfig, WechatChannelConfig},
         skill::{Skill, SkillFrontmatter},
+        tool::ToolSpec,
     };
+    use serde_json::json;
 
     #[test]
     fn build_runtime_prompt_includes_runtime_fields() {
@@ -240,5 +263,41 @@ mod tests {
     #[test]
     fn build_skills_prompt_returns_none_for_empty_skills() {
         assert!(build_skills_prompt(&[]).is_none());
+    }
+
+    #[test]
+    fn build_tools_prompt_includes_tool_summaries() {
+        let prompt = build_tools_prompt(&[
+            ToolSpec {
+                name: "read_file".to_string(),
+                description: "Read a file".to_string(),
+                parameters: json!({
+                    "type": "object",
+                    "properties": {
+                        "path": { "type": "string" }
+                    }
+                }),
+            },
+            ToolSpec {
+                name: "create_task".to_string(),
+                description: "Create a task".to_string(),
+                parameters: json!({
+                    "type": "object",
+                    "properties": {
+                        "prompt": { "type": "string" }
+                    }
+                }),
+            },
+        ])
+        .expect("build tools prompt");
+
+        assert!(prompt.contains("Available tools:"));
+        assert!(prompt.contains("- `read_file`: Read a file"));
+        assert!(prompt.contains("- `create_task`: Create a task"));
+    }
+
+    #[test]
+    fn build_tools_prompt_returns_none_for_empty_tools() {
+        assert!(build_tools_prompt(&[]).is_none());
     }
 }
