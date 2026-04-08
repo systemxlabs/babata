@@ -1,6 +1,8 @@
-use regex::Regex;
+use grep::{
+    regex::RegexMatcherBuilder,
+    searcher::{SearcherBuilder, sinks::UTF8},
+};
 use serde_json::{Value, json};
-use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::{
@@ -112,8 +114,10 @@ impl Tool for GrepTool {
     async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
         let (pattern, path, include) = parse_args(args)?;
 
-        let regex =
-            Regex::new(&pattern).map_err(|e| BabataError::tool(format!("Invalid regex: {}", e)))?;
+        let matcher = RegexMatcherBuilder::new()
+            .build(&pattern)
+            .map_err(|err| BabataError::tool(format!("Invalid regex: {}", err)))?;
+        let mut searcher = SearcherBuilder::new().line_number(true).build();
 
         let base = PathBuf::from(&path);
         if !base.exists() {
@@ -129,25 +133,28 @@ impl Tool for GrepTool {
         let mut matches = Vec::new();
 
         for fp in files {
-            let text = match fs::read_to_string(&fp) {
-                Ok(content) => content,
-                Err(_) => continue, // skip binary or unreadable files
-            };
-
-            for (lineno, line) in text.lines().enumerate() {
-                let line_num = lineno + 1;
-                if regex.is_match(line) {
+            let file_display = fp.display().to_string();
+            let result = searcher.search_path(
+                &matcher,
+                &fp,
+                UTF8(|line_num, line| {
                     matches.push(format!(
                         "{}:{}: {}",
-                        fp.display(),
+                        file_display,
                         line_num,
                         line.trim_end()
                     ));
-                    if matches.len() >= MAX_MATCHES {
-                        matches.push("... (match limit reached)".to_string());
-                        return Ok(matches.join("\n"));
-                    }
-                }
+                    Ok(matches.len() < MAX_MATCHES)
+                }),
+            );
+
+            if result.is_err() {
+                continue;
+            }
+
+            if matches.len() >= MAX_MATCHES {
+                matches.push("... (match limit reached)".to_string());
+                return Ok(matches.join("\n"));
             }
         }
 
@@ -183,6 +190,11 @@ fn parse_args(args: &str) -> BabataResult<(String, String, Option<String>)> {
 mod tests {
     use super::*;
     use serde_json::json;
+    use uuid::Uuid;
+
+    fn temp_dir_path(prefix: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()))
+    }
 
     #[test]
     fn parse_args_extracts_pattern_path_and_include() {
@@ -219,5 +231,85 @@ mod tests {
             err.to_string()
                 .contains("Missing required parameter: pattern")
         );
+    }
+
+    #[tokio::test]
+    async fn grep_tool_returns_matching_lines_with_file_and_line_number() {
+        let tool = GrepTool::new();
+        let tool_context = ToolContext::test();
+        let dir = temp_dir_path("babata-grep-match");
+        let file = dir.join("main.rs");
+
+        tokio::fs::create_dir_all(&dir).await.expect("create dir");
+        tokio::fs::write(&file, "fn main() {}\nlet value = 42;\n")
+            .await
+            .expect("seed file");
+
+        let args = json!({
+            "pattern": "value",
+            "path": dir.to_string_lossy(),
+        })
+        .to_string();
+
+        let result = tool.execute(&args, &tool_context).await.expect("grep");
+        assert_eq!(result, format!("{}:2: let value = 42;", file.display()));
+
+        let _ = tokio::fs::remove_dir_all(&dir).await;
+    }
+
+    #[tokio::test]
+    async fn grep_tool_respects_include_filter() {
+        let tool = GrepTool::new();
+        let tool_context = ToolContext::test();
+        let dir = temp_dir_path("babata-grep-include");
+        let rs_file = dir.join("lib.rs");
+        let txt_file = dir.join("notes.txt");
+
+        tokio::fs::create_dir_all(&dir).await.expect("create dir");
+        tokio::fs::write(&rs_file, "let rust_match = true;\n")
+            .await
+            .expect("seed rs file");
+        tokio::fs::write(&txt_file, "rust_match should be ignored\n")
+            .await
+            .expect("seed txt file");
+
+        let args = json!({
+            "pattern": "rust_match",
+            "path": dir.to_string_lossy(),
+            "include": "*.rs",
+        })
+        .to_string();
+
+        let result = tool.execute(&args, &tool_context).await.expect("grep");
+        assert_eq!(
+            result,
+            format!("{}:1: let rust_match = true;", rs_file.display())
+        );
+
+        let _ = tokio::fs::remove_dir_all(&dir).await;
+    }
+
+    #[tokio::test]
+    async fn grep_tool_returns_no_matches_message() {
+        let tool = GrepTool::new();
+        let tool_context = ToolContext::test();
+        let dir = temp_dir_path("babata-grep-empty");
+        let file = dir.join("main.rs");
+
+        tokio::fs::create_dir_all(&dir).await.expect("create dir");
+        tokio::fs::write(&file, "fn main() {}\n")
+            .await
+            .expect("seed file");
+
+        let args = json!({
+            "pattern": "missing_pattern",
+            "path": dir.to_string_lossy(),
+        })
+        .to_string();
+
+        let result = tool.execute(&args, &tool_context).await.expect("grep");
+        assert_eq!(result, "No matches found.");
+
+        let _ = tokio::fs::remove_dir_all(&dir).await;
     }
 }
