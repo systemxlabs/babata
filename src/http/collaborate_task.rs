@@ -24,14 +24,14 @@ pub(super) async fn create(
     state
         .task_manager
         .collaborate_task(task_id, request)
-        .map_err(ApiError::from_babata_error)
+        .map_err(ApiError::from)
         .into_response()
 }
 
 pub(super) async fn get(State(state): State<HttpApp>, Path(task_id): Path<Uuid>) -> Response {
     match state.task_manager.get_collaboration_task_state(task_id) {
         Ok(collaboration_state) => Json(collaboration_state).into_response(),
-        Err(err) => ApiError::from_babata_error(err).into_response(),
+        Err(err) => ApiError::from(err).into_response(),
     }
 }
 

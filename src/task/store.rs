@@ -136,6 +136,16 @@ impl TaskStore {
         Ok(task)
     }
 
+    pub fn task_exists(&self, task_id: Uuid) -> BabataResult<bool> {
+        let conn = self.connect()?;
+        conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM tasks WHERE task_id = ?1)",
+            params![task_id.to_string()],
+            |row| row.get::<_, bool>(0),
+        )
+        .map_err(|err| BabataError::internal(format!("Failed to query task existence: {}", err)))
+    }
+
     pub fn list_tasks(
         &self,
         status: Option<TaskStatus>,
@@ -581,6 +591,35 @@ mod tests {
         let task = store.get_task(task_id).expect("load task");
         assert_eq!(task.description, "after");
         assert!(task.never_ends);
+
+        let _ = std::fs::remove_file(&db_path);
+    }
+
+    #[test]
+    fn task_exists_returns_true_only_for_inserted_task() {
+        let db_path = temp_db_path("task-store-exists");
+        let store = TaskStore::open(&db_path).expect("open store");
+        let task_id = Uuid::new_v4();
+
+        store
+            .insert_task(TaskRecord {
+                task_id,
+                description: "exists".to_string(),
+                agent: Some("babata".to_string()),
+                status: TaskStatus::Running,
+                parent_task_id: None,
+                root_task_id: task_id,
+                created_at: 999,
+                never_ends: false,
+            })
+            .expect("insert task");
+
+        assert!(store.task_exists(task_id).expect("existing task"));
+        assert!(
+            !store
+                .task_exists(Uuid::new_v4())
+                .expect("missing task should be false")
+        );
 
         let _ = std::fs::remove_file(&db_path);
     }

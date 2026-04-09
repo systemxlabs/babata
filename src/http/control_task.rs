@@ -25,7 +25,7 @@ fn control_task(state: HttpApp, task_id: &str, action: TaskAction) -> Result<(),
         TaskAction::Resume => state.task_manager.resume_task(task_id),
         TaskAction::Cancel => state.task_manager.cancel_task(task_id),
     }
-    .map_err(ApiError::from_babata_error)?;
+    .map_err(ApiError::from)?;
 
     Ok(())
 }

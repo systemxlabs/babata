@@ -26,7 +26,7 @@ pub(super) async fn handle(
         .list_tasks(status, query.limit, query.offset)
     {
         Ok(tasks) => Json(ListTasksResponse::from_records(tasks)).into_response(),
-        Err(err) => ApiError::from_babata_error(err).into_response(),
+        Err(err) => ApiError::from(err).into_response(),
     }
 }
 

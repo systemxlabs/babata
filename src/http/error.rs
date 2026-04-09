@@ -20,8 +20,10 @@ impl ApiError {
             message: message.into(),
         }
     }
+}
 
-    pub(crate) fn from_babata_error(err: BabataError) -> Self {
+impl From<BabataError> for ApiError {
+    fn from(err: BabataError) -> Self {
         match err {
             BabataError::InvalidInput(message, _) => Self {
                 status: StatusCode::BAD_REQUEST,
@@ -69,19 +71,19 @@ mod tests {
 
     #[test]
     fn invalid_input_maps_to_400() {
-        let error = ApiError::from_babata_error(BabataError::invalid_input("bad input"));
+        let error = ApiError::from(BabataError::invalid_input("bad input"));
         assert_eq!(error.status, StatusCode::BAD_REQUEST);
     }
 
     #[test]
     fn not_found_maps_to_404() {
-        let error = ApiError::from_babata_error(BabataError::not_found("missing"));
+        let error = ApiError::from(BabataError::not_found("missing"));
         assert_eq!(error.status, StatusCode::NOT_FOUND);
     }
 
     #[test]
     fn other_errors_map_to_500() {
-        let error = ApiError::from_babata_error(BabataError::tool("tool failure"));
+        let error = ApiError::from(BabataError::tool("tool failure"));
         assert_eq!(error.status, StatusCode::INTERNAL_SERVER_ERROR);
     }
 }

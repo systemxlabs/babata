@@ -19,6 +19,7 @@ use axum::{
     routing::{get, post},
 };
 use serde_json::json;
+use uuid::Uuid;
 
 use crate::{BabataResult, error::BabataError, task::TaskManager};
 
@@ -85,4 +86,23 @@ fn router(task_manager: Arc<TaskManager>) -> Router {
 
 async fn health() -> impl IntoResponse {
     Json(json!( { "status": "ok" }))
+}
+
+pub(crate) fn parse_task_id(task_id: &str) -> Result<Uuid, ApiError> {
+    Uuid::parse_str(task_id)
+        .map_err(|err| ApiError::bad_request(format!("Invalid task id '{}': {}", task_id, err)))
+}
+
+pub(crate) fn ensure_task_exists(
+    task_manager: &TaskManager,
+    task_id: Uuid,
+) -> Result<(), ApiError> {
+    match task_manager.task_exists(task_id) {
+        Ok(true) => Ok(()),
+        Ok(false) => Err(ApiError::from(BabataError::not_found(format!(
+            "Task '{}' not found",
+            task_id
+        )))),
+        Err(err) => Err(ApiError::from(err)),
+    }
 }

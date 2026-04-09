@@ -4,9 +4,8 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use serde::Serialize;
-use uuid::Uuid;
 
-use super::{ApiError, HttpApp};
+use super::{ApiError, HttpApp, ensure_task_exists, parse_task_id};
 
 /// File or directory entry
 #[derive(Debug, Serialize)]
@@ -25,38 +24,28 @@ pub(crate) struct FileEntry {
 
 /// Handle GET /api/tasks/{task_id}/files
 pub(super) async fn handle(State(state): State<HttpApp>, Path(task_id): Path<String>) -> Response {
-    // Parse task ID
-    let task_id = match Uuid::parse_str(&task_id) {
-        Ok(task_id) => task_id,
-        Err(err) => {
-            return ApiError::bad_request(format!("Invalid task id '{}': {}", task_id, err))
-                .into_response();
-        }
-    };
-
-    // Verify task exists
-    if let Err(err) = state.task_manager.get_task(task_id) {
-        return ApiError::from_babata_error(err).into_response();
-    }
-
-    // Get task directory path
-    let task_dir = match crate::utils::babata_dir() {
-        Ok(babata_dir) => babata_dir.join("tasks").join(task_id.to_string()),
-        Err(err) => return ApiError::from_babata_error(err).into_response(),
-    };
-
-    // Check if task directory exists
-    if !task_dir.exists() {
-        return Json(Vec::<FileEntry>::new()).into_response();
-    }
-
-    // Recursively read all files
-    match read_directory_recursive(&task_dir).await {
+    match handle_inner(&state, &task_id).await {
         Ok(files) => Json(files).into_response(),
-        Err(err) => {
-            ApiError::bad_request(format!("Failed to read directory: {}", err)).into_response()
-        }
+        Err(err) => err.into_response(),
     }
+}
+
+async fn handle_inner(state: &HttpApp, task_id: &str) -> Result<Vec<FileEntry>, ApiError> {
+    let task_id = parse_task_id(task_id)?;
+    ensure_task_exists(&state.task_manager, task_id)?;
+
+    let task_dir = crate::utils::babata_dir()
+        .map_err(ApiError::from)?
+        .join("tasks")
+        .join(task_id.to_string());
+
+    if !task_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    read_directory_recursive(&task_dir)
+        .await
+        .map_err(|err| ApiError::bad_request(format!("Failed to read directory: {}", err)))
 }
 
 /// Recursively read directory and return all file entries using iterative approach

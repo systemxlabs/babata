@@ -26,7 +26,7 @@ pub(super) async fn handle(
         .await
     {
         Ok(()) => (StatusCode::OK, Json(serde_json::json!({ "success": true }))).into_response(),
-        Err(err) => ApiError::from_babata_error(err).into_response(),
+        Err(err) => ApiError::from(err).into_response(),
     }
 }
 

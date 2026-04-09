@@ -4,11 +4,10 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use serde::Deserialize;
-use uuid::Uuid;
 
 use crate::utils::babata_dir;
 
-use super::{ApiError, HttpApp};
+use super::{ApiError, HttpApp, ensure_task_exists, parse_task_id};
 
 const MAX_LIMIT: usize = 1000;
 
@@ -26,39 +25,33 @@ pub(super) async fn handle(
     Path(task_id): Path<String>,
     Query(params): Query<LogQueryParams>,
 ) -> Response {
-    // Parse and validate task ID
-    let task_id = match Uuid::parse_str(&task_id) {
-        Ok(task_id) => task_id,
-        Err(err) => {
-            return ApiError::bad_request(format!("Invalid task id '{}': {}", task_id, err))
-                .into_response();
-        }
-    };
-
-    // Verify task exists
-    if let Err(err) = state.task_manager.get_task(task_id) {
-        return ApiError::from_babata_error(err).into_response();
+    match handle_inner(&state, &task_id, params).await {
+        Ok(logs) => Json(logs).into_response(),
+        Err(err) => err.into_response(),
     }
+}
 
-    let task_id_str = task_id.to_string();
+async fn handle_inner(
+    state: &HttpApp,
+    task_id: &str,
+    params: LogQueryParams,
+) -> Result<Vec<String>, ApiError> {
+    let task_id = parse_task_id(task_id)?;
+    ensure_task_exists(&state.task_manager, task_id)?;
 
-    // Validate limit: must be greater than 0 and not exceed MAX_LIMIT
     if params.limit == 0 {
-        return ApiError::bad_request("limit must be greater than 0").into_response();
+        return Err(ApiError::bad_request("limit must be greater than 0"));
     }
     if params.limit > MAX_LIMIT {
-        return ApiError::bad_request(format!("limit exceeds maximum value of {}", MAX_LIMIT))
-            .into_response();
+        return Err(ApiError::bad_request(format!(
+            "limit exceeds maximum value of {}",
+            MAX_LIMIT
+        )));
     }
 
-    let limit = params.limit;
-    let offset = params.offset;
-
-    // Read and filter logs with pagination
-    match read_task_logs(&task_id_str, offset, limit).await {
-        Ok(logs) => Json(logs).into_response(),
-        Err(err) => ApiError::bad_request(format!("Failed to read logs: {}", err)).into_response(),
-    }
+    read_task_logs(&task_id.to_string(), params.offset, params.limit)
+        .await
+        .map_err(|err| ApiError::bad_request(format!("Failed to read logs: {}", err)))
 }
 
 /// Read logs from log files in chronological order with pagination.

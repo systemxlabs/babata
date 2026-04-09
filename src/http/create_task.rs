@@ -30,7 +30,7 @@ pub(super) async fn handle(
             }),
         )
             .into_response(),
-        Err(err) => ApiError::from_babata_error(err).into_response(),
+        Err(err) => ApiError::from(err).into_response(),
     }
 }
 

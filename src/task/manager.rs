@@ -333,6 +333,10 @@ impl TaskManager {
         self.store.get_task(task_id)
     }
 
+    pub fn task_exists(&self, task_id: Uuid) -> BabataResult<bool> {
+        self.store.task_exists(task_id)
+    }
+
     pub fn count_tasks(&self, status: Option<TaskStatus>) -> BabataResult<usize> {
         self.store.count_tasks(status)
     }

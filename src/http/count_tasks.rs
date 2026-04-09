@@ -23,7 +23,7 @@ pub(super) async fn handle(
 
     match state.task_manager.count_tasks(status) {
         Ok(count) => Json(CountTasksResponse { count }).into_response(),
-        Err(err) => ApiError::from_babata_error(err).into_response(),
+        Err(err) => ApiError::from(err).into_response(),
     }
 }
 

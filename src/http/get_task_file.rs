@@ -4,9 +4,8 @@ use axum::{
     http::{StatusCode, header},
     response::{IntoResponse, Response},
 };
-use uuid::Uuid;
 
-use super::{ApiError, HttpApp};
+use super::{ApiError, HttpApp, ensure_task_exists, parse_task_id};
 
 /// Handle GET /api/tasks/{task_id}/files/{*path}
 /// Returns raw file content for text files, raw binary bytes for binary files
@@ -14,61 +13,75 @@ pub(super) async fn handle(
     State(state): State<HttpApp>,
     Path((task_id, file_path)): Path<(String, String)>,
 ) -> Response {
-    // Parse task ID
-    let task_id = match Uuid::parse_str(&task_id) {
-        Ok(task_id) => task_id,
-        Err(err) => {
-            return ApiError::bad_request(format!("Invalid task id '{}': {}", task_id, err))
-                .into_response();
-        }
-    };
+    match handle_inner(&state, &task_id, &file_path).await {
+        Ok(response) => response,
+        Err(err) => err.into_response(),
+    }
+}
 
-    // Verify task exists
-    if let Err(err) = state.task_manager.get_task(task_id) {
-        return ApiError::from_babata_error(err).into_response();
+async fn handle_inner(
+    state: &HttpApp,
+    task_id: &str,
+    file_path: &str,
+) -> Result<Response, ApiError> {
+    let task_id = parse_task_id(task_id)?;
+    ensure_task_exists(&state.task_manager, task_id)?;
+
+    let task_dir = crate::utils::babata_dir()
+        .map_err(ApiError::from)?
+        .join("tasks")
+        .join(task_id.to_string());
+
+    let file_path = file_path.replace('/', std::path::MAIN_SEPARATOR_STR);
+    let target_path = normalize_path(&task_dir, &file_path)
+        .ok_or_else(|| ApiError::bad_request("Invalid file path: directory traversal detected"))?;
+
+    let metadata = tokio::fs::metadata(&target_path)
+        .await
+        .map_err(|err| ApiError::bad_request(format!("File not found: {}", err)))?;
+    if !metadata.is_file() {
+        return Err(ApiError::bad_request(format!(
+            "'{}' is not a file (might be a directory)",
+            file_path
+        )));
     }
 
-    // Get task directory path
-    let task_dir = match crate::utils::babata_dir() {
-        Ok(babata_dir) => babata_dir.join("tasks").join(task_id.to_string()),
-        Err(err) => return ApiError::from_babata_error(err).into_response(),
-    };
-
-    // Resolve the file path (security: prevent directory traversal)
-    let file_path = file_path.replace('/', std::path::MAIN_SEPARATOR_STR);
-    let target_path = match normalize_path(&task_dir, &file_path) {
-        Some(path) => path,
-        None => {
-            return ApiError::bad_request("Invalid file path: directory traversal detected")
-                .into_response();
-        }
-    };
-
-    // Check if path exists and is a file
-    match tokio::fs::metadata(&target_path).await {
-        Ok(meta) => {
-            if !meta.is_file() {
-                return ApiError::bad_request(format!(
-                    "'{}' is not a file (might be a directory)",
-                    file_path
-                ))
-                .into_response();
-            }
-        }
-        Err(err) => {
-            return ApiError::bad_request(format!("File not found: {}", err)).into_response();
-        }
-    };
-
-    // Get file name and detect content type
     let name = target_path
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| file_path.clone());
     let content_type = detect_content_type(&name, &target_path).await;
 
-    // Check if it's a text file based on content type
-    let is_text = content_type.starts_with("text/")
+    let body = if is_text_content_type(&content_type) {
+        match tokio::fs::read_to_string(&target_path).await {
+            Ok(content) => Body::from(content),
+            Err(text_err) => {
+                let bytes = tokio::fs::read(&target_path).await.map_err(|_| {
+                    ApiError::bad_request(format!("Failed to read file: {}", text_err))
+                })?;
+                Body::from(bytes)
+            }
+        }
+    } else {
+        let bytes = tokio::fs::read(&target_path)
+            .await
+            .map_err(|err| ApiError::bad_request(format!("Failed to read file: {}", err)))?;
+        Body::from(bytes)
+    };
+
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, content_type)
+        .body(body)
+        .map_err(|_| {
+            ApiError::from(crate::error::BabataError::internal(
+                "Failed to build response",
+            ))
+        })
+}
+
+fn is_text_content_type(content_type: &str) -> bool {
+    content_type.starts_with("text/")
         || content_type == "application/json"
         || content_type == "application/javascript"
         || content_type == "application/xml"
@@ -78,60 +91,7 @@ pub(super) async fn handle(
         || content_type == "application/x-httpd-php"
         || content_type == "application/x-python-code"
         || content_type == "application/x-rust"
-        || content_type.starts_with("application/x-");
-
-    if is_text {
-        // Read and return text content directly
-        match tokio::fs::read_to_string(&target_path).await {
-            Ok(content) => Response::builder()
-                .status(StatusCode::OK)
-                .header(header::CONTENT_TYPE, content_type)
-                .body(Body::from(content))
-                .unwrap_or_else(|_| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "Failed to build response",
-                    )
-                        .into_response()
-                }),
-            Err(err) => {
-                // If text read fails, try reading as binary
-                match tokio::fs::read(&target_path).await {
-                    Ok(bytes) => Response::builder()
-                        .status(StatusCode::OK)
-                        .header(header::CONTENT_TYPE, content_type)
-                        .body(Body::from(bytes))
-                        .unwrap_or_else(|_| {
-                            (
-                                StatusCode::INTERNAL_SERVER_ERROR,
-                                "Failed to build response",
-                            )
-                                .into_response()
-                        }),
-                    Err(_) => ApiError::bad_request(format!("Failed to read file: {}", err))
-                        .into_response(),
-                }
-            }
-        }
-    } else {
-        // For binary files, read and return raw bytes
-        match tokio::fs::read(&target_path).await {
-            Ok(bytes) => Response::builder()
-                .status(StatusCode::OK)
-                .header(header::CONTENT_TYPE, content_type)
-                .body(Body::from(bytes))
-                .unwrap_or_else(|_| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "Failed to build response",
-                    )
-                        .into_response()
-                }),
-            Err(err) => {
-                ApiError::bad_request(format!("Failed to read file: {}", err)).into_response()
-            }
-        }
-    }
+        || content_type.starts_with("application/x-")
 }
 
 /// Normalize and validate file path to prevent directory traversal

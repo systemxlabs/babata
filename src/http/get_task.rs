@@ -21,7 +21,7 @@ pub(super) async fn handle(State(state): State<HttpApp>, Path(task_id): Path<Str
 
     match state.task_manager.get_task(task_id) {
         Ok(task) => Json(TaskResponse::from_record(task)).into_response(),
-        Err(err) => ApiError::from_babata_error(err).into_response(),
+        Err(err) => ApiError::from(err).into_response(),
     }
 }
 
