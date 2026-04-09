@@ -291,21 +291,6 @@ fn prompt_line(label: &str) -> BabataResult<String> {
 }
 
 fn configure_background_service() -> BabataResult<bool> {
-    if std::env::consts::OS == "windows" {
-        if let Err(err) = super::server::install_windows_service() {
-            if super::server::is_windows_service_permission_denied_message(&err.to_string()) {
-                println!(
-                    "Warning: Windows service was not created due to missing Administrator privileges."
-                );
-                println!("Run an elevated shell and execute: babata server start");
-                return Ok(false);
-            }
-            return Err(err);
-        }
-        println!("Configured Windows service: babata.server");
-        return Ok(true);
-    }
-
     let (template_content, template_name, output_name, output_dir) = match std::env::consts::OS {
         "macos" => (
             EMBEDDED_MACOS_SERVICE_TEMPLATE,

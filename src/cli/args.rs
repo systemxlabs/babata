@@ -42,15 +42,6 @@ pub enum ServerAction {
     Stop,
     #[command(about = "Restart background service on current platform")]
     Restart,
-    #[command(
-        name = "windows-service-host",
-        hide = true,
-        about = "Run Windows service host"
-    )]
-    WindowsServiceHost {
-        #[arg(long, hide = true, value_name = "HOME_DIR")]
-        home_dir: String,
-    },
 }
 
 #[derive(Subcommand, Debug)]

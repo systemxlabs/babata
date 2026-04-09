@@ -12,9 +12,6 @@ fn main() {
             babata::cli::ServerAction::Start => babata::cli::server::start(),
             babata::cli::ServerAction::Stop => babata::cli::server::stop(),
             babata::cli::ServerAction::Restart => babata::cli::server::restart(),
-            babata::cli::ServerAction::WindowsServiceHost { home_dir } => {
-                babata::cli::server::windows_service_host(&home_dir)
-            }
         },
         babata::cli::Command::Channel { action } => match action {
             babata::cli::ChannelAction::Add {
