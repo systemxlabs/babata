@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 
+use uuid::Uuid;
+
 use crate::{BabataResult, error::BabataError};
 
 pub fn babata_dir() -> BabataResult<PathBuf> {
@@ -13,4 +15,8 @@ pub fn resolve_home_dir() -> BabataResult<PathBuf> {
         .map_err(|_| {
             BabataError::internal("Failed to resolve home directory from HOME or USERPROFILE")
         })
+}
+
+pub fn task_dir(task_id: Uuid) -> BabataResult<PathBuf> {
+    Ok(babata_dir()?.join("tasks").join(task_id.to_string()))
 }

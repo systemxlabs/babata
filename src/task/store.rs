@@ -52,7 +52,7 @@ impl TaskStore {
                 record.task_id.to_string(),
                 record.description,
                 record.agent,
-                record.status.as_str(),
+                record.status.to_string(),
                 record.parent_task_id.map(|id| id.to_string()),
                 record.root_task_id.to_string(),
                 record.created_at,
@@ -99,7 +99,7 @@ impl TaskStore {
         let updated = conn
             .execute(
                 "UPDATE tasks SET status = ?1 WHERE task_id = ?2",
-                params![status.as_str(), task_id.to_string()],
+                params![status.to_string(), task_id.to_string()],
             )
             .map_err(|err| {
                 BabataError::internal(format!("Failed to update task status row: {}", err))
@@ -175,7 +175,7 @@ impl TaskStore {
                     })?;
                 collect_task_records(
                     stmt.query_map(
-                        params![status.as_str(), limit as i64, offset as i64],
+                        params![status.to_string(), limit as i64, offset as i64],
                         parse_task_record,
                     )
                     .map_err(|err| {
@@ -199,7 +199,7 @@ impl TaskStore {
                         ))
                     })?;
                 collect_task_records(
-                    stmt.query_map(params![status.as_str(), limit as i64], parse_task_record)
+                    stmt.query_map(params![status.to_string(), limit as i64], parse_task_record)
                         .map_err(|err| {
                             BabataError::internal(format!("Failed to query task rows: {}", err))
                         })?,
@@ -258,7 +258,7 @@ impl TaskStore {
             Some(status) => conn
                 .query_row(
                     "SELECT COUNT(*) FROM tasks WHERE status = ?1",
-                    params![status.as_str()],
+                    params![status.to_string()],
                     |row| row.get::<_, i64>(0),
                 )
                 .map_err(|err| {

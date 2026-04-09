@@ -2,6 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use log::info;
 use tokio::{sync::mpsc, task::JoinHandle};
+use uuid::Uuid;
 
 use crate::{
     BabataResult,
@@ -10,8 +11,9 @@ use crate::{
     error::BabataError,
     memory::Memory,
     message::Content,
-    task::{RunningTask, SteerMessage, TaskExitEvent, TaskRecord, task_dir},
+    task::{RunningTask, SteerMessage, TaskExitEvent, TaskRecord},
     tool::{Tool, build_tools},
+    utils::task_dir,
 };
 
 #[derive(Debug)]
@@ -51,6 +53,10 @@ impl TaskLauncher {
         task: &TaskRecord,
         exit_tx: mpsc::Sender<TaskExitEvent>,
     ) -> BabataResult<RunningTask> {
+        info!(
+            "Launching task {} with task record: {:?}",
+            task.task_id, task
+        );
         self.launch_internal(task, exit_tx, None)
     }
 
@@ -60,6 +66,10 @@ impl TaskLauncher {
         exit_tx: mpsc::Sender<TaskExitEvent>,
         reason: &str,
     ) -> BabataResult<RunningTask> {
+        info!(
+            "Relaunching task {} with reason '{}' and task record: {:?}",
+            task.task_id, reason, task
+        );
         self.launch_internal(task, exit_tx, Some(reason))
     }
 
@@ -67,7 +77,7 @@ impl TaskLauncher {
         &self,
         task: &TaskRecord,
         agent_name: &str,
-        prompt: &str,
+        collaboration_prompt: &str,
     ) -> BabataResult<JoinHandle<BabataResult<Vec<Content>>>> {
         let agent = self
             .agents
@@ -80,19 +90,13 @@ impl TaskLauncher {
             .ok_or_else(|| BabataError::config(format!("Agent memory '{}' not found", agent_name)))?
             .clone();
 
-        let mut prompt_content = build_task_prompt(task.task_id, None)?;
-        prompt_content.push(Content::Text {
-            text: format!(
-                "You are collaborating on the current task. Focus on the request below and return a useful final answer for the caller to consume directly.\n\nCollaboration request:\n{}",
-                prompt
-            ),
-        });
+        let prompt = build_collaboration_prompt(task.task_id, collaboration_prompt)?;
 
         let mut agent_task = AgentTask {
             task_id: task.task_id,
             parent_task_id: task.parent_task_id,
             root_task_id: task.root_task_id,
-            prompt: prompt_content,
+            prompt,
             agent,
             memory,
             all_tools: self.all_tools.clone(),
@@ -108,16 +112,6 @@ impl TaskLauncher {
         exit_tx: mpsc::Sender<TaskExitEvent>,
         reason: Option<&str>,
     ) -> BabataResult<RunningTask> {
-        match reason {
-            Some(reason) => info!(
-                "Relaunching task {} with reason '{}' and task record: {:?}",
-                task.task_id, reason, task
-            ),
-            None => info!(
-                "Launching task {} with task record: {:?}",
-                task.task_id, task
-            ),
-        }
         let agent = match task.agent.as_deref() {
             Some(agent_name) => self
                 .agents
@@ -142,7 +136,10 @@ impl TaskLauncher {
         let (steer_tx, steer_rx) = mpsc::channel::<SteerMessage>(128);
 
         let task_id = task.task_id;
-        let prompt = build_task_prompt(task.task_id, reason)?;
+        let prompt = match reason {
+            Some(reason) => build_relaunch_prompt(task_id, reason)?,
+            None => build_launch_prompt(task_id)?,
+        };
         let agent_task = AgentTask {
             task_id,
             parent_task_id: task.parent_task_id,
@@ -172,46 +169,24 @@ impl TaskLauncher {
     }
 }
 
-fn build_task_prompt(
-    task_id: uuid::Uuid,
-    relaunch_reason: Option<&str>,
-) -> BabataResult<Vec<Content>> {
+fn build_relaunch_prompt(task_id: uuid::Uuid, relaunch_reason: &str) -> BabataResult<Vec<Content>> {
     let task_dir = task_dir(task_id)?;
     let task_md_path = task_dir.join("task.md");
     let progress_md_path = task_dir.join("progress.md");
 
-    let task_markdown = std::fs::read_to_string(&task_md_path).map_err(|err| {
-        BabataError::internal(format!(
-            "Failed to read task file '{}': {}",
-            task_md_path.display(),
-            err
-        ))
-    })?;
-    let progress_markdown = std::fs::read_to_string(&progress_md_path).map_err(|err| {
-        BabataError::internal(format!(
-            "Failed to read progress file '{}': {}",
-            progress_md_path.display(),
-            err
-        ))
-    })?;
+    let task_markdown = std::fs::read_to_string(&task_md_path)?;
+    let progress_markdown = std::fs::read_to_string(&progress_md_path)?;
 
     let mut prompt = Vec::with_capacity(2);
-    if let Some(reason) = relaunch_reason {
-        prompt.push(Content::Text {
-            text: format!(
-                r#"This task is being relaunched.
-Relaunch reason: {}"#,
-                reason
-            ),
-        });
-    }
+    prompt.push(Content::Text {
+        text: format!("This task is relaunched with reason: {relaunch_reason}"),
+    });
 
     prompt.push(Content::Text {
         text: format!(
             r#"Current task state is defined by the following files.
-
-`task.md` path: {}
-`progress.md` path: {}
+- `task.md` at {}
+- `progress.md` at {}
 
 Below is the content of `task.md`
 {}
@@ -219,8 +194,68 @@ Below is the content of `task.md`
 ---
 
 Below is the content of `progress.md`
+{}"#,
+            task_md_path.display(),
+            progress_md_path.display(),
+            task_markdown,
+            progress_markdown
+        ),
+    });
+
+    Ok(prompt)
+}
+
+fn build_launch_prompt(task_id: uuid::Uuid) -> BabataResult<Vec<Content>> {
+    let task_dir = task_dir(task_id)?;
+    let task_md_path = task_dir.join("task.md");
+
+    let task_markdown = std::fs::read_to_string(&task_md_path)?;
+
+    let prompt = vec![Content::Text {
+        text: format!(
+            r#"Execute task (from {}) below:
+
+{}"#,
+            task_md_path.display(),
+            task_markdown,
+        ),
+    }];
+
+    Ok(prompt)
+}
+
+fn build_collaboration_prompt(
+    task_id: Uuid,
+    collaboration_prompt: &str,
+) -> BabataResult<Vec<Content>> {
+    let task_dir = task_dir(task_id)?;
+    let task_md_path = task_dir.join("task.md");
+    let progress_md_path = task_dir.join("progress.md");
+
+    let task_markdown = std::fs::read_to_string(&task_md_path)?;
+    let progress_markdown = std::fs::read_to_string(&progress_md_path)?;
+
+    let mut prompt = Vec::with_capacity(2);
+
+    prompt.push(Content::Text {
+        text: format!(
+            "You are collaborating on the current task with request: {collaboration_prompt}"
+        ),
+    });
+
+    prompt.push(Content::Text {
+        text: format!(
+            r#"Current task state is defined by the following files.
+- `task.md` at {}
+- `progress.md` at {}
+
+Below is the content of `task.md`
 {}
-"#,
+
+---
+
+Below is the content of `progress.md`
+{}"#,
             task_md_path.display(),
             progress_md_path.display(),
             task_markdown,

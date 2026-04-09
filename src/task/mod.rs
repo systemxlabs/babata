@@ -8,8 +8,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 pub use store::*;
 
-use crate::{BabataResult, error::BabataError, message::Content, utils::babata_dir};
-use std::path::PathBuf;
+use crate::{error::BabataError, message::Content};
 use uuid::Uuid;
 
 /// Steer message sent to a running task to influence its behavior.
@@ -88,20 +87,15 @@ pub enum TaskStatus {
     Paused,
 }
 
-impl TaskStatus {
-    pub const fn as_str(self) -> &'static str {
-        match self {
+impl std::fmt::Display for TaskStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let value = match self {
             TaskStatus::Running => "running",
             TaskStatus::Done => "done",
             TaskStatus::Canceled => "canceled",
             TaskStatus::Paused => "paused",
-        }
-    }
-}
-
-impl std::fmt::Display for TaskStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.as_str())
+        };
+        f.write_str(value)
     }
 }
 
@@ -132,8 +126,4 @@ pub enum CollaborationTaskState {
 pub enum TaskExitEvent {
     Completed { task_id: Uuid },
     Failed { task_id: Uuid, error: BabataError },
-}
-
-pub fn task_dir(task_id: Uuid) -> BabataResult<PathBuf> {
-    Ok(babata_dir()?.join("tasks").join(task_id.to_string()))
 }

@@ -93,12 +93,10 @@ pub(crate) fn parse_task_id(task_id: &str) -> BabataResult<Uuid> {
 }
 
 pub(crate) fn ensure_task_exists(task_manager: &TaskManager, task_id: Uuid) -> BabataResult<()> {
-    match task_manager.task_exists(task_id) {
-        Ok(true) => Ok(()),
-        Ok(false) => Err(BabataError::not_found(format!(
-            "Task '{}' not found",
-            task_id
-        ))),
-        Err(err) => Err(err),
+    if !task_manager.task_exists(task_id)? {
+        return Err(BabataError::not_found(format!(
+            "Task '{task_id}' not found",
+        )));
     }
+    Ok(())
 }

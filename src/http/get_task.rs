@@ -37,7 +37,7 @@ impl TaskResponse {
             task_id: record.task_id.to_string(),
             description: record.description,
             agent: record.agent,
-            status: record.status.as_str().to_string(),
+            status: record.status.to_string(),
             parent_task_id: record.parent_task_id.map(|task_id| task_id.to_string()),
             root_task_id: record.root_task_id.to_string(),
             created_at: record.created_at,

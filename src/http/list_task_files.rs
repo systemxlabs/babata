@@ -4,7 +4,7 @@ use axum::{
 };
 use serde::Serialize;
 
-use crate::{BabataResult, error::BabataError};
+use crate::{BabataResult, error::BabataError, utils::task_dir};
 
 use super::{HttpApp, ensure_task_exists, parse_task_id};
 
@@ -31,10 +31,7 @@ pub(super) async fn handle(
     let task_id = parse_task_id(&task_id)?;
     ensure_task_exists(&state.task_manager, task_id)?;
 
-    let task_dir = crate::utils::babata_dir()
-        .map_err(BabataError::from)?
-        .join("tasks")
-        .join(task_id.to_string());
+    let task_dir = task_dir(task_id)?;
 
     if !task_dir.exists() {
         return Ok(Json(Vec::new()));

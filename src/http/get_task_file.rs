@@ -5,7 +5,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
-use crate::{BabataResult, error::BabataError};
+use crate::{BabataResult, error::BabataError, utils::task_dir};
 
 use super::{HttpApp, ensure_task_exists, parse_task_id};
 
@@ -25,10 +25,7 @@ async fn handle_inner(state: &HttpApp, task_id: &str, file_path: &str) -> Babata
     let task_id = parse_task_id(task_id)?;
     ensure_task_exists(&state.task_manager, task_id)?;
 
-    let task_dir = crate::utils::babata_dir()
-        .map_err(BabataError::from)?
-        .join("tasks")
-        .join(task_id.to_string());
+    let task_dir = task_dir(task_id)?;
 
     let file_path = file_path.replace('/', std::path::MAIN_SEPARATOR_STR);
     let target_path = normalize_path(&task_dir, &file_path).ok_or_else(|| {

@@ -16,8 +16,9 @@ use crate::{
     message::Content,
     task::{
         CollaborationTaskState, CreateTaskRequest, SteerMessage, TaskExitEvent, TaskRecord,
-        TaskStatus, TaskStore, launcher::TaskLauncher, task_dir,
+        TaskStatus, TaskStore, launcher::TaskLauncher,
     },
+    utils::task_dir,
 };
 
 pub struct TaskManager {
