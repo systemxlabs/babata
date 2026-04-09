@@ -71,6 +71,8 @@ pub fn start_channel_loops(
                 match channel.try_receive().await {
                     Ok(content) => {
                         if !content.is_empty() {
+                            let description = render_prompt_as_description(&content);
+
                             let mut prompt = vec![Content::Text {
                                 text: format!(
                                     "Your user sent you a message from {}, the message content is below:",
@@ -80,6 +82,7 @@ pub fn start_channel_loops(
                             prompt.extend(content);
 
                             let task = CreateTaskRequest {
+                                description,
                                 prompt,
                                 parent_task_id: None,
                                 agent: None,
@@ -102,5 +105,23 @@ pub fn start_channel_loops(
                 tokio::time::sleep(Duration::from_secs(CHANNEL_RETRY_DELAY_SECS)).await;
             }
         });
+    }
+}
+
+fn render_prompt_as_description(prompt: &[Content]) -> String {
+    let lines = prompt
+        .iter()
+        .map(|content| match content {
+            Content::Text { text } => text.clone(),
+            Content::ImageUrl { url } => format!("- [image] {url}"),
+            Content::ImageData { media_type, .. } => format!("- [image_data] {media_type}"),
+            Content::AudioData { media_type, .. } => format!("- [audio_data] {media_type}"),
+        })
+        .collect::<Vec<_>>();
+
+    if lines.is_empty() {
+        "_No prompt provided._".to_string()
+    } else {
+        lines.join("\n\n")
     }
 }

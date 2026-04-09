@@ -136,6 +136,7 @@ async fn broadcast_service_started(task_manager: &Arc<TaskManager>) {
     };
 
     let task = CreateTaskRequest {
+        description: "broadcast service started notification".to_string(),
         prompt: vec![prompt],
         parent_task_id: None,
         agent: None,

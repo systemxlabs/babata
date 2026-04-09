@@ -26,6 +26,7 @@ impl SteerMessage {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CreateTaskRequest {
+    pub description: String,
     pub prompt: Vec<Content>,
     #[serde(default)]
     pub parent_task_id: Option<Uuid>,
@@ -44,6 +45,7 @@ mod tests {
     #[test]
     fn create_task_request_requires_never_ends_when_deserializing() {
         let error = serde_json::from_value::<CreateTaskRequest>(json!({
+            "description": "hello",
             "prompt": [{ "type": "text", "text": "hello" }],
         }))
         .expect_err("missing never_ends should fail");
@@ -55,6 +57,7 @@ mod tests {
     fn create_task_request_deserializes_with_explicit_never_ends() {
         let parent_task_id = Uuid::new_v4();
         let request = serde_json::from_value::<CreateTaskRequest>(json!({
+            "description": "demo task",
             "prompt": [{ "type": "text", "text": "hello" }],
             "parent_task_id": parent_task_id,
             "agent": "babata",
@@ -68,6 +71,7 @@ mod tests {
                 text: "hello".to_string()
             }]
         );
+        assert_eq!(request.description, "demo task");
         assert_eq!(request.parent_task_id, Some(parent_task_id));
         assert_eq!(request.agent.as_deref(), Some("babata"));
         assert!(request.never_ends);

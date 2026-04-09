@@ -162,7 +162,7 @@ impl TaskManager {
 
         let task_record = TaskRecord {
             task_id,
-            description: render_prompt_markdown(&request.prompt),
+            description: request.description.clone(),
             agent: request.agent.clone(),
             status: TaskStatus::Running,
             parent_task_id: request.parent_task_id,
@@ -804,6 +804,7 @@ mod tests {
 
         let task_id = manager
             .create_task(CreateTaskRequest {
+                description: "test create task".to_string(),
                 prompt: vec![Content::Text {
                     text: "test create task".to_string(),
                 }],

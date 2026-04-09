@@ -17,13 +17,11 @@ pub(super) async fn handle(
     if request.prompt.is_empty() {
         return ApiError::bad_request("prompt cannot be empty").into_response();
     }
+    if request.description.trim().is_empty() {
+        return ApiError::bad_request("description cannot be empty").into_response();
+    }
 
-    match state.task_manager.create_task(CreateTaskRequest {
-        prompt: request.prompt,
-        parent_task_id: request.parent_task_id,
-        agent: request.agent.filter(|value| !value.trim().is_empty()),
-        never_ends: request.never_ends,
-    }) {
+    match state.task_manager.create_task(request) {
         Ok(task_id) => (
             StatusCode::CREATED,
             Json(CreateTaskResponse {

@@ -112,6 +112,7 @@ fn run_create(
             None => None,
         };
         let request = CreateTaskRequest {
+            description: prompt.to_string(),
             prompt: vec![Content::Text {
                 text: prompt.to_string(),
             }],
