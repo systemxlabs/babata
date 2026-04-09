@@ -1,3 +1,4 @@
+mod collaborate;
 mod control_task;
 mod create_task;
 mod delete_tasks;
@@ -14,6 +15,7 @@ mod user_feedback;
 mod wait_task;
 mod write_file;
 
+pub use collaborate::*;
 pub use control_task::*;
 pub use create_task::*;
 pub use delete_tasks::*;
@@ -94,6 +96,7 @@ pub fn build_tools(
         Arc::new(QueryTasksTool::new()?),
         Arc::new(WaitTaskTool::new()?),
         Arc::new(SleepTool::new()),
+        Arc::new(CollaborateTool::new()),
         Arc::new(SteerTaskTool::new()),
         Arc::new(UpdateTaskTool::new()?),
         Arc::new(UserFeedbackTool::new(channels)),

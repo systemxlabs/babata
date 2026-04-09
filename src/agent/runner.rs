@@ -34,11 +34,11 @@ pub struct AgentTask {
     pub agent: Arc<Agent>,
     pub memory: Arc<Memory>,
     pub all_tools: HashMap<String, Arc<dyn Tool>>,
-    pub steer_rx: mpsc::Receiver<SteerMessage>,
+    pub steer_rx: Option<mpsc::Receiver<SteerMessage>>,
 }
 
 impl AgentTask {
-    pub async fn run(&mut self) -> BabataResult<()> {
+    pub async fn run(&mut self) -> BabataResult<Vec<Content>> {
         let config = Config::load()?;
         let agents = load_agents()?;
 
@@ -59,22 +59,23 @@ impl AgentTask {
             created_at: Utc::now(),
         }];
 
-        let mut success = false;
+        let mut final_response = None;
         let max_steps = 100;
         for _ in 0..max_steps {
             // Check for steer messages before calling the model
-            while let Ok(steer_msg) = self.steer_rx.try_recv() {
-                info!(
-                    "Task {} received steer message with {} content part(s)",
-                    self.task_id,
-                    steer_msg.content.len()
-                );
-                conversation.push(Message::UserSteering {
-                    content: steer_msg.content,
-                    created_at: Utc::now(),
-                });
+            if let Some(steer_rx) = self.steer_rx.as_mut() {
+                while let Ok(steer_msg) = steer_rx.try_recv() {
+                    info!(
+                        "Task {} received steer message with {} content part(s)",
+                        self.task_id,
+                        steer_msg.content.len()
+                    );
+                    conversation.push(Message::UserSteering {
+                        content: steer_msg.content,
+                        created_at: Utc::now(),
+                    });
+                }
             }
-
             let message = generate_with_retry(
                 provider.as_ref(),
                 self.task_id,
@@ -89,8 +90,8 @@ impl AgentTask {
             conversation.push(message.clone());
 
             match message {
-                Message::AssistantResponse { .. } => {
-                    success = true;
+                Message::AssistantResponse { content, .. } => {
+                    final_response = Some(content);
                     break;
                 }
                 Message::AssistantToolCalls { calls, .. } => {
@@ -143,9 +144,9 @@ impl AgentTask {
             }
         }
 
-        if success {
+        if let Some(final_response) = final_response {
             self.memory.append_messages(&conversation)?;
-            Ok(())
+            Ok(final_response)
         } else {
             Err(BabataError::provider(format!(
                 "Max steps ({}) reached before final answer",

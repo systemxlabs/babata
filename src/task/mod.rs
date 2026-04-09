@@ -119,6 +119,15 @@ impl std::str::FromStr for TaskStatus {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum CollaborationTaskState {
+    NonExisting,
+    Running,
+    Failed { reason: String },
+    Succeed { result: Vec<Content> },
+}
+
 #[derive(Debug)]
 pub enum TaskExitEvent {
     Completed { task_id: Uuid },

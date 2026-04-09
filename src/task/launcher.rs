@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use log::info;
-use tokio::sync::mpsc;
+use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::{
     BabataResult,
@@ -63,6 +63,45 @@ impl TaskLauncher {
         self.launch_internal(task, exit_tx, Some(reason))
     }
 
+    pub fn collaborate(
+        &self,
+        task: &TaskRecord,
+        agent_name: &str,
+        prompt: &str,
+    ) -> BabataResult<JoinHandle<BabataResult<Vec<Content>>>> {
+        let agent = self
+            .agents
+            .get(agent_name)
+            .ok_or_else(|| BabataError::not_found(format!("Agent '{}' not found", agent_name)))?
+            .clone();
+        let memory = self
+            .memories
+            .get(agent_name)
+            .ok_or_else(|| BabataError::config(format!("Agent memory '{}' not found", agent_name)))?
+            .clone();
+
+        let mut prompt_content = build_task_prompt(task.task_id, None)?;
+        prompt_content.push(Content::Text {
+            text: format!(
+                "You are collaborating on the current task. Focus on the request below and return a useful final answer for the caller to consume directly.\n\nCollaboration request:\n{}",
+                prompt
+            ),
+        });
+
+        let mut agent_task = AgentTask {
+            task_id: task.task_id,
+            parent_task_id: task.parent_task_id,
+            root_task_id: task.root_task_id,
+            prompt: prompt_content,
+            agent,
+            memory,
+            all_tools: self.all_tools.clone(),
+            steer_rx: None,
+        };
+
+        Ok(tokio::spawn(async move { agent_task.run().await }))
+    }
+
     fn launch_internal(
         &self,
         task: &TaskRecord,
@@ -112,13 +151,13 @@ impl TaskLauncher {
             agent,
             memory,
             all_tools: self.all_tools.clone(),
-            steer_rx,
+            steer_rx: Some(steer_rx),
         };
         let handle = tokio::spawn(async move {
             let mut agent_task = agent_task;
             let result = agent_task.run().await;
             let event = match result {
-                Ok(()) => TaskExitEvent::Completed { task_id },
+                Ok(_) => TaskExitEvent::Completed { task_id },
                 Err(error) => TaskExitEvent::Failed { task_id, error },
             };
             let _ = exit_tx.send(event).await;
@@ -128,6 +167,7 @@ impl TaskLauncher {
             task_id,
             handle,
             steer_tx,
+            collaboration_handle: None,
         })
     }
 }

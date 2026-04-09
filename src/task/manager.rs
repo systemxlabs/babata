@@ -1,6 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use chrono::Utc;
+use futures::FutureExt;
 use log::{error, info, warn};
 use parking_lot::Mutex;
 use tokio::{sync::mpsc, task::JoinHandle};
@@ -11,10 +12,11 @@ const MAX_TASK_TREE_DEPTH: usize = 5;
 use crate::{
     BabataResult,
     error::BabataError,
+    http::CollaborateTaskRequest,
     message::Content,
     task::{
-        CreateTaskRequest, SteerMessage, TaskExitEvent, TaskRecord, TaskStatus, TaskStore,
-        launcher::TaskLauncher, task_dir,
+        CollaborationTaskState, CreateTaskRequest, SteerMessage, TaskExitEvent, TaskRecord,
+        TaskStatus, TaskStore, launcher::TaskLauncher, task_dir,
     },
 };
 
@@ -72,6 +74,83 @@ impl TaskManager {
         })?;
 
         Ok(())
+    }
+
+    pub(crate) fn collaborate_task(
+        &self,
+        task_id: Uuid,
+        request: CollaborateTaskRequest,
+    ) -> BabataResult<()> {
+        let task = self.store.get_task(task_id)?;
+        if task.status != TaskStatus::Running {
+            return Err(BabataError::invalid_input(format!(
+                "Task '{}' cannot collaborate from status '{}'; only running tasks can collaborate",
+                task_id, task.status
+            )));
+        }
+
+        let mut running_tasks = self.running_tasks.lock();
+        let running_task = running_tasks.get_mut(&task_id).ok_or_else(|| {
+            BabataError::invalid_input(format!(
+                "Cannot collaborate on task '{}': task is not running",
+                task_id
+            ))
+        })?;
+
+        if running_task
+            .collaboration_handle
+            .as_ref()
+            .is_some_and(|handle| !handle.is_finished())
+        {
+            return Err(BabataError::invalid_input(format!(
+                "Task '{}' already has a running collaboration task",
+                task_id
+            )));
+        }
+
+        if running_task.collaboration_handle.is_some() {
+            let _ = running_task.collaboration_handle.take();
+        }
+
+        let collaboration_handle =
+            self.launcher
+                .collaborate(&task, &request.agent, &request.prompt)?;
+        running_task.collaboration_handle = Some(collaboration_handle);
+
+        Ok(())
+    }
+
+    pub fn get_collaboration_task_state(
+        &self,
+        task_id: Uuid,
+    ) -> BabataResult<CollaborationTaskState> {
+        let mut running_tasks = self.running_tasks.lock();
+        let running_task = running_tasks.get_mut(&task_id).ok_or_else(|| {
+            BabataError::not_found(format!("Running task '{}' not found", task_id))
+        })?;
+
+        let Some(handle) = running_task.collaboration_handle.as_ref() else {
+            return Ok(CollaborationTaskState::NonExisting);
+        };
+        if !handle.is_finished() {
+            return Ok(CollaborationTaskState::Running);
+        }
+
+        let handle = running_task.collaboration_handle.take().ok_or_else(|| {
+            BabataError::internal("Finished collaboration handle missing from running task")
+        })?;
+        let result = handle.now_or_never().ok_or_else(|| {
+            BabataError::internal("Finished collaboration task did not resolve immediately")
+        })?;
+
+        match result.map_err(|e| {
+            BabataError::internal(format!("Collaboration task execution failed: {e}"))
+        })? {
+            Ok(content) => Ok(CollaborationTaskState::Succeed { result: content }),
+            Err(e) => Ok(CollaborationTaskState::Failed {
+                reason: format!("{e}"),
+            }),
+        }
     }
 
     pub fn start(self: &Arc<Self>) -> BabataResult<()> {
@@ -193,7 +272,7 @@ impl TaskManager {
         }
 
         if let Some(running_task) = self.running_tasks.lock().remove(&task_id) {
-            running_task.handle.abort();
+            running_task.abort();
         }
 
         self.store.update_task_status(task_id, TaskStatus::Paused)?;
@@ -275,14 +354,14 @@ impl TaskManager {
 
         // Cancel and delete root task if it's running
         if let Some(running_task) = self.running_tasks.lock().remove(&task_id) {
-            running_task.handle.abort();
+            running_task.abort();
         }
 
         // Delete subtasks: cancel running, delete metadata, delete directory
         for subtask in &subtasks {
             // Cancel if running
             if let Some(running_task) = self.running_tasks.lock().remove(&subtask.task_id) {
-                running_task.handle.abort();
+                running_task.abort();
             }
             // Delete from store
             if let Err(err) = self.store.delete_task(subtask.task_id) {
@@ -329,7 +408,9 @@ impl TaskManager {
     }
 
     fn handle_task_completed(&self, task_id: Uuid) {
-        self.running_tasks.lock().remove(&task_id);
+        if let Some(running_task) = self.running_tasks.lock().remove(&task_id) {
+            running_task.abort();
+        }
         let task = match self.store.get_task(task_id) {
             Ok(task) => task,
             Err(err) => {
@@ -392,7 +473,9 @@ impl TaskManager {
     }
 
     fn handle_task_failed(&self, task_id: Uuid, error: BabataError) {
-        self.running_tasks.lock().remove(&task_id);
+        if let Some(running_task) = self.running_tasks.lock().remove(&task_id) {
+            running_task.abort();
+        }
 
         let task = match self.store.get_task(task_id) {
             Ok(task) => task,
@@ -456,7 +539,7 @@ impl TaskManager {
 
         info!("Cancelling task {} recursively", task_id);
         if let Some(running_task) = self.running_tasks.lock().remove(&task_id) {
-            running_task.handle.abort();
+            running_task.abort();
         }
 
         self.store
@@ -470,6 +553,16 @@ pub struct RunningTask {
     pub task_id: Uuid,
     pub handle: JoinHandle<()>,
     pub steer_tx: mpsc::Sender<SteerMessage>,
+    pub collaboration_handle: Option<JoinHandle<BabataResult<Vec<Content>>>>,
+}
+
+impl RunningTask {
+    fn abort(self) {
+        self.handle.abort();
+        if let Some(collaboration_handle) = self.collaboration_handle {
+            collaboration_handle.abort();
+        }
+    }
 }
 
 fn ensure_task_dir(task_id: Uuid) -> BabataResult<()> {
@@ -651,7 +744,7 @@ mod tests {
 
     fn cleanup_task_artifacts(manager: &TaskManager, task_id: Uuid) {
         if let Some(running_task) = manager.running_tasks.lock().remove(&task_id) {
-            running_task.handle.abort();
+            running_task.abort();
         }
         remove_task_dir(task_id);
     }
@@ -669,6 +762,7 @@ mod tests {
                     std::future::pending::<()>().await;
                 }),
                 steer_tx,
+                collaboration_handle: None,
             },
         );
         steer_rx
