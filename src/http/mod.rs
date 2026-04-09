@@ -3,7 +3,6 @@ mod control_task;
 mod count_tasks;
 mod create_task;
 mod delete_task;
-mod error;
 mod get_task;
 mod get_task_file;
 mod get_task_logs;
@@ -26,7 +25,6 @@ use crate::{BabataResult, error::BabataError, task::TaskManager};
 pub(crate) use collaborate_task::CollaborateTaskRequest;
 pub(crate) use control_task::{ControlTaskRequest, TaskAction};
 pub(crate) use count_tasks::CountTasksResponse;
-pub(crate) use error::ApiError;
 pub(crate) use get_task::TaskResponse;
 pub(crate) use steer_task::SteerTaskRequest;
 
@@ -88,21 +86,19 @@ async fn health() -> impl IntoResponse {
     Json(json!( { "status": "ok" }))
 }
 
-pub(crate) fn parse_task_id(task_id: &str) -> Result<Uuid, ApiError> {
-    Uuid::parse_str(task_id)
-        .map_err(|err| ApiError::bad_request(format!("Invalid task id '{}': {}", task_id, err)))
+pub(crate) fn parse_task_id(task_id: &str) -> BabataResult<Uuid> {
+    Uuid::parse_str(task_id).map_err(|err| {
+        BabataError::invalid_input(format!("Invalid task id '{}': {}", task_id, err))
+    })
 }
 
-pub(crate) fn ensure_task_exists(
-    task_manager: &TaskManager,
-    task_id: Uuid,
-) -> Result<(), ApiError> {
+pub(crate) fn ensure_task_exists(task_manager: &TaskManager, task_id: Uuid) -> BabataResult<()> {
     match task_manager.task_exists(task_id) {
         Ok(true) => Ok(()),
-        Ok(false) => Err(ApiError::from(BabataError::not_found(format!(
+        Ok(false) => Err(BabataError::not_found(format!(
             "Task '{}' not found",
             task_id
-        )))),
-        Err(err) => Err(ApiError::from(err)),
+        ))),
+        Err(err) => Err(err),
     }
 }

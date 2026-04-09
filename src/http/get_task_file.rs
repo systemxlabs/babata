@@ -5,7 +5,9 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
-use super::{ApiError, HttpApp, ensure_task_exists, parse_task_id};
+use crate::{BabataResult, error::BabataError};
+
+use super::{HttpApp, ensure_task_exists, parse_task_id};
 
 /// Handle GET /api/tasks/{task_id}/files/{*path}
 /// Returns raw file content for text files, raw binary bytes for binary files
@@ -19,28 +21,23 @@ pub(super) async fn handle(
     }
 }
 
-async fn handle_inner(
-    state: &HttpApp,
-    task_id: &str,
-    file_path: &str,
-) -> Result<Response, ApiError> {
+async fn handle_inner(state: &HttpApp, task_id: &str, file_path: &str) -> BabataResult<Response> {
     let task_id = parse_task_id(task_id)?;
     ensure_task_exists(&state.task_manager, task_id)?;
 
     let task_dir = crate::utils::babata_dir()
-        .map_err(ApiError::from)?
+        .map_err(BabataError::from)?
         .join("tasks")
         .join(task_id.to_string());
 
     let file_path = file_path.replace('/', std::path::MAIN_SEPARATOR_STR);
-    let target_path = normalize_path(&task_dir, &file_path)
-        .ok_or_else(|| ApiError::bad_request("Invalid file path: directory traversal detected"))?;
+    let target_path = normalize_path(&task_dir, &file_path).ok_or_else(|| {
+        BabataError::invalid_input("Invalid file path: directory traversal detected")
+    })?;
 
-    let metadata = tokio::fs::metadata(&target_path)
-        .await
-        .map_err(|err| ApiError::bad_request(format!("File not found: {}", err)))?;
+    let metadata = tokio::fs::metadata(&target_path).await?;
     if !metadata.is_file() {
-        return Err(ApiError::bad_request(format!(
+        return Err(BabataError::invalid_input(format!(
             "'{}' is not a file (might be a directory)",
             file_path
         )));
@@ -55,17 +52,13 @@ async fn handle_inner(
     let body = if is_text_content_type(&content_type) {
         match tokio::fs::read_to_string(&target_path).await {
             Ok(content) => Body::from(content),
-            Err(text_err) => {
-                let bytes = tokio::fs::read(&target_path).await.map_err(|_| {
-                    ApiError::bad_request(format!("Failed to read file: {}", text_err))
-                })?;
+            Err(_) => {
+                let bytes = tokio::fs::read(&target_path).await?;
                 Body::from(bytes)
             }
         }
     } else {
-        let bytes = tokio::fs::read(&target_path)
-            .await
-            .map_err(|err| ApiError::bad_request(format!("Failed to read file: {}", err)))?;
+        let bytes = tokio::fs::read(&target_path).await?;
         Body::from(bytes)
     };
 
@@ -73,11 +66,7 @@ async fn handle_inner(
         .status(StatusCode::OK)
         .header(header::CONTENT_TYPE, content_type)
         .body(body)
-        .map_err(|_| {
-            ApiError::from(crate::error::BabataError::internal(
-                "Failed to build response",
-            ))
-        })
+        .map_err(|_| BabataError::internal("Failed to build response"))
 }
 
 fn is_text_content_type(content_type: &str) -> bool {

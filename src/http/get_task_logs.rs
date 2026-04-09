@@ -1,13 +1,12 @@
 use axum::{
     Json,
     extract::{Path, Query, State},
-    response::{IntoResponse, Response},
 };
 use serde::Deserialize;
 
-use crate::utils::babata_dir;
+use crate::{BabataResult, error::BabataError, utils::babata_dir};
 
-use super::{ApiError, HttpApp, ensure_task_exists, parse_task_id};
+use super::{HttpApp, ensure_task_exists, parse_task_id};
 
 const MAX_LIMIT: usize = 1000;
 
@@ -24,34 +23,24 @@ pub(super) async fn handle(
     State(state): State<HttpApp>,
     Path(task_id): Path<String>,
     Query(params): Query<LogQueryParams>,
-) -> Response {
-    match handle_inner(&state, &task_id, params).await {
-        Ok(logs) => Json(logs).into_response(),
-        Err(err) => err.into_response(),
-    }
-}
-
-async fn handle_inner(
-    state: &HttpApp,
-    task_id: &str,
-    params: LogQueryParams,
-) -> Result<Vec<String>, ApiError> {
-    let task_id = parse_task_id(task_id)?;
+) -> BabataResult<Json<Vec<String>>> {
+    let task_id = parse_task_id(&task_id)?;
     ensure_task_exists(&state.task_manager, task_id)?;
 
     if params.limit == 0 {
-        return Err(ApiError::bad_request("limit must be greater than 0"));
+        return Err(BabataError::invalid_input("limit must be greater than 0"));
     }
     if params.limit > MAX_LIMIT {
-        return Err(ApiError::bad_request(format!(
+        return Err(BabataError::invalid_input(format!(
             "limit exceeds maximum value of {}",
             MAX_LIMIT
         )));
     }
 
-    read_task_logs(&task_id.to_string(), params.offset, params.limit)
+    let logs = read_task_logs(&task_id.to_string(), params.offset, params.limit)
         .await
-        .map_err(|err| ApiError::bad_request(format!("Failed to read logs: {}", err)))
+        .map_err(|err| BabataError::invalid_input(format!("Failed to read logs: {}", err)))?;
+    Ok(Json(logs))
 }
 
 /// Read logs from log files in chronological order with pagination.

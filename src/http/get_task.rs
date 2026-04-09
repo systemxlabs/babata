@@ -1,28 +1,22 @@
 use axum::{
     Json,
     extract::{Path, State},
-    response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
+use crate::BabataResult;
 use crate::task::TaskRecord;
 
-use super::{ApiError, HttpApp};
+use super::{HttpApp, parse_task_id};
 
-pub(super) async fn handle(State(state): State<HttpApp>, Path(task_id): Path<String>) -> Response {
-    let task_id = match Uuid::parse_str(&task_id) {
-        Ok(task_id) => task_id,
-        Err(err) => {
-            return ApiError::bad_request(format!("Invalid task id '{}': {}", task_id, err))
-                .into_response();
-        }
-    };
+pub(super) async fn handle(
+    State(state): State<HttpApp>,
+    Path(task_id): Path<String>,
+) -> BabataResult<Json<TaskResponse>> {
+    let task_id = parse_task_id(&task_id)?;
 
-    match state.task_manager.get_task(task_id) {
-        Ok(task) => Json(TaskResponse::from_record(task)).into_response(),
-        Err(err) => ApiError::from(err).into_response(),
-    }
+    let task = state.task_manager.get_task(task_id)?;
+    Ok(Json(TaskResponse::from_record(task)))
 }
 
 #[derive(Debug, Serialize, Deserialize)]

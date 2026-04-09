@@ -1,11 +1,12 @@
 use axum::{
     Json,
     extract::{Path, State},
-    response::{IntoResponse, Response},
 };
 use serde::Serialize;
 
-use super::{ApiError, HttpApp, ensure_task_exists, parse_task_id};
+use crate::{BabataResult, error::BabataError};
+
+use super::{HttpApp, ensure_task_exists, parse_task_id};
 
 /// File or directory entry
 #[derive(Debug, Serialize)]
@@ -23,29 +24,27 @@ pub(crate) struct FileEntry {
 }
 
 /// Handle GET /api/tasks/{task_id}/files
-pub(super) async fn handle(State(state): State<HttpApp>, Path(task_id): Path<String>) -> Response {
-    match handle_inner(&state, &task_id).await {
-        Ok(files) => Json(files).into_response(),
-        Err(err) => err.into_response(),
-    }
-}
-
-async fn handle_inner(state: &HttpApp, task_id: &str) -> Result<Vec<FileEntry>, ApiError> {
-    let task_id = parse_task_id(task_id)?;
+pub(super) async fn handle(
+    State(state): State<HttpApp>,
+    Path(task_id): Path<String>,
+) -> BabataResult<Json<Vec<FileEntry>>> {
+    let task_id = parse_task_id(&task_id)?;
     ensure_task_exists(&state.task_manager, task_id)?;
 
     let task_dir = crate::utils::babata_dir()
-        .map_err(ApiError::from)?
+        .map_err(BabataError::from)?
         .join("tasks")
         .join(task_id.to_string());
 
     if !task_dir.exists() {
-        return Ok(Vec::new());
+        return Ok(Json(Vec::new()));
     }
 
-    read_directory_recursive(&task_dir)
+    let files = read_directory_recursive(&task_dir)
         .await
-        .map_err(|err| ApiError::bad_request(format!("Failed to read directory: {}", err)))
+        .map_err(|err| BabataError::invalid_input(format!("Failed to read directory: {}", err)))?;
+
+    Ok(Json(files))
 }
 
 /// Recursively read directory and return all file entries using iterative approach

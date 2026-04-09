@@ -1,38 +1,37 @@
 use axum::{
     Json,
     extract::{Path, State},
-    response::{IntoResponse, Response},
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::{ApiError, HttpApp};
+use crate::{BabataResult, error::BabataError, task::CollaborationTaskState};
+
+use super::HttpApp;
 
 pub(super) async fn create(
     State(state): State<HttpApp>,
     Path(task_id): Path<Uuid>,
     Json(request): Json<CollaborateTaskRequest>,
-) -> Response {
+) -> BabataResult<()> {
     if request.agent.trim().is_empty() {
-        return ApiError::bad_request("agent cannot be empty").into_response();
+        return Err(BabataError::invalid_input("agent cannot be empty"));
     }
     if request.prompt.trim().is_empty() {
-        return ApiError::bad_request("prompt cannot be empty").into_response();
+        return Err(BabataError::invalid_input("prompt cannot be empty"));
     }
 
-    state
-        .task_manager
-        .collaborate_task(task_id, request)
-        .map_err(ApiError::from)
-        .into_response()
+    state.task_manager.collaborate_task(task_id, request)?;
+    Ok(())
 }
 
-pub(super) async fn get(State(state): State<HttpApp>, Path(task_id): Path<Uuid>) -> Response {
-    match state.task_manager.get_collaboration_task_state(task_id) {
-        Ok(collaboration_state) => Json(collaboration_state).into_response(),
-        Err(err) => ApiError::from(err).into_response(),
-    }
+pub(super) async fn get(
+    State(state): State<HttpApp>,
+    Path(task_id): Path<Uuid>,
+) -> BabataResult<Json<CollaborationTaskState>> {
+    let collaboration_state = state.task_manager.get_collaboration_task_state(task_id)?;
+    Ok(Json(collaboration_state))
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]

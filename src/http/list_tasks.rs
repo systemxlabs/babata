@@ -1,33 +1,33 @@
 use axum::{
     Json,
     extract::{Query, State},
-    response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
 
-use crate::task::{TaskRecord, TaskStatus};
+use crate::{
+    BabataResult,
+    error::BabataError,
+    task::{TaskRecord, TaskStatus},
+};
 
-use super::{ApiError, HttpApp, get_task::TaskResponse};
+use super::{HttpApp, get_task::TaskResponse};
 
 pub(super) async fn handle(
     State(state): State<HttpApp>,
     Query(query): Query<ListTasksQuery>,
-) -> Response {
+) -> BabataResult<Json<ListTasksResponse>> {
     let status = match query.status {
         Some(status) => match status.parse::<TaskStatus>() {
             Ok(status) => Some(status),
-            Err(err) => return ApiError::bad_request(err).into_response(),
+            Err(err) => return Err(BabataError::invalid_input(err)),
         },
         None => None,
     };
 
-    match state
+    let tasks = state
         .task_manager
-        .list_tasks(status, query.limit, query.offset)
-    {
-        Ok(tasks) => Json(ListTasksResponse::from_records(tasks)).into_response(),
-        Err(err) => ApiError::from(err).into_response(),
-    }
+        .list_tasks(status, query.limit, query.offset)?;
+    Ok(Json(ListTasksResponse::from_records(tasks)))
 }
 
 #[derive(Debug, Deserialize)]

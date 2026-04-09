@@ -1,30 +1,27 @@
 use axum::{
     Json,
     extract::{Query, State},
-    response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
 
-use crate::task::TaskStatus;
+use crate::{BabataResult, error::BabataError, task::TaskStatus};
 
-use super::{ApiError, HttpApp};
+use super::HttpApp;
 
 pub(super) async fn handle(
     State(state): State<HttpApp>,
     Query(query): Query<CountTasksQuery>,
-) -> Response {
+) -> BabataResult<Json<CountTasksResponse>> {
     let status = match query.status {
         Some(status) => match status.parse::<TaskStatus>() {
             Ok(status) => Some(status),
-            Err(err) => return ApiError::bad_request(err).into_response(),
+            Err(err) => return Err(BabataError::invalid_input(err)),
         },
         None => None,
     };
 
-    match state.task_manager.count_tasks(status) {
-        Ok(count) => Json(CountTasksResponse { count }).into_response(),
-        Err(err) => ApiError::from(err).into_response(),
-    }
+    let count = state.task_manager.count_tasks(status)?;
+    Ok(Json(CountTasksResponse { count }))
 }
 
 #[derive(Debug, Deserialize)]

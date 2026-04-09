@@ -1,5 +1,10 @@
 use std::panic::Location;
 
+use axum::{
+    http::StatusCode,
+    response::{IntoResponse, Response},
+};
+
 #[derive(Debug)]
 pub enum BabataError {
     InvalidInput(String, &'static Location<'static>),
@@ -77,6 +82,23 @@ impl std::error::Error for BabataError {
     }
 }
 
+impl IntoResponse for BabataError {
+    fn into_response(self) -> Response {
+        let status = match self {
+            BabataError::InvalidInput(_, _) => StatusCode::BAD_REQUEST,
+            BabataError::NotFound(_, _) => StatusCode::NOT_FOUND,
+            BabataError::Config(_, _)
+            | BabataError::Provider(_, _)
+            | BabataError::Memory(_, _)
+            | BabataError::Tool(_, _)
+            | BabataError::Channel(_, _)
+            | BabataError::Internal(_, _) => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+
+        (status, self.to_string()).into_response()
+    }
+}
+
 impl From<serde_json::Error> for BabataError {
     #[track_caller]
     fn from(err: serde_json::Error) -> Self {
@@ -88,5 +110,41 @@ impl From<std::io::Error> for BabataError {
     #[track_caller]
     fn from(err: std::io::Error) -> Self {
         BabataError::Internal(err.to_string(), Location::caller())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::BabataError;
+    use axum::{body::to_bytes, http::StatusCode, response::IntoResponse};
+
+    #[test]
+    fn invalid_input_maps_to_400() {
+        let response = BabataError::invalid_input("bad input").into_response();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn not_found_maps_to_404() {
+        let response = BabataError::not_found("missing").into_response();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[test]
+    fn other_errors_map_to_500() {
+        let response = BabataError::tool("tool failure").into_response();
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[tokio::test]
+    async fn error_response_body_is_plain_text_with_location() {
+        let response = BabataError::invalid_input("bad input").into_response();
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("read response body");
+        let text = String::from_utf8(body.to_vec()).expect("utf8 body");
+
+        assert!(text.contains("Invalid input error at"));
+        assert!(text.contains("bad input"));
     }
 }

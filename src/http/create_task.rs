@@ -1,41 +1,34 @@
-use axum::{
-    Json,
-    extract::State,
-    http::StatusCode,
-    response::{IntoResponse, Response},
-};
+use axum::{Json, extract::State};
 use serde::Serialize;
 
-use crate::task::CreateTaskRequest;
+use crate::{
+    BabataResult,
+    error::BabataError,
+    task::{CreateTaskRequest, TaskStatus},
+};
 
-use super::{ApiError, HttpApp};
+use super::HttpApp;
 
 pub(super) async fn handle(
     State(state): State<HttpApp>,
     Json(request): Json<CreateTaskRequest>,
-) -> Response {
+) -> BabataResult<Json<CreateTaskResponse>> {
     if request.prompt.is_empty() {
-        return ApiError::bad_request("prompt cannot be empty").into_response();
+        return Err(BabataError::invalid_input("prompt cannot be empty"));
     }
     if request.description.trim().is_empty() {
-        return ApiError::bad_request("description cannot be empty").into_response();
+        return Err(BabataError::invalid_input("description cannot be empty"));
     }
 
-    match state.task_manager.create_task(request) {
-        Ok(task_id) => (
-            StatusCode::CREATED,
-            Json(CreateTaskResponse {
-                task_id: task_id.to_string(),
-                status: "running".to_string(),
-            }),
-        )
-            .into_response(),
-        Err(err) => ApiError::from(err).into_response(),
-    }
+    let task_id = state.task_manager.create_task(request)?;
+    Ok(Json(CreateTaskResponse {
+        task_id: task_id.to_string(),
+        status: TaskStatus::Running.to_string(),
+    }))
 }
 
 #[derive(Debug, Serialize)]
-struct CreateTaskResponse {
+pub(crate) struct CreateTaskResponse {
     task_id: String,
     status: String,
 }

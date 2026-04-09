@@ -1,46 +1,28 @@
 use axum::{
     Json,
     extract::{Path, State},
-    response::{IntoResponse, Response},
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
-use super::{ApiError, HttpApp};
+use crate::BabataResult;
+
+use super::{HttpApp, parse_task_id};
 
 pub(super) async fn handle(
     State(state): State<HttpApp>,
     Path(task_id): Path<String>,
     Json(request): Json<ControlTaskRequest>,
-) -> Response {
-    control_task(state, &task_id, request.action).into_response()
-}
+) -> BabataResult<()> {
+    let task_id = parse_task_id(&task_id)?;
 
-fn control_task(state: HttpApp, task_id: &str, action: TaskAction) -> Result<(), ApiError> {
-    let task_id = parse_task_id(task_id)?;
-
-    match action {
+    match request.action {
         TaskAction::Pause => state.task_manager.pause_task(task_id),
         TaskAction::Resume => state.task_manager.resume_task(task_id),
         TaskAction::Cancel => state.task_manager.cancel_task(task_id),
-    }
-    .map_err(ApiError::from)?;
+    }?;
 
     Ok(())
-}
-
-fn parse_task_id(task_id: &str) -> Result<Uuid, ApiError> {
-    let task_id = match Uuid::parse_str(task_id) {
-        Ok(task_id) => task_id,
-        Err(err) => {
-            return Err(ApiError::bad_request(format!(
-                "Invalid task id '{}': {}",
-                task_id, err
-            )));
-        }
-    };
-    Ok(task_id)
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, JsonSchema)]
