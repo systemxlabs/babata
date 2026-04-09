@@ -191,21 +191,6 @@ impl TaskManager {
                 continue;
             }
 
-            // Check if task directory and required files exist
-            let task_dir = task_dir(task.task_id)?;
-            let task_md_path = task_dir.join("task.md");
-            let progress_md_path = task_dir.join("progress.md");
-
-            if !task_md_path.exists() || !progress_md_path.exists() {
-                warn!(
-                    "Task {} is missing required files (task.md or progress.md), canceling task",
-                    task.task_id
-                );
-                self.store
-                    .update_task_status(task.task_id, TaskStatus::Canceled)?;
-                continue;
-            }
-
             let reason = format!(
                 "Task {} is being relaunched to continue running when server started.",
                 task.task_id
@@ -250,10 +235,11 @@ impl TaskManager {
             created_at: Utc::now().timestamp_millis(),
             never_ends: request.never_ends,
         };
-        initialize_task_dir(&task_record, &request.prompt)?;
         self.store.insert_task(task_record.clone())?;
 
-        let running_task = self.launcher.launch(&task_record, self.exit_tx.clone())?;
+        let running_task =
+            self.launcher
+                .launch(&task_record, request.prompt, self.exit_tx.clone())?;
         {
             let mut guard = self.running_tasks.lock();
             guard.insert(task_id, running_task);
@@ -373,13 +359,13 @@ impl TaskManager {
                 error!("Failed to delete subtask {}: {}", subtask.task_id, err);
             }
             // Delete task directory
-            remove_task_dir(subtask.task_id);
+            remove_task_dir(subtask.task_id)?;
         }
 
         // Delete root task from store
         self.store.delete_task(task_id)?;
         // Delete root task directory
-        remove_task_dir(task_id);
+        remove_task_dir(task_id)?;
 
         info!("Deleted task {} and {} subtask(s)", task_id, subtasks.len());
         Ok(())
@@ -463,7 +449,6 @@ impl TaskManager {
     }
 
     fn relaunch_after_completion(&self, task: &TaskRecord, reason: &str, failure_context: &str) {
-        info!("{reason}");
         match self.launcher.relaunch(task, self.exit_tx.clone(), reason) {
             Ok(running_task) => {
                 self.running_tasks.lock().insert(task.task_id, running_task);
@@ -570,108 +555,15 @@ impl RunningTask {
     }
 }
 
-fn ensure_task_dir(task_id: Uuid) -> BabataResult<()> {
+fn remove_task_dir(task_id: Uuid) -> BabataResult<()> {
     let task_dir = task_dir(task_id)?;
-    std::fs::create_dir_all(&task_dir)?;
-    Ok(())
-}
-
-fn initialize_task_dir(task: &TaskRecord, prompt: &[Content]) -> BabataResult<()> {
-    ensure_task_dir(task.task_id)?;
-
-    let task_dir = task_dir(task.task_id)?;
-    let task_md_path = task_dir.join("task.md");
-    let progress_md_path = task_dir.join("progress.md");
-    let prompt = render_prompt_markdown(prompt);
-    let task_markdown = format!(
-        r#"# Task
-
-## Metadata
-- Task ID: {}
-- Root Task ID: {}
-- Parent Task ID: {}
-
-## Initial Prompt
-{}
-
-## Description
-
-(What the task is about, background, and input)
-
-## Completion Criteria
-
-(What needs to be done)
-"#,
-        task.task_id,
-        task.root_task_id,
-        task.parent_task_id
-            .map(|task_id| task_id.to_string())
-            .unwrap_or_else(|| "none".to_string()),
-        prompt
-    );
-    let progress_markdown = r#"# Progress
-
-## Current Checkpoint
-
-(What is the current state)
-
-## Recent Actions
-
-(What happened since the last checkpoint)
-
-## Final Result
-
-(The ultimate outcome of the task, update when task finished)
-"#
-    .to_string();
-
-    std::fs::write(&task_md_path, task_markdown)?;
-    std::fs::write(&progress_md_path, progress_markdown)?;
-    Ok(())
-}
-
-fn remove_task_dir(task_id: Uuid) {
-    let task_dir = match task_dir(task_id) {
-        Ok(path) => path,
-        Err(err) => {
-            error!(
-                "Failed to resolve task directory for task {} cleanup: {}",
-                task_id, err
-            );
-            return;
-        }
-    };
 
     if !task_dir.exists() {
-        return;
+        return Ok(());
     }
 
-    if let Err(err) = std::fs::remove_dir_all(&task_dir) {
-        error!(
-            "Failed to remove task directory '{}' for task {}: {}",
-            task_dir.display(),
-            task_id,
-            err
-        );
-    }
-}
-
-fn render_prompt_markdown(prompt: &[Content]) -> String {
-    let lines = prompt
-        .iter()
-        .map(|content| match content {
-            Content::Text { text } => text.clone(),
-            Content::ImageUrl { url } => format!("- [image] {url}"),
-            Content::ImageData { media_type, .. } => format!("- [image_data] {media_type}"),
-            Content::AudioData { media_type, .. } => format!("- [audio_data] {media_type}"),
-        })
-        .collect::<Vec<_>>();
-
-    if lines.is_empty() {
-        "_No prompt provided._".to_string()
-    } else {
-        lines.join("\n\n")
-    }
+    std::fs::remove_dir_all(&task_dir)?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -680,9 +572,6 @@ mod tests {
     use crate::agent::{Agent, AgentFrontmatter};
     use std::{collections::HashMap, fs, path::PathBuf};
     use uuid::Uuid;
-
-    #[cfg(unix)]
-    use std::os::unix::fs::PermissionsExt;
 
     fn task_record(never_ends: bool) -> TaskRecord {
         let task_id = Uuid::new_v4();
@@ -751,7 +640,7 @@ mod tests {
         if let Some(running_task) = manager.running_tasks.lock().remove(&task_id) {
             running_task.abort();
         }
-        remove_task_dir(task_id);
+        let _ = remove_task_dir(task_id);
     }
 
     fn insert_dummy_running_task(
@@ -779,13 +668,6 @@ mod tests {
         fs::create_dir_all(&temp_root).expect("create temp root");
         let manager = build_test_manager(&temp_root);
         let task = task_record(true);
-        initialize_task_dir(
-            &task,
-            &[Content::Text {
-                text: "keep running".to_string(),
-            }],
-        )
-        .expect("initialize task dir");
         manager
             .store
             .insert_task(task.clone())
@@ -796,7 +678,6 @@ mod tests {
         let stored_task = manager.store.get_task(task.task_id).expect("load task");
         assert_eq!(stored_task.status, TaskStatus::Running);
         assert!(manager.running_tasks.lock().contains_key(&task.task_id));
-        assert!(task_dir(task.task_id).expect("resolve task dir").exists());
 
         cleanup_task_artifacts(&manager, task.task_id);
         let _ = fs::remove_dir_all(&temp_root);
@@ -808,13 +689,6 @@ mod tests {
         fs::create_dir_all(&temp_root).expect("create temp root");
         let manager = build_test_manager(&temp_root);
         let task = task_record(false);
-        initialize_task_dir(
-            &task,
-            &[Content::Text {
-                text: "finish task".to_string(),
-            }],
-        )
-        .expect("initialize task dir");
         manager
             .store
             .insert_task(task.clone())
@@ -824,8 +698,6 @@ mod tests {
 
         let stored_task = manager.store.get_task(task.task_id).expect("load task");
         assert_eq!(stored_task.status, TaskStatus::Done);
-        assert!(task_dir(task.task_id).expect("resolve task dir").exists());
-
         let _ = fs::remove_dir_all(&temp_root);
     }
 
@@ -836,20 +708,6 @@ mod tests {
         let manager = build_test_manager(&temp_root);
         let task = task_record(false);
         let subtask = subtask_record(task.task_id, task.root_task_id);
-        initialize_task_dir(
-            &task,
-            &[Content::Text {
-                text: "wait for subtask".to_string(),
-            }],
-        )
-        .expect("initialize task dir");
-        initialize_task_dir(
-            &subtask,
-            &[Content::Text {
-                text: "subtask still running".to_string(),
-            }],
-        )
-        .expect("initialize subtask dir");
         manager
             .store
             .insert_task(task.clone())
@@ -867,14 +725,8 @@ mod tests {
             .expect("load parent task");
         assert_eq!(stored_task.status, TaskStatus::Running);
         assert!(manager.running_tasks.lock().contains_key(&task.task_id));
-        assert!(
-            task_dir(task.task_id)
-                .expect("resolve parent task dir")
-                .exists()
-        );
 
         cleanup_task_artifacts(&manager, task.task_id);
-        remove_task_dir(subtask.task_id);
         let _ = fs::remove_dir_all(&temp_root);
     }
 
@@ -883,7 +735,6 @@ mod tests {
         let temp_root = temp_test_root("manager-create-stores-steer");
         fs::create_dir_all(&temp_root).expect("create temp root");
         let manager = build_test_manager(&temp_root);
-
         let task_id = manager
             .create_task(CreateTaskRequest {
                 description: "test create task".to_string(),
@@ -913,13 +764,6 @@ mod tests {
         fs::create_dir_all(&temp_root).expect("create temp root");
         let manager = build_test_manager(&temp_root);
         let task = task_record(false);
-        initialize_task_dir(
-            &task,
-            &[Content::Text {
-                text: "steer target".to_string(),
-            }],
-        )
-        .expect("initialize task dir");
         manager
             .store
             .insert_task(task.clone())
@@ -946,7 +790,6 @@ mod tests {
         );
 
         cleanup_task_artifacts(&manager, task.task_id);
-        remove_task_dir(task.task_id);
         let _ = fs::remove_dir_all(&temp_root);
     }
 
@@ -956,13 +799,6 @@ mod tests {
         fs::create_dir_all(&temp_root).expect("create temp root");
         let manager = build_test_manager(&temp_root);
         let task = task_record(false);
-        initialize_task_dir(
-            &task,
-            &[Content::Text {
-                text: "pause target".to_string(),
-            }],
-        )
-        .expect("initialize task dir");
         manager
             .store
             .insert_task(task.clone())
@@ -976,7 +812,6 @@ mod tests {
         assert_eq!(stored_task.status, TaskStatus::Paused);
         assert!(!manager.running_tasks.lock().contains_key(&task.task_id));
 
-        remove_task_dir(task.task_id);
         let _ = fs::remove_dir_all(&temp_root);
     }
 
@@ -987,20 +822,6 @@ mod tests {
         let manager = build_test_manager(&temp_root);
         let task = task_record(false);
         let subtask = subtask_record(task.task_id, task.root_task_id);
-        initialize_task_dir(
-            &task,
-            &[Content::Text {
-                text: "delete root".to_string(),
-            }],
-        )
-        .expect("initialize root task dir");
-        initialize_task_dir(
-            &subtask,
-            &[Content::Text {
-                text: "delete subtask".to_string(),
-            }],
-        )
-        .expect("initialize subtask dir");
         manager
             .store
             .insert_task(task.clone())
