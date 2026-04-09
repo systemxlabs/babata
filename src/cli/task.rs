@@ -6,7 +6,10 @@ use uuid::Uuid;
 use crate::{
     BabataResult,
     error::BabataError,
-    http::{CountTasksResponse, DEFAULT_HTTP_BASE_URL, ListTasksResponse, TaskResponse},
+    http::{
+        ControlTaskRequest, CountTasksResponse, DEFAULT_HTTP_BASE_URL, ListTasksResponse,
+        TaskAction, TaskResponse,
+    },
     message::Content,
     task::CreateTaskRequest,
 };
@@ -61,12 +64,15 @@ pub fn count(status: Option<&str>) {
 }
 
 fn run_control(action: &str, task_id: &str) -> BabataResult<()> {
+    let action = action.parse::<TaskAction>().map_err(BabataError::config)?;
+
     let runtime = build_runtime()?;
     runtime.block_on(async move {
         let response = Client::new()
             .post(format!(
-                "{DEFAULT_HTTP_BASE_URL}/api/tasks/{task_id}/{action}"
+                "{DEFAULT_HTTP_BASE_URL}/api/tasks/{task_id}/control"
             ))
+            .json(&ControlTaskRequest { action })
             .send()
             .await
             .map_err(|err| {

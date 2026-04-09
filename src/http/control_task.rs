@@ -1,23 +1,20 @@
 use axum::{
+    Json,
     extract::{Path, State},
     response::{IntoResponse, Response},
 };
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::{ApiError, HttpApp};
 
-pub(super) async fn pause(State(state): State<HttpApp>, Path(task_id): Path<String>) -> Response {
-    control_task(state, &task_id, TaskAction::Pause).into_response()
-}
-
-pub(super) async fn resume(State(state): State<HttpApp>, Path(task_id): Path<String>) -> Response {
-    control_task(state, &task_id, TaskAction::Resume).into_response()
-}
-
-pub(super) async fn cancel(State(state): State<HttpApp>, Path(task_id): Path<String>) -> Response {
-    control_task(state, &task_id, TaskAction::Cancel).into_response()
+pub(super) async fn handle(
+    State(state): State<HttpApp>,
+    Path(task_id): Path<String>,
+    Json(request): Json<ControlTaskRequest>,
+) -> Response {
+    control_task(state, &task_id, request.action).into_response()
 }
 
 fn control_task(state: HttpApp, task_id: &str, action: TaskAction) -> Result<(), ApiError> {
@@ -46,7 +43,7 @@ fn parse_task_id(task_id: &str) -> Result<Uuid, ApiError> {
     Ok(task_id)
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum TaskAction {
     Pause,
@@ -62,5 +59,70 @@ impl std::fmt::Display for TaskAction {
             TaskAction::Cancel => "cancel",
         };
         f.write_str(value)
+    }
+}
+
+impl std::str::FromStr for TaskAction {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "pause" => Ok(TaskAction::Pause),
+            "resume" => Ok(TaskAction::Resume),
+            "cancel" => Ok(TaskAction::Cancel),
+            _ => Err(format!(
+                "Unsupported task action '{}'; expected pause, resume, or cancel",
+                s
+            )),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ControlTaskRequest {
+    pub(crate) action: TaskAction,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ControlTaskRequest, TaskAction};
+    use serde_json::json;
+
+    #[test]
+    fn control_task_request_deserializes_action() {
+        let request = serde_json::from_value::<ControlTaskRequest>(json!({
+            "action": "pause"
+        }))
+        .expect("deserialize request");
+
+        assert!(matches!(request.action, TaskAction::Pause));
+    }
+
+    #[test]
+    fn control_task_request_rejects_unknown_fields() {
+        let error = serde_json::from_value::<ControlTaskRequest>(json!({
+            "action": "pause",
+            "extra": true
+        }))
+        .expect_err("unknown field should fail");
+
+        assert!(error.to_string().contains("unknown field"));
+    }
+
+    #[test]
+    fn task_action_from_str_parses_supported_values() {
+        assert!(matches!(
+            "pause".parse::<TaskAction>(),
+            Ok(TaskAction::Pause)
+        ));
+        assert!(matches!(
+            "resume".parse::<TaskAction>(),
+            Ok(TaskAction::Resume)
+        ));
+        assert!(matches!(
+            "cancel".parse::<TaskAction>(),
+            Ok(TaskAction::Cancel)
+        ));
     }
 }
