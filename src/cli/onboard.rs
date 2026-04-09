@@ -284,13 +284,9 @@ fn prompt_background_service_setup() -> BabataResult<bool> {
 fn prompt_line(label: &str) -> BabataResult<String> {
     use std::io::{self, Write};
     print!("{label}: ");
-    io::stdout()
-        .flush()
-        .map_err(|err| BabataError::internal(format!("Failed to flush stdout: {err}")))?;
+    io::stdout().flush()?;
     let mut input = String::new();
-    io::stdin()
-        .read_line(&mut input)
-        .map_err(|err| BabataError::internal(format!("Failed to read input: {err}")))?;
+    io::stdin().read_line(&mut input)?;
     Ok(input.trim_end().to_string())
 }
 

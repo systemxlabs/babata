@@ -152,22 +152,10 @@ impl WechatChannel {
     fn persist_get_updates_buf(&self, get_updates_buf: &str) -> BabataResult<()> {
         let path = Self::get_updates_buf_path()?;
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|err| {
-                BabataError::internal(format!(
-                    "Failed to create Wechat channel state directory '{}': {}",
-                    parent.display(),
-                    err
-                ))
-            })?;
+            std::fs::create_dir_all(parent)?;
         }
 
-        std::fs::write(&path, get_updates_buf).map_err(|err| {
-            BabataError::internal(format!(
-                "Failed to persist Wechat get_updates_buf to '{}': {}",
-                path.display(),
-                err
-            ))
-        })?;
+        std::fs::write(&path, get_updates_buf)?;
 
         Ok(())
     }
@@ -175,22 +163,10 @@ impl WechatChannel {
     fn persist_latest_context_token(&self, context_token: &str) -> BabataResult<()> {
         let path = wechat_latest_context_token_path()?;
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|err| {
-                BabataError::internal(format!(
-                    "Failed to create Wechat channel state directory '{}': {}",
-                    parent.display(),
-                    err
-                ))
-            })?;
+            std::fs::create_dir_all(parent)?;
         }
 
-        std::fs::write(&path, context_token).map_err(|err| {
-            BabataError::internal(format!(
-                "Failed to persist Wechat latest context_token to '{}': {}",
-                path.display(),
-                err
-            ))
-        })?;
+        std::fs::write(&path, context_token)?;
 
         Ok(())
     }
@@ -201,13 +177,7 @@ impl WechatChannel {
             return Ok(None);
         }
 
-        let content = std::fs::read_to_string(&path).map_err(|err| {
-            BabataError::internal(format!(
-                "Failed to read Wechat get_updates_buf from '{}': {}",
-                path.display(),
-                err
-            ))
-        })?;
+        let content = std::fs::read_to_string(&path)?;
         let content = content.trim();
         if content.is_empty() {
             return Ok(None);
@@ -563,13 +533,7 @@ impl WechatChannel {
         data: &[u8],
     ) -> BabataResult<PathBuf> {
         let dir = Self::media_dir()?;
-        std::fs::create_dir_all(&dir).map_err(|err| {
-            BabataError::internal(format!(
-                "Failed to create Wechat media directory '{}': {}",
-                dir.display(),
-                err
-            ))
-        })?;
+        std::fs::create_dir_all(&dir)?;
 
         let file_name = sanitize_file_name(
             attachment
@@ -578,13 +542,7 @@ impl WechatChannel {
                 .unwrap_or(attachment.kind.default_file_name()),
         );
         let path = dir.join(format!("{}_{}", Uuid::new_v4(), file_name));
-        std::fs::write(&path, data).map_err(|err| {
-            BabataError::internal(format!(
-                "Failed to persist Wechat attachment to '{}': {}",
-                path.display(),
-                err
-            ))
-        })?;
+        std::fs::write(&path, data)?;
 
         Ok(path)
     }
@@ -600,13 +558,7 @@ pub(crate) fn load_wechat_latest_context_token() -> BabataResult<Option<String>>
         return Ok(None);
     }
 
-    let content = std::fs::read_to_string(&path).map_err(|err| {
-        BabataError::channel(format!(
-            "Failed to read Wechat context_token from '{}': {}",
-            path.display(),
-            err
-        ))
-    })?;
+    let content = std::fs::read_to_string(&path)?;
 
     let content = content.trim();
     if content.is_empty() {

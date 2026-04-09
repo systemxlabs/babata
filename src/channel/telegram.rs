@@ -128,21 +128,9 @@ impl TelegramChannel {
     fn persist_last_update_id(&self, last_update_id: i64) -> BabataResult<()> {
         let path = Self::last_update_id_path()?;
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|err| {
-                BabataError::channel(format!(
-                    "Failed to create Telegram channel state directory '{}': {}",
-                    parent.display(),
-                    err
-                ))
-            })?;
+            std::fs::create_dir_all(parent)?;
         }
-        std::fs::write(&path, last_update_id.to_string()).map_err(|err| {
-            BabataError::channel(format!(
-                "Failed to persist Telegram last_update_id to '{}': {}",
-                path.display(),
-                err
-            ))
-        })?;
+        std::fs::write(&path, last_update_id.to_string())?;
 
         Ok(())
     }
@@ -153,13 +141,7 @@ impl TelegramChannel {
             return Ok(None);
         }
 
-        let content = std::fs::read_to_string(&path).map_err(|err| {
-            BabataError::channel(format!(
-                "Failed to read Telegram last_update_id from '{}': {}",
-                path.display(),
-                err
-            ))
-        })?;
+        let content = std::fs::read_to_string(&path)?;
         let content = content.trim();
         if content.is_empty() {
             return Ok(None);

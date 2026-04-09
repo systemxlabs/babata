@@ -43,13 +43,7 @@ impl HttpApp {
     }
 
     pub async fn serve(&self) -> BabataResult<()> {
-        let listener = tokio::net::TcpListener::bind(DEFAULT_HTTP_ADDR)
-            .await
-            .map_err(|err| {
-                BabataError::internal(format!(
-                    "Failed to bind HTTP server on {DEFAULT_HTTP_ADDR}: {err}"
-                ))
-            })?;
+        let listener = tokio::net::TcpListener::bind(DEFAULT_HTTP_ADDR).await?;
 
         log::info!("HTTP server listening on {}", DEFAULT_HTTP_ADDR);
 

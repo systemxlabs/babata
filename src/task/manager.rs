@@ -474,13 +474,8 @@ pub struct RunningTask {
 
 fn ensure_task_dir(task_id: Uuid) -> BabataResult<()> {
     let task_dir = task_dir(task_id)?;
-    std::fs::create_dir_all(&task_dir).map_err(|err| {
-        BabataError::internal(format!(
-            "Failed to create task directory '{}': {}",
-            task_dir.display(),
-            err
-        ))
-    })
+    std::fs::create_dir_all(&task_dir)?;
+    Ok(())
 }
 
 fn initialize_task_dir(task: &TaskRecord, prompt: &[Content]) -> BabataResult<()> {
@@ -532,20 +527,8 @@ fn initialize_task_dir(task: &TaskRecord, prompt: &[Content]) -> BabataResult<()
 "#
     .to_string();
 
-    std::fs::write(&task_md_path, task_markdown).map_err(|err| {
-        BabataError::internal(format!(
-            "Failed to write task file '{}': {}",
-            task_md_path.display(),
-            err
-        ))
-    })?;
-    std::fs::write(&progress_md_path, progress_markdown).map_err(|err| {
-        BabataError::internal(format!(
-            "Failed to write progress file '{}': {}",
-            progress_md_path.display(),
-            err
-        ))
-    })?;
+    std::fs::write(&task_md_path, task_markdown)?;
+    std::fs::write(&progress_md_path, progress_markdown)?;
     Ok(())
 }
 
