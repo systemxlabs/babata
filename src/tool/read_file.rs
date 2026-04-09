@@ -40,7 +40,11 @@ impl Tool for ReadFileTool {
     }
 
     async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
-        let (path, offset, limit) = validate_args(args)?;
+        let args: ReadFileArgs = parse_tool_args(args)?;
+        let path = shellexpand::tilde(&args.path).to_string();
+
+        let offset = args.offset.unwrap_or(0);
+        let limit = args.limit.unwrap_or(DEFAULT_MAX_LINES);
 
         info!("Reading file: {}", path);
 
@@ -73,17 +77,4 @@ struct ReadFileArgs {
     offset: Option<usize>,
     #[schemars(description = "Maximum number of lines to read")]
     limit: Option<usize>,
-}
-
-fn validate_args(args: &str) -> BabataResult<(String, usize, usize)> {
-    let args: ReadFileArgs = parse_tool_args(args)?;
-    if args.path.trim().is_empty() {
-        return Err(BabataError::tool("path cannot be empty"));
-    }
-
-    Ok((
-        shellexpand::tilde(&args.path).to_string(),
-        args.offset.unwrap_or(0),
-        args.limit.unwrap_or(DEFAULT_MAX_LINES),
-    ))
 }

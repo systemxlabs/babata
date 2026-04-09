@@ -39,7 +39,8 @@ impl Tool for WriteFileTool {
     }
 
     async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
-        let (path, content) = validate_args(args)?;
+        let args: WriteFileArgs = parse_tool_args(args)?;
+        let path = shellexpand::tilde(&args.path).to_string();
 
         info!("Writing to file: {}", path);
 
@@ -52,10 +53,10 @@ impl Tool for WriteFileTool {
                 .map_err(|e| BabataError::tool(format!("Failed to create directories: {}", e)))?;
         }
 
-        let lines = content.lines().count();
+        let lines = args.content.lines().count();
 
         // Write content to file
-        tokio::fs::write(&path, content)
+        tokio::fs::write(&path, args.content)
             .await
             .map_err(|e| BabataError::tool(format!("Failed to write file: {}", e)))?;
 
@@ -70,15 +71,6 @@ struct WriteFileArgs {
     path: String,
     #[schemars(description = "The content to write to the file")]
     content: String,
-}
-
-fn validate_args(args: &str) -> BabataResult<(String, String)> {
-    let args: WriteFileArgs = parse_tool_args(args)?;
-    if args.path.trim().is_empty() {
-        return Err(BabataError::tool("path cannot be empty"));
-    }
-
-    Ok((shellexpand::tilde(&args.path).to_string(), args.content))
 }
 
 #[cfg(test)]
@@ -161,7 +153,7 @@ mod tests {
             result
                 .unwrap_err()
                 .to_string()
-                .contains("Missing required parameter: path")
+                .contains("Invalid tool arguments: missing field `path`")
         );
     }
 
@@ -180,7 +172,7 @@ mod tests {
             result
                 .unwrap_err()
                 .to_string()
-                .contains("Missing required parameter: content")
+                .contains("Invalid tool arguments: missing field `content`")
         );
     }
 }

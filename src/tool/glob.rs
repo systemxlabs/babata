@@ -43,7 +43,16 @@ impl Tool for GlobTool {
     }
 
     async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
-        let (pattern, path) = validate_args(args)?;
+        let args: GlobArgs = parse_tool_args(args)?;
+
+        let path = args
+            .path
+            .map(|p| shellexpand::tilde(&p).to_string())
+            .unwrap_or_else(|| {
+                std::env::current_dir()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_else(|_| ".".to_string())
+            });
 
         let base = PathBuf::from(&path);
         if !base.is_dir() {
@@ -51,8 +60,8 @@ impl Tool for GlobTool {
         }
 
         // Collect matching files
-        let pattern_with_base = base.join(&pattern);
-        let hits = glob::glob(pattern_with_base.to_str().unwrap_or(&pattern))
+        let pattern_with_base = base.join(&args.pattern);
+        let hits = glob::glob(pattern_with_base.to_str().unwrap_or(&args.pattern))
             .map_err(|e| BabataError::tool(format!("Invalid glob pattern: {}", e)))?
             .filter_map(|entry| entry.ok())
             .collect::<Vec<_>>();
@@ -104,29 +113,28 @@ struct GlobArgs {
     path: Option<String>,
 }
 
-fn validate_args(args: &str) -> BabataResult<(String, String)> {
-    let args: GlobArgs = parse_tool_args(args)?;
-    let path = args
-        .path
-        .map(|p| shellexpand::tilde(&p).to_string())
-        .unwrap_or_else(|| {
-            std::env::current_dir()
-                .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or_else(|_| ".".to_string())
-        });
-
-    Ok((args.pattern, path))
-}
-
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{GlobArgs, parse_tool_args};
     use serde_json::json;
+
+    fn parse_glob_args(args: &str) -> crate::BabataResult<(String, String)> {
+        let args: GlobArgs = parse_tool_args(args)?;
+        let path = args
+            .path
+            .map(|p| shellexpand::tilde(&p).to_string())
+            .unwrap_or_else(|| {
+                std::env::current_dir()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_else(|_| ".".to_string())
+            });
+        Ok((args.pattern, path))
+    }
 
     #[test]
     fn validate_args_extracts_pattern_and_path() {
         let (pattern, path) =
-            validate_args(&json!({ "pattern": "**/*.rs", "path": "/tmp" }).to_string())
+            parse_glob_args(&json!({ "pattern": "**/*.rs", "path": "/tmp" }).to_string())
                 .expect("parse args");
         assert_eq!(pattern, "**/*.rs");
         assert_eq!(path, "/tmp");
@@ -135,7 +143,7 @@ mod tests {
     #[test]
     fn validate_args_expands_tilde_in_path() {
         let (pattern, path) =
-            validate_args(&json!({ "pattern": "*.txt", "path": "~" }).to_string())
+            parse_glob_args(&json!({ "pattern": "*.txt", "path": "~" }).to_string())
                 .expect("parse args");
         assert_eq!(pattern, "*.txt");
         assert!(!path.starts_with('~'));
@@ -144,7 +152,7 @@ mod tests {
     #[test]
     fn validate_args_uses_cwd_when_path_missing() {
         let (pattern, path) =
-            validate_args(&json!({ "pattern": "*.md" }).to_string()).expect("parse args");
+            parse_glob_args(&json!({ "pattern": "*.md" }).to_string()).expect("parse args");
         assert_eq!(pattern, "*.md");
         assert!(!path.is_empty());
     }
@@ -152,10 +160,10 @@ mod tests {
     #[test]
     fn validate_args_rejects_missing_pattern() {
         let err =
-            validate_args(&json!({ "path": "/tmp" }).to_string()).expect_err("missing pattern");
+            parse_glob_args(&json!({ "path": "/tmp" }).to_string()).expect_err("missing pattern");
         assert!(
-            err.to_string()
-                .contains("Missing required parameter: pattern")
+            err.to_string().contains("Invalid tool arguments")
+                && err.to_string().contains("missing field `pattern`")
         );
     }
 }

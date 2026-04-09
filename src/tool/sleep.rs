@@ -52,34 +52,31 @@ impl Tool for SleepTool {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-struct SleepArgs {
-    #[schemars(description = "Sleep duration in seconds")]
-    seconds: Option<f64>,
-    #[schemars(
-        description = "Wake-up time in RFC3339 format with timezone, for example 2026-03-16T18:30:00+08:00"
-    )]
-    until: Option<String>,
+#[serde(tag = "mode", rename_all = "snake_case", deny_unknown_fields)]
+enum SleepArgs {
+    Seconds {
+        #[schemars(description = "Sleep duration in seconds")]
+        seconds: f64,
+    },
+    Until {
+        #[schemars(
+            description = "Wake-up time in RFC3339 format with timezone, for example 2026-03-16T18:30:00+08:00"
+        )]
+        until: String,
+    },
 }
 
 fn parse_sleep_duration(args: &SleepArgs) -> BabataResult<Duration> {
-    let seconds = args.seconds;
-    let until = args.until.as_deref();
-
-    match (seconds, until) {
-        (Some(_), Some(_)) => Err(BabataError::tool("Provide exactly one of seconds or until")),
-        (Some(seconds), None) => {
-            if !seconds.is_finite() || seconds < 0.0 {
+    match args {
+        SleepArgs::Seconds { seconds } => {
+            if !seconds.is_finite() || *seconds < 0.0 {
                 return Err(BabataError::tool(
                     "seconds must be a non-negative finite number",
                 ));
             }
-            Ok(Duration::from_secs_f64(seconds))
+            Ok(Duration::from_secs_f64(*seconds))
         }
-        (None, Some(until)) => parse_until_duration(until),
-        (None, None) => Err(BabataError::tool(
-            "Missing sleep duration: provide either seconds or until",
-        )),
+        SleepArgs::Until { until } => parse_until_duration(until),
     }
 }
 
@@ -118,28 +115,54 @@ mod tests {
     use chrono::{TimeZone, Utc};
     use serde_json::json;
 
+    use crate::tool::parse_tool_args;
+
     use super::{SleepArgs, compute_sleep_until_duration, parse_sleep_duration};
 
     #[test]
     fn parse_sleep_duration_accepts_seconds() {
-        let args =
-            serde_json::from_value::<SleepArgs>(json!({ "seconds": 1.5 })).expect("sleep args");
+        let args = serde_json::from_value::<SleepArgs>(json!({
+            "mode": "seconds",
+            "seconds": 1.5
+        }))
+        .expect("sleep args");
         let duration = parse_sleep_duration(&args).expect("parse seconds");
         assert_eq!(duration, Duration::from_millis(1500));
     }
 
     #[test]
-    fn parse_sleep_duration_rejects_both_seconds_and_until() {
+    fn parse_sleep_duration_accepts_until() {
+        let now = Utc::now();
+        let until = now + chrono::Duration::seconds(2);
         let args = serde_json::from_value::<SleepArgs>(json!({
-            "seconds": 1,
-            "until": "2026-03-16T18:30:00+08:00"
+            "mode": "until",
+            "until": until.to_rfc3339(),
         }))
         .expect("sleep args");
-        let err = parse_sleep_duration(&args).expect_err("reject conflicting inputs");
-        assert!(
-            err.to_string()
-                .contains("Provide exactly one of seconds or until")
-        );
+        let duration = parse_sleep_duration(&args).expect("parse until");
+        assert!(duration <= Duration::from_secs(2));
+        assert!(duration > Duration::from_millis(0));
+    }
+
+    #[test]
+    fn parse_sleep_duration_rejects_multiple_modes() {
+        let err = parse_tool_args::<SleepArgs>(
+            &json!({
+                "mode": "seconds",
+                "seconds": 1,
+                "until": "2026-03-16T18:30:00+08:00"
+            })
+            .to_string(),
+        )
+        .expect_err("reject conflicting inputs");
+        assert!(err.to_string().contains("Invalid tool arguments"));
+    }
+
+    #[test]
+    fn parse_sleep_duration_rejects_missing_mode() {
+        let err = parse_tool_args::<SleepArgs>(&json!({ "seconds": 1 }).to_string())
+            .expect_err("missing mode should fail");
+        assert!(err.to_string().contains("Invalid tool arguments"));
     }
 
     #[test]

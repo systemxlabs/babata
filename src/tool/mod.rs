@@ -1,4 +1,4 @@
-﻿mod control_task;
+mod control_task;
 mod create_task;
 mod delete_tasks;
 mod edit_file;
@@ -74,16 +74,8 @@ impl ToolContext<'_> {
 }
 
 pub fn parse_tool_args<T: DeserializeOwned>(args: &str) -> BabataResult<T> {
-    serde_json::from_str(args).map_err(|err| {
-        let message = err.to_string();
-        if let Some(field) = message
-            .strip_prefix("missing field `")
-            .and_then(|value| value.split('`').next())
-        {
-            return BabataError::tool(format!("Missing required parameter: {field}"));
-        }
-        BabataError::tool(format!("Invalid tool arguments: {message}"))
-    })
+    serde_json::from_str(args)
+        .map_err(|err| BabataError::tool(format!("Invalid tool arguments: {err}")))
 }
 
 pub fn build_tools(

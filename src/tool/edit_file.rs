@@ -41,7 +41,9 @@ impl Tool for EditFileTool {
     }
 
     async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
-        let (file_path, old_string, new_string) = validate_args(args)?;
+        let args: EditFileArgs = parse_tool_args(args)?;
+
+        let file_path = shellexpand::tilde(&args.file_path).to_string();
 
         info!("Editing file: {}", file_path);
 
@@ -49,7 +51,7 @@ impl Tool for EditFileTool {
             .await
             .map_err(|err| BabataError::tool(format!("Failed to read file: {}", err)))?;
 
-        let occurrences = content.matches(&old_string).count();
+        let occurrences = content.matches(&args.old_string).count();
 
         if occurrences == 0 {
             let preview = if content.len() > 500 {
@@ -70,7 +72,7 @@ impl Tool for EditFileTool {
             )));
         }
 
-        let new_content = content.replacen(&old_string, &new_string, 1);
+        let new_content = content.replacen(&args.old_string, &args.new_string, 1);
 
         tokio::fs::write(&file_path, &new_content)
             .await
@@ -92,15 +94,6 @@ struct EditFileArgs {
     old_string: String,
     #[schemars(description = "Replacement text")]
     new_string: String,
-}
-
-fn validate_args(args: &str) -> BabataResult<(String, String, String)> {
-    let args: EditFileArgs = parse_tool_args(args)?;
-    Ok((
-        shellexpand::tilde(&args.file_path).to_string(),
-        args.old_string,
-        args.new_string,
-    ))
 }
 
 /// Generate a compact unified diff between old and new file content
@@ -160,6 +153,12 @@ mod tests {
     use uuid::Uuid;
 
     use super::*;
+
+    fn parse_edit_args(args: &str) -> BabataResult<(String, String, String)> {
+        let args: EditFileArgs = parse_tool_args(args)?;
+        let file_path = shellexpand::tilde(&args.file_path).to_string();
+        Ok((file_path, args.old_string, args.new_string))
+    }
 
     fn temp_file_path(prefix: &str) -> std::path::PathBuf {
         std::env::temp_dir().join(format!("{prefix}-{}.txt", Uuid::new_v4()))
@@ -294,7 +293,7 @@ mod tests {
 
     #[test]
     fn validate_args_extracts_file_path_and_strings() {
-        let (file_path, old_string, new_string) = validate_args(
+        let (file_path, old_string, new_string) = parse_edit_args(
             &json!({ "file_path": "/tmp/test.txt", "old_string": "foo", "new_string": "bar" })
                 .to_string(),
         )
@@ -306,7 +305,7 @@ mod tests {
 
     #[test]
     fn validate_args_expands_tilde_in_file_path() {
-        let (file_path, _, _) = validate_args(
+        let (file_path, _, _) = parse_edit_args(
             &json!({ "file_path": "~/test.txt", "old_string": "a", "new_string": "b" }).to_string(),
         )
         .expect("parse args");
@@ -315,33 +314,35 @@ mod tests {
 
     #[test]
     fn validate_args_rejects_missing_file_path() {
-        let err = validate_args(&json!({ "old_string": "a", "new_string": "b" }).to_string())
+        let err = parse_edit_args(&json!({ "old_string": "a", "new_string": "b" }).to_string())
             .expect_err("missing file_path");
         assert!(
-            err.to_string()
-                .contains("Missing required parameter: file_path")
+            err.to_string().contains("Invalid tool arguments")
+                && err.to_string().contains("missing field `file_path`")
         );
     }
 
     #[test]
     fn validate_args_rejects_missing_old_string() {
-        let err =
-            validate_args(&json!({ "file_path": "/tmp/test.txt", "new_string": "b" }).to_string())
-                .expect_err("missing old_string");
+        let err = parse_edit_args(
+            &json!({ "file_path": "/tmp/test.txt", "new_string": "b" }).to_string(),
+        )
+        .expect_err("missing old_string");
         assert!(
-            err.to_string()
-                .contains("Missing required parameter: old_string")
+            err.to_string().contains("Invalid tool arguments")
+                && err.to_string().contains("missing field `old_string`")
         );
     }
 
     #[test]
     fn validate_args_rejects_missing_new_string() {
-        let err =
-            validate_args(&json!({ "file_path": "/tmp/test.txt", "old_string": "a" }).to_string())
-                .expect_err("missing new_string");
+        let err = parse_edit_args(
+            &json!({ "file_path": "/tmp/test.txt", "old_string": "a" }).to_string(),
+        )
+        .expect_err("missing new_string");
         assert!(
-            err.to_string()
-                .contains("Missing required parameter: new_string")
+            err.to_string().contains("Invalid tool arguments")
+                && err.to_string().contains("missing field `new_string`")
         );
     }
 }

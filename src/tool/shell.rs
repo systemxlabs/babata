@@ -41,9 +41,11 @@ impl Tool for ShellTool {
     async fn execute(&self, args: &str, context: &ToolContext<'_>) -> BabataResult<String> {
         info!("Executing shell command: {args}",);
 
-        let (command, timeout_secs) = validate_args(args)?;
+        let args: ShellArgs = parse_tool_args(args)?;
 
-        let output = exec_shell(&command, timeout_secs).await?;
+        let timeout_secs = args.timeout_secs.unwrap_or(DEFAULT_TIMEOUT_SECS);
+
+        let output = exec_shell(&args.command, timeout_secs).await?;
 
         let stdout = process_output_with_truncation(&output.stdout, context, "stdout")?;
         let stderr = process_output_with_truncation(&output.stderr, context, "stderr")?;
@@ -81,19 +83,7 @@ struct ShellArgs {
     )]
     command: String,
     #[schemars(description = "Optional timeout in seconds")]
-    timeout_ms: Option<usize>,
-}
-
-fn validate_args(args: &str) -> BabataResult<(String, usize)> {
-    let args: ShellArgs = parse_tool_args(args)?;
-    if args.command.trim().is_empty() {
-        return Err(BabataError::tool("command cannot be empty"));
-    }
-
-    Ok((
-        args.command,
-        args.timeout_ms.unwrap_or(DEFAULT_TIMEOUT_SECS),
-    ))
+    timeout_secs: Option<usize>,
 }
 
 async fn exec_shell(command: &str, timeout_secs: usize) -> BabataResult<Output> {

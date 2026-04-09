@@ -96,10 +96,18 @@ impl Tool for GrepTool {
     }
 
     async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
-        let (pattern, path, include) = validate_args(args)?;
+        let args: GrepArgs = parse_tool_args(args)?;
 
+        let path = args
+            .path
+            .map(|p| shellexpand::tilde(&p).to_string())
+            .unwrap_or_else(|| {
+                std::env::current_dir()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_else(|_| ".".to_string())
+            });
         let matcher = RegexMatcherBuilder::new()
-            .build(&pattern)
+            .build(&args.pattern)
             .map_err(|err| BabataError::tool(format!("Invalid regex: {}", err)))?;
         let mut searcher = SearcherBuilder::new().line_number(true).build();
 
@@ -111,7 +119,7 @@ impl Tool for GrepTool {
         let files: Vec<PathBuf> = if base.is_file() {
             vec![base]
         } else {
-            walk(&base, include.as_deref())
+            walk(&base, args.include.as_deref())
         };
 
         let mut matches = Vec::new();
@@ -161,23 +169,13 @@ struct GrepArgs {
     include: Option<String>,
 }
 
-fn validate_args(args: &str) -> BabataResult<(String, String, Option<String>)> {
-    let args: GrepArgs = parse_tool_args(args)?;
-    let path = args
-        .path
-        .map(|p| shellexpand::tilde(&p).to_string())
-        .unwrap_or_else(|| {
-            std::env::current_dir()
-                .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or_else(|_| ".".to_string())
-        });
-
-    Ok((args.pattern, path, args.include))
-}
-
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{GrepArgs, GrepTool};
+    use crate::{
+        BabataResult,
+        tool::{Tool, ToolContext, parse_tool_args},
+    };
     use serde_json::json;
     use uuid::Uuid;
 
@@ -185,9 +183,22 @@ mod tests {
         std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()))
     }
 
+    fn parse_grep_args(args: &str) -> BabataResult<(String, String, Option<String>)> {
+        let args: GrepArgs = parse_tool_args(args)?;
+        let path = args
+            .path
+            .map(|p| shellexpand::tilde(&p).to_string())
+            .unwrap_or_else(|| {
+                std::env::current_dir()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_else(|_| ".".to_string())
+            });
+        Ok((args.pattern, path, args.include))
+    }
+
     #[test]
     fn validate_args_extracts_pattern_path_and_include() {
-        let (pattern, path, include) = validate_args(
+        let (pattern, path, include) = parse_grep_args(
             &json!({ "pattern": "foo", "path": "/tmp", "include": "*.rs" }).to_string(),
         )
         .expect("parse args");
@@ -199,7 +210,7 @@ mod tests {
     #[test]
     fn validate_args_expands_tilde_in_path() {
         let (pattern, path, include) =
-            validate_args(&json!({ "pattern": "test", "path": "~" }).to_string())
+            parse_grep_args(&json!({ "pattern": "test", "path": "~" }).to_string())
                 .expect("parse args");
         assert_eq!(pattern, "test");
         assert!(!path.starts_with('~'));
@@ -209,7 +220,7 @@ mod tests {
     #[test]
     fn validate_args_uses_cwd_when_path_missing() {
         let (pattern, path, include) =
-            validate_args(&json!({ "pattern": "hello" }).to_string()).expect("parse args");
+            parse_grep_args(&json!({ "pattern": "hello" }).to_string()).expect("parse args");
         assert_eq!(pattern, "hello");
         assert!(!path.is_empty());
         assert_eq!(include, None);
@@ -218,10 +229,10 @@ mod tests {
     #[test]
     fn validate_args_rejects_missing_pattern() {
         let err =
-            validate_args(&json!({ "path": "/tmp" }).to_string()).expect_err("missing pattern");
+            parse_grep_args(&json!({ "path": "/tmp" }).to_string()).expect_err("missing pattern");
         assert!(
-            err.to_string()
-                .contains("Missing required parameter: pattern")
+            err.to_string().contains("Invalid tool arguments")
+                && err.to_string().contains("missing field `pattern`")
         );
     }
 

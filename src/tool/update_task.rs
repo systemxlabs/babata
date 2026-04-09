@@ -5,7 +5,7 @@ use uuid::Uuid;
 use crate::{
     BabataResult,
     error::BabataError,
-    task::{TaskStatus, TaskStore},
+    task::{TaskStatus, TaskStore, TaskUpdate},
     tool::{Tool, ToolContext, ToolSpec, parse_tool_args},
 };
 
@@ -21,7 +21,7 @@ impl UpdateTaskTool {
             spec: ToolSpec {
                 name: "update_task".to_string(),
                 description:
-                    "Update task fields for a running or paused task. If task_id is omitted, update the current task. Use this to keep task summaries and never_ends flags accurate as work evolves."
+                    "Update task field for a running or paused task. If task_id is omitted, update the current task. Use this to keep task summaries and never_ends flags accurate as work evolves."
                         .to_string(),
                 parameters: schemars::schema_for!(UpdateTaskArgs),
             },
@@ -37,7 +37,8 @@ impl Tool for UpdateTaskTool {
     }
 
     async fn execute(&self, args: &str, context: &ToolContext<'_>) -> BabataResult<String> {
-        let (task_id, description, never_ends) = validate_args(args, context)?;
+        let args: UpdateTaskArgs = parse_tool_args(args)?;
+        let task_id = args.task_id.unwrap_or(*context.task_id);
 
         let task = self.task_store.get_task(task_id)?;
         if !matches!(task.status, TaskStatus::Running | TaskStatus::Paused) {
@@ -47,55 +48,152 @@ impl Tool for UpdateTaskTool {
             )));
         }
 
-        self.task_store
-            .update_task(task_id, description.clone(), never_ends)?;
+        self.task_store.update_task(task_id, args.update.clone())?;
 
-        let mut updates = Vec::new();
-        if let Some(description) = description {
-            updates.push(format!("description='{}'", description));
-        }
-        if let Some(never_ends) = never_ends {
-            updates.push(format!("never_ends={}", never_ends));
-        }
+        let update_description = match &args.update {
+            TaskUpdate::Description { description } => format!("description='{}'", description),
+            TaskUpdate::NeverEnds { never_ends } => format!("never_ends={}", never_ends),
+        };
 
         Ok(format!(
             "Updated task '{}': {}",
-            task_id,
-            updates.join(", ")
+            task_id, update_description
         ))
     }
 }
 
-fn validate_args(
-    args: &str,
-    context: &ToolContext<'_>,
-) -> BabataResult<(Uuid, Option<String>, Option<bool>)> {
-    let args: UpdateTaskArgs = parse_tool_args(args)?;
-    let task_id = args.task_id.unwrap_or(*context.task_id);
-    let description = args.description.map(|value| value.trim().to_string());
-    let never_ends = args.never_ends;
-
-    if description.as_deref() == Some("") {
-        return Err(BabataError::tool("description cannot be empty"));
-    }
-    if description.is_none() && never_ends.is_none() {
-        return Err(BabataError::tool(
-            "At least one of description or never_ends must be provided",
-        ));
-    }
-
-    Ok((task_id, description, never_ends))
-}
-
 #[derive(Debug, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
 struct UpdateTaskArgs {
     #[schemars(
         description = "Optional UUID of the task to update. If omitted, the current task is used."
     )]
     task_id: Option<Uuid>,
-    #[schemars(description = "Optional new task description")]
-    description: Option<String>,
-    #[schemars(description = "Optional boolean flag to update on the task")]
-    never_ends: Option<bool>,
+    #[serde(flatten)]
+    update: TaskUpdate,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::UpdateTaskArgs;
+    use crate::{
+        error::BabataError,
+        task::TaskUpdate,
+        tool::{ToolContext, parse_tool_args},
+    };
+    use serde_json::json;
+    use uuid::Uuid;
+
+    fn parse_update_args(
+        args: &str,
+        context: &ToolContext<'_>,
+    ) -> Result<(Uuid, TaskUpdate), BabataError> {
+        let args: UpdateTaskArgs = parse_tool_args(args)?;
+        let task_id = args.task_id.unwrap_or(*context.task_id);
+
+        match args.update {
+            TaskUpdate::Description { description } => {
+                let description = description.trim().to_string();
+                if description.is_empty() {
+                    return Err(BabataError::tool("description cannot be empty"));
+                }
+                Ok((task_id, TaskUpdate::Description { description }))
+            }
+            TaskUpdate::NeverEnds { never_ends } => {
+                Ok((task_id, TaskUpdate::NeverEnds { never_ends }))
+            }
+        }
+    }
+
+    #[test]
+    fn parse_description_update_args() {
+        let args = parse_tool_args::<UpdateTaskArgs>(
+            &json!({
+                "field": "description",
+                "description": "trim me"
+            })
+            .to_string(),
+        )
+        .expect("parse args");
+
+        assert!(matches!(
+            args,
+            UpdateTaskArgs {
+                update: TaskUpdate::Description { description },
+                ..
+            } if description == "trim me"
+        ));
+    }
+
+    #[test]
+    fn parse_never_ends_update_args() {
+        let args = parse_tool_args::<UpdateTaskArgs>(
+            &json!({
+                "field": "never_ends",
+                "never_ends": true
+            })
+            .to_string(),
+        )
+        .expect("parse args");
+
+        assert!(matches!(
+            args,
+            UpdateTaskArgs {
+                update: TaskUpdate::NeverEnds { never_ends },
+                ..
+            } if never_ends
+        ));
+    }
+
+    #[test]
+    fn validate_args_trims_description_values() {
+        let context = ToolContext::test();
+
+        let (task_id, update) = parse_update_args(
+            &json!({
+                "field": "description",
+                "description": "  updated task  "
+            })
+            .to_string(),
+            &context,
+        )
+        .expect("validate args");
+
+        assert_eq!(task_id, *context.task_id);
+        assert_eq!(
+            update,
+            TaskUpdate::Description {
+                description: "updated task".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn validate_args_rejects_empty_description() {
+        let error = parse_update_args(
+            &json!({
+                "field": "description",
+                "description": "   "
+            })
+            .to_string(),
+            &ToolContext::test(),
+        )
+        .expect_err("empty description should fail");
+
+        assert!(error.to_string().contains("description cannot be empty"));
+    }
+
+    #[test]
+    fn parse_args_rejects_multiple_update_fields() {
+        let error = parse_tool_args::<UpdateTaskArgs>(
+            &json!({
+                "field": "description",
+                "description": "x",
+                "never_ends": true
+            })
+            .to_string(),
+        )
+        .expect_err("multiple update fields should fail");
+
+        assert!(error.to_string().contains("Invalid tool arguments"));
+    }
 }

@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, OptionalExtension, Row, params};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -21,6 +22,19 @@ pub struct TaskRecord {
 #[derive(Debug, Clone)]
 pub struct TaskStore {
     db_path: PathBuf,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, JsonSchema)]
+#[serde(tag = "field", rename_all = "snake_case", deny_unknown_fields)]
+pub enum TaskUpdate {
+    Description {
+        #[schemars(description = "New task description", length(min = 1))]
+        description: String,
+    },
+    NeverEnds {
+        #[schemars(description = "New value for the task's never_ends flag")]
+        never_ends: bool,
+    },
 }
 
 impl TaskStore {
@@ -49,23 +63,10 @@ impl TaskStore {
         Ok(())
     }
 
-    pub fn update_task(
-        &self,
-        task_id: Uuid,
-        description: Option<String>,
-        never_ends: Option<bool>,
-    ) -> BabataResult<()> {
+    pub fn update_task(&self, task_id: Uuid, update: TaskUpdate) -> BabataResult<()> {
         let conn = self.connect()?;
-        let updated = match (description, never_ends) {
-            (Some(description), Some(never_ends)) => conn
-                .execute(
-                    "UPDATE tasks SET description = ?1, never_ends = ?2 WHERE task_id = ?3",
-                    params![description, never_ends, task_id.to_string()],
-                )
-                .map_err(|err| {
-                    BabataError::internal(format!("Failed to update task row: {}", err))
-                })?,
-            (Some(description), None) => conn
+        let updated = match update {
+            TaskUpdate::Description { description } => conn
                 .execute(
                     "UPDATE tasks SET description = ?1 WHERE task_id = ?2",
                     params![description, task_id.to_string()],
@@ -73,7 +74,7 @@ impl TaskStore {
                 .map_err(|err| {
                     BabataError::internal(format!("Failed to update task row: {}", err))
                 })?,
-            (None, Some(never_ends)) => conn
+            TaskUpdate::NeverEnds { never_ends } => conn
                 .execute(
                     "UPDATE tasks SET never_ends = ?1 WHERE task_id = ?2",
                     params![never_ends, task_id.to_string()],
@@ -81,11 +82,6 @@ impl TaskStore {
                 .map_err(|err| {
                     BabataError::internal(format!("Failed to update task row: {}", err))
                 })?,
-            (None, None) => {
-                return Err(BabataError::internal(
-                    "At least one task field must be provided for update".to_string(),
-                ));
-            }
         };
 
         if updated == 0 {
@@ -552,7 +548,7 @@ mod tests {
     }
 
     #[test]
-    fn update_task_persists_description_and_never_ends() {
+    fn update_task_persists_single_field_updates() {
         let db_path = temp_db_path("task-store-update-task");
         let store = TaskStore::open(&db_path).expect("open store");
         let task_id = Uuid::new_v4();
@@ -571,8 +567,16 @@ mod tests {
             .expect("insert task");
 
         store
-            .update_task(task_id, Some("after".to_string()), Some(true))
-            .expect("update task");
+            .update_task(
+                task_id,
+                TaskUpdate::Description {
+                    description: "after".to_string(),
+                },
+            )
+            .expect("update description");
+        store
+            .update_task(task_id, TaskUpdate::NeverEnds { never_ends: true })
+            .expect("update never_ends");
 
         let task = store.get_task(task_id).expect("load task");
         assert_eq!(task.description, "after");

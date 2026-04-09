@@ -21,8 +21,7 @@ impl QueryTasksTool {
                 description: "Query tasks from the task store using a SQL SELECT statement. \
                     Returns each row as a JSON object. \
                     The tasks table has columns: task_id, description, agent, status, \
-                    parent_task_id, root_task_id, created_at, never_ends. \
-                    Only SELECT queries are allowed."
+                    parent_task_id, root_task_id, created_at, never_ends."
                     .to_string(),
                 parameters: schemars::schema_for!(QueryTasksArgs),
             },

@@ -41,12 +41,16 @@ impl Tool for CreateTaskTool {
     async fn execute(&self, args: &str, context: &ToolContext<'_>) -> BabataResult<String> {
         let args: CreateTaskArgs = parse_tool_args(args)?;
 
+        let parent_task_id = match args.task_type.unwrap_or_default() {
+            TaskType::RootTask => None,
+            TaskType::Subtask => Some(*context.task_id),
+        };
         let request_body = CreateTaskRequest {
             prompt: vec![Content::Text {
                 text: args.prompt.clone(),
             }],
             agent: args.agent.clone(),
-            parent_task_id: parse_parent_task_id(&args, context)?,
+            parent_task_id,
             never_ends: args.never_ends,
         };
 
@@ -90,30 +94,30 @@ struct CreateTaskArgs {
     #[schemars(
         description = "The type of task to create: 'subtask' or 'roottask'. Defaults to 'subtask'."
     )]
-    task_type: Option<String>,
+    task_type: Option<TaskType>,
 }
 
-fn parse_parent_task_id(
-    args: &CreateTaskArgs,
-    context: &ToolContext<'_>,
-) -> BabataResult<Option<uuid::Uuid>> {
-    let task_type = args.task_type.as_deref().unwrap_or("subtask");
-    match task_type {
-        "roottask" => Ok(None),
-        "subtask" => Ok(Some(*context.task_id)),
-        _ => Err(BabataError::tool(format!(
-            "Invalid task_type '{}'; expected 'subtask' or 'roottask'",
-            task_type
-        ))),
-    }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+enum TaskType {
+    #[default]
+    Subtask,
+    RootTask,
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{CreateTaskArgs, parse_parent_task_id};
+    use super::{CreateTaskArgs, TaskType};
     use crate::tool::{ToolContext, parse_tool_args};
     use serde_json::json;
     use uuid::Uuid;
+
+    fn parent_task_id(args: &CreateTaskArgs, context: &ToolContext<'_>) -> Option<Uuid> {
+        match args.task_type.unwrap_or_default() {
+            TaskType::RootTask => None,
+            TaskType::Subtask => Some(*context.task_id),
+        }
+    }
 
     #[test]
     fn parse_parent_task_id_defaults_to_current_task_for_subtask() {
@@ -129,8 +133,7 @@ mod tests {
             &json!({ "prompt": "x", "never_ends": false }).to_string(),
         )
         .expect("parse args");
-        let parent_task_id = parse_parent_task_id(&args, &context).expect("parent task id");
-        assert_eq!(parent_task_id, Some(task_id));
+        assert_eq!(parent_task_id(&args, &context), Some(task_id));
     }
 
     #[test]
@@ -147,8 +150,18 @@ mod tests {
             &json!({ "prompt": "x", "never_ends": false, "task_type": "roottask" }).to_string(),
         )
         .expect("parse args");
-        let parent_task_id = parse_parent_task_id(&args, &context).expect("root task");
-        assert_eq!(parent_task_id, None);
+        assert_eq!(parent_task_id(&args, &context), None);
+        assert_eq!(args.task_type, Some(TaskType::RootTask));
+    }
+
+    #[test]
+    fn parse_task_type_rejects_unknown_value() {
+        let error = parse_tool_args::<CreateTaskArgs>(
+            &json!({ "prompt": "x", "never_ends": false, "task_type": "other" }).to_string(),
+        )
+        .expect_err("invalid task_type should fail");
+
+        assert!(error.to_string().contains("Invalid tool arguments"));
     }
 
     #[test]
@@ -156,9 +169,8 @@ mod tests {
         let error = parse_tool_args::<CreateTaskArgs>(&json!({ "prompt": "x" }).to_string())
             .expect_err("missing never_ends should fail");
         assert!(
-            error
-                .to_string()
-                .contains("Missing required parameter: never_ends")
+            error.to_string().contains("Invalid tool arguments")
+                && error.to_string().contains("missing field `never_ends`")
         );
     }
 
@@ -219,9 +231,8 @@ mod tests {
         let error = parse_tool_args::<CreateTaskArgs>(&json!({ "never_ends": false }).to_string())
             .expect_err("missing prompt");
         assert!(
-            error
-                .to_string()
-                .contains("Missing required parameter: prompt")
+            error.to_string().contains("Invalid tool arguments")
+                && error.to_string().contains("missing field `prompt`")
         );
     }
 }
