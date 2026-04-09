@@ -43,7 +43,7 @@ impl TaskManager {
         // Check if target task exists and is running
         let target_task = self.store.get_task(task_id)?;
         if !matches!(target_task.status, TaskStatus::Running) {
-            return Err(BabataError::tool(format!(
+            return Err(BabataError::invalid_input(format!(
                 "Cannot steer task '{}': task is not running (status: {})",
                 task_id, target_task.status
             )));
@@ -56,7 +56,7 @@ impl TaskManager {
             .get(&task_id)
             .map(|task| task.steer_tx.clone())
             .ok_or_else(|| {
-                BabataError::tool(format!(
+                BabataError::invalid_input(format!(
                     "Cannot steer task '{}': task is not running or steer channel not available",
                     task_id
                 ))
@@ -154,7 +154,7 @@ impl TaskManager {
 
         // Check task tree depth limit
         if parent_depth >= MAX_TASK_TREE_DEPTH {
-            return Err(BabataError::tool(format!(
+            return Err(BabataError::invalid_input(format!(
                 "Cannot create task: maximum task tree depth ({}) reached",
                 MAX_TASK_TREE_DEPTH
             )));
@@ -186,7 +186,7 @@ impl TaskManager {
         info!("Pausing task {}", task_id);
         let task = self.store.get_task(task_id)?;
         if task.status != TaskStatus::Running {
-            return Err(BabataError::config(format!(
+            return Err(BabataError::invalid_input(format!(
                 "Task '{}' cannot be paused from status '{}'",
                 task_id, task.status
             )));
@@ -204,7 +204,7 @@ impl TaskManager {
         info!("Resuming task {}", task_id);
         let task = self.store.get_task(task_id)?;
         if task.status != TaskStatus::Paused {
-            return Err(BabataError::config(format!(
+            return Err(BabataError::invalid_input(format!(
                 "Task '{}' cannot be resumed from status '{}'",
                 task_id, task.status
             )));
@@ -231,7 +231,7 @@ impl TaskManager {
         info!("Cancelling task {}", task_id);
         let task = self.store.get_task(task_id)?;
         if matches!(task.status, TaskStatus::Done | TaskStatus::Canceled) {
-            return Err(BabataError::config(format!(
+            return Err(BabataError::invalid_input(format!(
                 "Task '{}' cannot be canceled from status '{}'",
                 task_id, task.status
             )));
@@ -264,7 +264,7 @@ impl TaskManager {
 
         // Only root tasks can be deleted
         if task.parent_task_id.is_some() {
-            return Err(BabataError::config(format!(
+            return Err(BabataError::invalid_input(format!(
                 "Task '{}' is not a root task; only root tasks can be deleted",
                 task_id
             )));

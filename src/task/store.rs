@@ -85,7 +85,7 @@ impl TaskStore {
         };
 
         if updated == 0 {
-            return Err(BabataError::internal(format!(
+            return Err(BabataError::not_found(format!(
                 "Task '{}' not found",
                 task_id
             )));
@@ -106,7 +106,7 @@ impl TaskStore {
             })?;
 
         if updated == 0 {
-            return Err(BabataError::internal(format!(
+            return Err(BabataError::not_found(format!(
                 "Task '{}' not found",
                 task_id
             )));
@@ -131,7 +131,7 @@ impl TaskStore {
             .query_row(params![task_id.to_string()], parse_task_record)
             .optional()
             .map_err(|err| BabataError::internal(format!("Failed to query task row: {}", err)))?
-            .ok_or_else(|| BabataError::internal(format!("Task '{}' not found", task_id)))?;
+            .ok_or_else(|| BabataError::not_found(format!("Task '{}' not found", task_id)))?;
 
         Ok(task)
     }
@@ -365,7 +365,7 @@ impl TaskStore {
             .map_err(|err| BabataError::internal(format!("Failed to delete task row: {}", err)))?;
 
         if deleted == 0 {
-            return Err(BabataError::internal(format!(
+            return Err(BabataError::not_found(format!(
                 "Task '{}' not found",
                 task_id
             )));

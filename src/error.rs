@@ -2,6 +2,8 @@ use std::panic::Location;
 
 #[derive(Debug)]
 pub enum BabataError {
+    InvalidInput(String, &'static Location<'static>),
+    NotFound(String, &'static Location<'static>),
     Config(String, &'static Location<'static>),
     Provider(String, &'static Location<'static>),
     Memory(String, &'static Location<'static>),
@@ -11,6 +13,16 @@ pub enum BabataError {
 }
 
 impl BabataError {
+    #[track_caller]
+    pub fn invalid_input(message: impl Into<String>) -> Self {
+        BabataError::InvalidInput(message.into(), Location::caller())
+    }
+
+    #[track_caller]
+    pub fn not_found(message: impl Into<String>) -> Self {
+        BabataError::NotFound(message.into(), Location::caller())
+    }
+
     #[track_caller]
     pub fn config(message: impl Into<String>) -> Self {
         BabataError::Config(message.into(), Location::caller())
@@ -45,6 +57,10 @@ impl BabataError {
 impl std::fmt::Display for BabataError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            BabataError::InvalidInput(msg, loc) => {
+                write!(f, "Invalid input error at {}: {}", loc, msg)
+            }
+            BabataError::NotFound(msg, loc) => write!(f, "Not found error at {}: {}", loc, msg),
             BabataError::Config(msg, loc) => write!(f, "Config error at {}: {}", loc, msg),
             BabataError::Provider(msg, loc) => write!(f, "Provider error at {}: {}", loc, msg),
             BabataError::Memory(msg, loc) => write!(f, "Memory error at {}: {}", loc, msg),

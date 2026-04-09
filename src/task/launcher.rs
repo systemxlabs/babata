@@ -83,7 +83,7 @@ impl TaskLauncher {
             Some(agent_name) => self
                 .agents
                 .get(agent_name)
-                .ok_or_else(|| BabataError::config(format!("Agent '{}' not found", agent_name)))?
+                .ok_or_else(|| BabataError::not_found(format!("Agent '{}' not found", agent_name)))?
                 .clone(),
             None => self.default_agent.clone(),
         };

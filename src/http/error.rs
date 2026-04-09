@@ -23,20 +23,21 @@ impl ApiError {
 
     pub(crate) fn from_babata_error(err: BabataError) -> Self {
         match err {
-            BabataError::Config(message, _)
-            | BabataError::Tool(message, _)
-            | BabataError::Channel(message, _) => Self {
+            BabataError::InvalidInput(message, _) => Self {
                 status: StatusCode::BAD_REQUEST,
                 message,
             },
-            BabataError::Internal(message, _) if message.contains("not found") => Self {
+            BabataError::NotFound(message, _) => Self {
                 status: StatusCode::NOT_FOUND,
                 message,
             },
-            BabataError::Internal(message, _)
+            BabataError::Config(message, _)
+            | BabataError::Tool(message, _)
+            | BabataError::Channel(message, _)
+            | BabataError::Internal(message, _)
             | BabataError::Provider(message, _)
             | BabataError::Memory(message, _) => Self {
-                status: StatusCode::BAD_REQUEST,
+                status: StatusCode::INTERNAL_SERVER_ERROR,
                 message,
             },
         }
@@ -58,4 +59,29 @@ impl IntoResponse for ApiError {
 #[derive(Debug, Serialize)]
 struct ErrorResponse {
     error: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ApiError;
+    use crate::error::BabataError;
+    use axum::http::StatusCode;
+
+    #[test]
+    fn invalid_input_maps_to_400() {
+        let error = ApiError::from_babata_error(BabataError::invalid_input("bad input"));
+        assert_eq!(error.status, StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn not_found_maps_to_404() {
+        let error = ApiError::from_babata_error(BabataError::not_found("missing"));
+        assert_eq!(error.status, StatusCode::NOT_FOUND);
+    }
+
+    #[test]
+    fn other_errors_map_to_500() {
+        let error = ApiError::from_babata_error(BabataError::tool("tool failure"));
+        assert_eq!(error.status, StatusCode::INTERNAL_SERVER_ERROR);
+    }
 }
