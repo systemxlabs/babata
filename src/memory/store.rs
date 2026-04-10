@@ -7,6 +7,7 @@ use std::{
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use crate::{
     BabataResult,
@@ -17,6 +18,7 @@ use crate::{
 /// Database record structure that maps 1:1 with the messages table schema.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MessageRecord {
+    pub task_id: Uuid,
     pub message_type: MessageType,
     #[serde(with = "option_json_string")]
     pub content: Option<Vec<Content>>,
@@ -172,6 +174,7 @@ impl MessageStore {
         })?;
         conn.execute(
             "CREATE TABLE IF NOT EXISTS messages (
+                task_id TEXT NOT NULL,
                 message_type TEXT NOT NULL,
                 content TEXT,
                 reasoning_content TEXT,
@@ -199,11 +202,12 @@ impl MessageStore {
     }
 
     /// Convert Message to MessageRecord
-    fn message_to_record(message: &Message) -> BabataResult<MessageRecord> {
+    fn message_to_record(message: &Message, task_id: Uuid) -> BabataResult<MessageRecord> {
         let created_at = *message.created_at();
 
         let record = match message {
             Message::UserPrompt { content: c, .. } => MessageRecord {
+                task_id,
                 message_type: MessageType::UserPrompt,
                 content: Some(c.clone()),
                 reasoning_content: None,
@@ -212,6 +216,7 @@ impl MessageStore {
                 created_at,
             },
             Message::UserSteering { content: c, .. } => MessageRecord {
+                task_id,
                 message_type: MessageType::UserSteering,
                 content: Some(c.clone()),
                 reasoning_content: None,
@@ -224,6 +229,7 @@ impl MessageStore {
                 reasoning_content: r,
                 ..
             } => MessageRecord {
+                task_id,
                 message_type: MessageType::AssistantResponse,
                 content: Some(c.clone()),
                 reasoning_content: r.clone(),
@@ -236,6 +242,7 @@ impl MessageStore {
                 reasoning_content: r,
                 ..
             } => MessageRecord {
+                task_id,
                 message_type: MessageType::AssistantToolCalls,
                 content: None,
                 reasoning_content: r.clone(),
@@ -246,6 +253,7 @@ impl MessageStore {
             Message::ToolResult {
                 call, result: res, ..
             } => MessageRecord {
+                task_id,
                 message_type: MessageType::ToolResult,
                 content: None,
                 reasoning_content: None,
@@ -315,14 +323,14 @@ impl MessageStore {
         Ok(message)
     }
 
-    pub fn append_messages(&self, messages: &[Message]) -> BabataResult<()> {
+    pub fn append_messages(&self, task_id: Uuid, messages: &[Message]) -> BabataResult<()> {
         if messages.is_empty() {
             return Ok(());
         }
 
         let conn = self.connect()?;
         let mut stmt = conn
-            .prepare("INSERT INTO messages (message_type, content, reasoning_content, tool_calls, result, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)")
+            .prepare("INSERT INTO messages (task_id, message_type, content, reasoning_content, tool_calls, result, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)")
             .map_err(|err| {
                 BabataError::memory(format!(
                     "Failed to prepare message insert statement: {}",
@@ -331,7 +339,7 @@ impl MessageStore {
             })?;
 
         for message in messages {
-            let record = Self::message_to_record(message)?;
+            let record = Self::message_to_record(message, task_id)?;
             let message_type_str = record.message_type.to_string();
 
             let content_json = record
@@ -354,6 +362,7 @@ impl MessageStore {
                 .transpose()?;
 
             stmt.execute(params![
+                record.task_id.to_string(),
                 message_type_str,
                 content_json,
                 record.reasoning_content,
@@ -375,8 +384,8 @@ impl MessageStore {
         }
 
         let query =
-            "SELECT message_type, content, reasoning_content, tool_calls, result, created_at FROM (
-            SELECT message_type, content, reasoning_content, tool_calls, result, created_at, rowid
+            "SELECT task_id, message_type, content, reasoning_content, tool_calls, result, created_at FROM (
+            SELECT task_id, message_type, content, reasoning_content, tool_calls, result, created_at, rowid
             FROM messages
             ORDER BY datetime(created_at) DESC, rowid DESC
             LIMIT ?1
@@ -398,25 +407,34 @@ impl MessageStore {
         while let Some(row) = rows.next().map_err(|err| {
             BabataError::memory(format!("Failed to scan sqlite message row: {}", err))
         })? {
-            let message_type_str: String = row.get(0).map_err(|err| {
+            let task_id_str: String = row.get(0).map_err(|err| {
+                BabataError::memory(format!("Failed to read task_id from row: {}", err))
+            })?;
+            let task_id = Uuid::parse_str(&task_id_str).map_err(|err| {
+                BabataError::memory(format!(
+                    "Failed to parse task_id '{}': {}",
+                    task_id_str, err
+                ))
+            })?;
+            let message_type_str: String = row.get(1).map_err(|err| {
                 BabataError::memory(format!("Failed to read message_type from row: {}", err))
             })?;
-            let content_json: Option<String> = row.get(1).map_err(|err| {
+            let content_json: Option<String> = row.get(2).map_err(|err| {
                 BabataError::memory(format!("Failed to read content from row: {}", err))
             })?;
-            let reasoning_content: Option<String> = row.get(2).map_err(|err| {
+            let reasoning_content: Option<String> = row.get(3).map_err(|err| {
                 BabataError::memory(format!(
                     "Failed to read reasoning_content from row: {}",
                     err
                 ))
             })?;
-            let tool_calls_json: Option<String> = row.get(3).map_err(|err| {
+            let tool_calls_json: Option<String> = row.get(4).map_err(|err| {
                 BabataError::memory(format!("Failed to read tool_calls from row: {}", err))
             })?;
-            let result: Option<String> = row.get(4).map_err(|err| {
+            let result: Option<String> = row.get(5).map_err(|err| {
                 BabataError::memory(format!("Failed to read result from row: {}", err))
             })?;
-            let created_at_str: String = row.get(5).map_err(|err| {
+            let created_at_str: String = row.get(6).map_err(|err| {
                 BabataError::memory(format!("Failed to read created_at from row: {}", err))
             })?;
             let created_at = created_at_str.parse::<DateTime<Utc>>().map_err(|err| {
@@ -448,6 +466,7 @@ impl MessageStore {
                 .transpose()?;
 
             let record = MessageRecord {
+                task_id,
                 message_type,
                 content,
                 reasoning_content,
@@ -481,6 +500,7 @@ mod tests {
 
         let store = MessageStore::open(&db_path).expect("open sqlite message store");
 
+        let task_id = Uuid::new_v4();
         let now = Utc::now();
         let messages = vec![
             Message::UserPrompt {
@@ -523,7 +543,7 @@ mod tests {
         ];
 
         store
-            .append_messages(&messages)
+            .append_messages(task_id, &messages)
             .expect("insert messages into sqlite");
         let scanned = store
             .scan_recent_messages(messages.len())
@@ -541,6 +561,7 @@ mod tests {
             .join(format!("message-store-{}.db", Uuid::new_v4()));
 
         let store = MessageStore::open(&db_path).expect("open sqlite message store");
+        let task_id = Uuid::new_v4();
         let now = Utc::now();
         let messages = vec![
             Message::UserPrompt {
@@ -564,7 +585,7 @@ mod tests {
         ];
 
         store
-            .append_messages(&messages)
+            .append_messages(task_id, &messages)
             .expect("insert messages into sqlite");
 
         let scanned = store
