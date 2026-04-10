@@ -4,11 +4,11 @@ use std::{
     sync::Arc,
 };
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{BabataResult, error::BabataError, utils::babata_dir};
 
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct AgentFrontmatter {
     pub name: String,
     pub description: String,
@@ -166,4 +166,102 @@ fn parse_agent_content(content: &str, path: &Path) -> BabataResult<(AgentFrontma
     })?;
 
     Ok((headers, body))
+}
+
+/// Save an agent to AGENT.md file
+pub fn save_agent(
+    name: &str,
+    frontmatter: &AgentFrontmatter,
+    body: &str,
+) -> BabataResult<()> {
+    let agent_dir = babata_dir()?.join("agents").join(name);
+    std::fs::create_dir_all(&agent_dir).map_err(|err| {
+        BabataError::config(format!(
+            "Failed to create agent directory '{}': {}",
+            agent_dir.display(),
+            err
+        ))
+    })?;
+
+    let agent_path = agent_dir.join("AGENT.md");
+
+    let frontmatter_yaml = serde_yaml::to_string(frontmatter).map_err(|err| {
+        BabataError::config(format!("Failed to serialize agent frontmatter: {}", err))
+    })?;
+
+    let content = format!("---\n{}---\n{}", frontmatter_yaml, body);
+
+    std::fs::write(&agent_path, content).map_err(|err| {
+        BabataError::config(format!(
+            "Failed to write agent file '{}': {}",
+            agent_path.display(),
+            err
+        ))
+    })?;
+
+    Ok(())
+}
+
+/// Delete an agent by name (removes the entire agent directory)
+pub fn delete_agent(name: &str) -> BabataResult<()> {
+    let agent_dir = babata_dir()?.join("agents").join(name);
+
+    if !agent_dir.exists() {
+        return Err(BabataError::config(format!(
+            "Agent '{}' does not exist",
+            name
+        )));
+    }
+
+    std::fs::remove_dir_all(&agent_dir).map_err(|err| {
+        BabataError::config(format!(
+            "Failed to delete agent directory '{}': {}",
+            agent_dir.display(),
+            err
+        ))
+    })?;
+
+    Ok(())
+}
+
+/// Check if an agent exists
+pub fn agent_exists(name: &str) -> bool {
+    match babata_dir() {
+        Ok(dir) => {
+            let agent_path = dir.join("agents").join(name).join("AGENT.md");
+            agent_path.is_file()
+        }
+        Err(_) => false,
+    }
+}
+
+/// Load a single agent by name
+pub fn load_agent_by_name(name: &str) -> BabataResult<Arc<Agent>> {
+    let agent_path = babata_dir()?.join("agents").join(name).join("AGENT.md");
+
+    if !agent_path.is_file() {
+        return Err(BabataError::config(format!(
+            "Agent '{}' not found at '{}'",
+            name,
+            agent_path.display()
+        )));
+    }
+
+    let content = std::fs::read_to_string(&agent_path).map_err(|err| {
+        BabataError::config(format!(
+            "Failed to read agent file '{}': {}",
+            agent_path.display(),
+            err
+        ))
+    })?;
+
+    let (frontmatter, body) = parse_agent_content(&content, &agent_path)?;
+
+    let agent = Agent {
+        path: agent_path,
+        frontmatter,
+        body,
+    };
+
+    Ok(Arc::new(agent))
 }
