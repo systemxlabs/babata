@@ -137,7 +137,7 @@ impl std::str::FromStr for TaskStatus {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "running" => Ok(TaskStatus::Running),
-            "completed" | "done" => Ok(TaskStatus::Completed),
+            "completed" => Ok(TaskStatus::Completed),
             "failed" => Ok(TaskStatus::Failed),
             "canceled" => Ok(TaskStatus::Canceled),
             "paused" => Ok(TaskStatus::Paused),
