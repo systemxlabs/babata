@@ -23,7 +23,10 @@ pub(super) async fn handle(
 ) -> BabataResult<impl IntoResponse> {
     // Check if agent exists
     if !agent_exists(&name) {
-        return Err(BabataError::not_found(format!("Agent '{}' not found", name)));
+        return Err(BabataError::not_found(format!(
+            "Agent '{}' not found",
+            name
+        )));
     }
 
     // Load existing agent to check if default status is changing

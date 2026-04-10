@@ -169,10 +169,7 @@ fn parse_agent_content(content: &str, path: &Path) -> BabataResult<(AgentFrontma
 }
 
 /// Save an agent to AGENT.md file
-pub fn save_agent(
-    frontmatter: &AgentFrontmatter,
-    body: &str,
-) -> BabataResult<()> {
+pub fn save_agent(frontmatter: &AgentFrontmatter, body: &str) -> BabataResult<()> {
     let agent_dir = babata_dir()?.join("agents").join(&frontmatter.name);
     std::fs::create_dir_all(&agent_dir).map_err(|err| {
         BabataError::config(format!(

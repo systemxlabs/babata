@@ -67,7 +67,10 @@ impl HttpApp {
 fn router(task_manager: Arc<TaskManager>) -> Router {
     Router::new()
         .route("/api/health", get(health))
-        .route("/api/agents", get(list_agents::handle).post(create_agent::handle))
+        .route(
+            "/api/agents",
+            get(list_agents::handle).post(create_agent::handle),
+        )
         .route(
             "/api/agents/{name}",
             get(get_agent::handle)

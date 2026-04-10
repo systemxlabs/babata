@@ -1,7 +1,4 @@
-use axum::{
-    Json,
-    extract::Path,
-};
+use axum::{Json, extract::Path};
 use serde::Serialize;
 
 use crate::BabataResult;
@@ -19,9 +16,7 @@ pub(crate) struct GetAgentResponse {
     pub body: String,
 }
 
-pub(super) async fn handle(
-    Path(name): Path<String>,
-) -> BabataResult<Json<GetAgentResponse>> {
+pub(super) async fn handle(Path(name): Path<String>) -> BabataResult<Json<GetAgentResponse>> {
     let agent = load_agent_by_name(&name).map_err(|err| {
         // Convert config error (agent not found) to not found error for proper 404 response
         if err.to_string().contains("not found") {
