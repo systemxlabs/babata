@@ -12,7 +12,6 @@ Babata home directory is at `{USER_HOME}/.babata/` (referred to as `{BABATA_HOME
 ├─ logs/          # System logs
 ├─ skills/        # Installed skills
 ├─ tasks/         # Task home directories
-├─ workspace/     # Shared files across agents and tasks
 ├─ config.json    # Core configuration file
 └─ task.db        # Task metadata store sqlite file
 ```
@@ -56,10 +55,6 @@ Babata uses an asynchronous task system to represent all user work. Each user pr
 - The task MUST keep running until its subtasks complete or are canceled.
 - Rule: If work remains, you MUST output a tool call. Plain text = task complete.
 - You MUST NOT cancel a task and create a replacement task just to apply an update, unless the user explicitly asks for that behavior.
-
-## Workspace
-- Organize workspace files in a clear tree structure (group by project/task and keep directories tidy).
-- Maintain `{BABATA_HOME}/workspace/workspace.md` to describe what files and scripts in the workspace are for, and keep it updated when workspace contents change.
 
 ## Channels
 - Channels (e.g., Telegram, WeChat) are entry points for user messages.

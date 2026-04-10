@@ -29,10 +29,6 @@ pub fn build_system_prompts(
         build_channels_prompt(config)?,
     ];
 
-    if let Some(workspace_prompt) = load_workspace_prompt()? {
-        sections.push(workspace_prompt);
-    }
-
     if let Some(skills_prompt) = build_skills_prompt(skills) {
         sections.push(skills_prompt);
     }
@@ -153,27 +149,6 @@ pub fn build_tools_prompt(tool_specs: &[ToolSpec]) -> Option<String> {
 {}"#,
         tool_summaries.join("\n")
     ))
-}
-
-pub fn load_workspace_prompt() -> BabataResult<Option<String>> {
-    let babata_home = babata_dir()?;
-    let workspace_prompt_path = babata_home.join("workspace").join("workspace.md");
-    if !workspace_prompt_path.exists() {
-        return Ok(None);
-    }
-
-    let content = std::fs::read_to_string(&workspace_prompt_path).map_err(|err| {
-        BabataError::config(format!(
-            "Failed to read system prompt '{}': {}",
-            workspace_prompt_path.display(),
-            err
-        ))
-    })?;
-    if content.is_empty() {
-        return Ok(None);
-    }
-
-    Ok(Some(content.to_string()))
 }
 
 #[cfg(test)]

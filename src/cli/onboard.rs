@@ -28,8 +28,6 @@ pub fn run() {
 }
 
 fn run_onboard() -> BabataResult<()> {
-    ensure_default_directories()?;
-
     let mut config = Config::load_or_init()?;
 
     if let Some(provider_config) = prompt_provider_setup()? {
@@ -57,30 +55,6 @@ fn run_onboard() -> BabataResult<()> {
     }
 
     Ok(())
-}
-
-fn ensure_default_directories() -> BabataResult<()> {
-    let base = crate::utils::babata_dir()?;
-    let workspace = base.join("workspace");
-
-    ensure_directory_if_missing(&workspace)?;
-    println!("Created directory {}", workspace.display());
-
-    Ok(())
-}
-
-fn ensure_directory_if_missing(path: &Path) -> BabataResult<()> {
-    if path.exists() {
-        return Ok(());
-    }
-
-    std::fs::create_dir_all(path).map_err(|err| {
-        BabataError::config(format!(
-            "Failed to create directory '{}': {}",
-            path.display(),
-            err
-        ))
-    })
 }
 
 fn prompt_provider_setup() -> BabataResult<Option<ProviderConfig>> {
