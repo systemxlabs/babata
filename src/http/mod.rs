@@ -18,6 +18,7 @@ use axum::{
     routing::{get, post},
 };
 use serde_json::json;
+use tower_http::services::ServeDir;
 use uuid::Uuid;
 
 use crate::{BabataResult, error::BabataError, task::TaskManager};
@@ -80,6 +81,7 @@ fn router(task_manager: Arc<TaskManager>) -> Router {
         )
         .route("/api/tasks/{task_id}/control", post(control_task::handle))
         .route("/api/tasks/{task_id}/steer", post(steer_task::handle))
+        .nest_service("/", ServeDir::new("web/dist"))
         .with_state(HttpApp { task_manager })
 }
 
