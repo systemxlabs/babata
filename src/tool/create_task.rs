@@ -11,6 +11,12 @@ use crate::{
     tool::{Tool, ToolContext, ToolSpec, parse_tool_args},
 };
 
+#[derive(Debug, Deserialize)]
+struct CreateTaskResponse {
+    task_id: String,
+    status: String,
+}
+
 #[derive(Debug)]
 pub struct CreateTaskTool {
     spec: ToolSpec,
@@ -70,12 +76,20 @@ impl Tool for CreateTaskTool {
             )));
         }
 
-        response.text().await.map_err(|err| {
-            BabataError::tool(format!(
-                "Failed to read create_task HTTP API response body: {}",
-                err
-            ))
-        })
+        let response_body = response
+            .json::<CreateTaskResponse>()
+            .await
+            .map_err(|err| {
+                BabataError::tool(format!(
+                    "Failed to deserialize create_task HTTP API response: {}",
+                    err
+                ))
+            })?;
+
+        Ok(format!(
+            "Task created successfully. Task ID: {}, Status: {}",
+            response_body.task_id, response_body.status
+        ))
     }
 }
 
