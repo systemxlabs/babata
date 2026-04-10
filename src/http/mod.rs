@@ -4,12 +4,14 @@ mod count_tasks;
 mod create_agent;
 mod create_task;
 mod delete_agent;
+mod delete_skill;
 mod delete_task;
 mod get_agent;
 mod get_task;
 mod get_task_file;
 mod get_task_logs;
 mod list_agents;
+mod list_skills;
 mod list_task_files;
 mod list_tasks;
 mod steer_task;
@@ -20,7 +22,7 @@ use std::{env, sync::Arc};
 use axum::{
     Json, Router,
     response::IntoResponse,
-    routing::{get, post},
+    routing::{delete, get, post},
 };
 use serde_json::json;
 use tower_http::services::ServeDir;
@@ -77,6 +79,8 @@ fn router(task_manager: Arc<TaskManager>) -> Router {
                 .put(update_agent::handle)
                 .delete(delete_agent::handle),
         )
+        .route("/api/skills", get(list_skills::handle))
+        .route("/api/skills/{name}", delete(delete_skill::handle))
         .route("/api/tasks/count", get(count_tasks::handle))
         .route(
             "/api/tasks",
