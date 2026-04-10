@@ -5,17 +5,11 @@ use serde::Deserialize;
 use crate::{
     BabataResult,
     error::BabataError,
-    http::DEFAULT_HTTP_BASE_URL,
+    http::{CreateTaskResponse, DEFAULT_HTTP_BASE_URL},
     message::Content,
     task::CreateTaskRequest,
     tool::{Tool, ToolContext, ToolSpec, parse_tool_args},
 };
-
-#[derive(Debug, Deserialize)]
-struct CreateTaskResponse {
-    task_id: String,
-    status: String,
-}
 
 #[derive(Debug)]
 pub struct CreateTaskTool {
