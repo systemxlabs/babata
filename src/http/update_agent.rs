@@ -1,4 +1,4 @@
-use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
+use axum::{Json, extract::Path};
 use serde::Deserialize;
 
 use crate::{
@@ -20,7 +20,7 @@ pub(crate) struct UpdateAgentRequest {
 pub(super) async fn handle(
     Path(name): Path<String>,
     Json(request): Json<UpdateAgentRequest>,
-) -> BabataResult<impl IntoResponse> {
+) -> BabataResult<()> {
     // Check if agent exists
     if !agent_exists(&name) {
         return Err(BabataError::not_found(format!(
@@ -55,7 +55,7 @@ pub(super) async fn handle(
     // Save the updated agent
     save_agent(&frontmatter, &request.body)?;
 
-    Ok(StatusCode::NO_CONTENT)
+    Ok(())
 }
 
 /// Unset the current default agent (set default to false)
