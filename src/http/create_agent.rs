@@ -50,7 +50,7 @@ pub(super) async fn handle(
     };
 
     // Save the agent
-    save_agent(&request.name, &frontmatter, &request.body)?;
+    save_agent(&frontmatter, &request.body)?;
 
     Ok(StatusCode::CREATED)
 }

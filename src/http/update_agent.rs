@@ -50,7 +50,7 @@ pub(super) async fn handle(
     };
 
     // Save the updated agent
-    save_agent(&name, &frontmatter, &request.body)?;
+    save_agent(&frontmatter, &request.body)?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -76,7 +76,7 @@ async fn unset_current_default_agent(excluding: &str) -> BabataResult<()> {
                 allowed_tools: agent.frontmatter.allowed_tools.clone(),
                 default: Some(false),
             };
-            save_agent(agent_name, &new_frontmatter, &agent.body)?;
+            save_agent(&new_frontmatter, &agent.body)?;
             log::info!("Unset default agent '{}'", agent_name);
             break;
         }
