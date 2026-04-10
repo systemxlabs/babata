@@ -81,7 +81,7 @@ fn router(task_manager: Arc<TaskManager>) -> Router {
         )
         .route("/api/tasks/{task_id}/control", post(control_task::handle))
         .route("/api/tasks/{task_id}/steer", post(steer_task::handle))
-        .nest_service("/", ServeDir::new("web/dist"))
+        .fallback_service(ServeDir::new("web/dist"))
         .with_state(HttpApp { task_manager })
 }
 
