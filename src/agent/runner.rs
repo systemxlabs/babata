@@ -145,7 +145,7 @@ impl AgentTask {
         }
 
         if let Some(final_response) = final_response {
-            self.memory.append_messages(&conversation)?;
+            self.memory.append_messages(self.task_id, &conversation)?;
             Ok(final_response)
         } else {
             Err(BabataError::provider(format!(

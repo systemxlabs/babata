@@ -4,6 +4,8 @@ pub use store::MessageStore;
 
 use std::path::{Path, PathBuf};
 
+use uuid::Uuid;
+
 use crate::message::Content;
 use crate::{BabataResult, error::BabataError, message::Message};
 
@@ -71,8 +73,8 @@ This file stores important information that should persist across sessions.
         Ok(())
     }
 
-    pub fn append_messages(&self, messages: &[Message]) -> BabataResult<()> {
-        self.store.append_messages(messages)
+    pub fn append_messages(&self, task_id: Uuid, messages: &[Message]) -> BabataResult<()> {
+        self.store.append_messages(task_id, messages)
     }
 
     fn render_context(messages: &[Message]) -> String {
@@ -236,23 +238,27 @@ mod tests {
             MessageStore::open(agent_home.join("message.db")).expect("open sqlite message store");
         let memory = Memory { store, agent_home };
 
+        let task_id = Uuid::new_v4();
         let now = Utc::now();
         memory
-            .append_messages(&[
-                Message::UserPrompt {
-                    content: vec![Content::Text {
-                        text: "hello".to_string(),
-                    }],
-                    created_at: now,
-                },
-                Message::AssistantResponse {
-                    content: vec![Content::Text {
-                        text: "world".to_string(),
-                    }],
-                    reasoning_content: None,
-                    created_at: now,
-                },
-            ])
+            .append_messages(
+                task_id,
+                &[
+                    Message::UserPrompt {
+                        content: vec![Content::Text {
+                            text: "hello".to_string(),
+                        }],
+                        created_at: now,
+                    },
+                    Message::AssistantResponse {
+                        content: vec![Content::Text {
+                            text: "world".to_string(),
+                        }],
+                        reasoning_content: None,
+                        created_at: now,
+                    },
+                ],
+            )
             .expect("insert messages into sqlite");
 
         let context = memory
