@@ -76,15 +76,12 @@ impl Tool for CreateTaskTool {
             )));
         }
 
-        let response_body = response
-            .json::<CreateTaskResponse>()
-            .await
-            .map_err(|err| {
-                BabataError::tool(format!(
-                    "Failed to deserialize create_task HTTP API response: {}",
-                    err
-                ))
-            })?;
+        let response_body = response.json::<CreateTaskResponse>().await.map_err(|err| {
+            BabataError::tool(format!(
+                "Failed to deserialize create_task HTTP API response: {}",
+                err
+            ))
+        })?;
 
         Ok(format!(
             "Task created successfully. Task ID: {}, Status: {}",
