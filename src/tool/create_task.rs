@@ -5,7 +5,7 @@ use serde::Deserialize;
 use crate::{
     BabataResult,
     error::BabataError,
-    http::DEFAULT_HTTP_BASE_URL,
+    http::{CreateTaskResponse, DEFAULT_HTTP_BASE_URL},
     message::Content,
     task::CreateTaskRequest,
     tool::{Tool, ToolContext, ToolSpec, parse_tool_args},
@@ -70,12 +70,17 @@ impl Tool for CreateTaskTool {
             )));
         }
 
-        response.text().await.map_err(|err| {
+        let response_body = response.json::<CreateTaskResponse>().await.map_err(|err| {
             BabataError::tool(format!(
-                "Failed to read create_task HTTP API response body: {}",
+                "Failed to deserialize create_task HTTP API response: {}",
                 err
             ))
-        })
+        })?;
+
+        Ok(format!(
+            "Task created successfully. Task ID: {}, Status: {}",
+            response_body.task_id, response_body.status
+        ))
     }
 }
 

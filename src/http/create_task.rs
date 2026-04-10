@@ -1,5 +1,6 @@
 use axum::{Json, extract::State};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use crate::{
     BabataResult,
@@ -25,13 +26,13 @@ pub(super) async fn handle(
 
     let task_id = state.task_manager.create_task(request)?;
     Ok(Json(CreateTaskResponse {
-        task_id: task_id.to_string(),
-        status: TaskStatus::Running.to_string(),
+        task_id,
+        status: TaskStatus::Running,
     }))
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct CreateTaskResponse {
-    task_id: String,
-    status: String,
+    pub task_id: Uuid,
+    pub status: TaskStatus,
 }

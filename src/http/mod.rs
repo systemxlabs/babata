@@ -25,6 +25,7 @@ use crate::{BabataResult, error::BabataError, task::TaskManager};
 pub(crate) use collaborate_task::CollaborateTaskRequest;
 pub(crate) use control_task::{ControlTaskRequest, TaskAction};
 pub(crate) use count_tasks::CountTasksResponse;
+pub(crate) use create_task::CreateTaskResponse;
 pub(crate) use get_task::TaskResponse;
 pub(crate) use steer_task::SteerTaskRequest;
 
