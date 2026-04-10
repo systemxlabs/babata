@@ -7,7 +7,7 @@ use tokio::time::sleep;
 use crate::{
     BabataResult,
     error::BabataError,
-    http::{CollaborateTaskRequest, DEFAULT_HTTP_BASE_URL},
+    http::{CollaborateTaskRequest, http_base_url},
     message::Content,
     task::CollaborationTaskState,
     tool::{Tool, ToolContext, ToolSpec, parse_tool_args},
@@ -50,6 +50,7 @@ impl Tool for CollaborateTool {
 
     async fn execute(&self, args: &str, context: &ToolContext<'_>) -> BabataResult<String> {
         let args: CollaborateArgs = parse_tool_args(args)?;
+        let base_url = http_base_url()?;
         let request = CollaborateTaskRequest {
             agent: args.agent.clone(),
             prompt: args.prompt.clone(),
@@ -57,7 +58,7 @@ impl Tool for CollaborateTool {
         let response = self
             .http_client
             .post(format!(
-                "{DEFAULT_HTTP_BASE_URL}/api/tasks/{}/collaborate",
+                "{base_url}/api/tasks/{}/collaborate",
                 context.task_id
             ))
             .json(&request)
@@ -80,7 +81,7 @@ impl Tool for CollaborateTool {
             let response = self
                 .http_client
                 .get(format!(
-                    "{DEFAULT_HTTP_BASE_URL}/api/tasks/{}/collaborate",
+                    "{base_url}/api/tasks/{}/collaborate",
                     context.task_id
                 ))
                 .send()

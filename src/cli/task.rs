@@ -7,8 +7,8 @@ use crate::{
     BabataResult,
     error::BabataError,
     http::{
-        ControlTaskRequest, CountTasksResponse, DEFAULT_HTTP_BASE_URL, ListTasksResponse,
-        TaskAction, TaskResponse,
+        ControlTaskRequest, CountTasksResponse, ListTasksResponse, TaskAction, TaskResponse,
+        http_base_url,
     },
     message::Content,
     task::CreateTaskRequest,
@@ -65,13 +65,12 @@ pub fn count(status: Option<&str>) {
 
 fn run_control(action: &str, task_id: &str) -> BabataResult<()> {
     let action = action.parse::<TaskAction>().map_err(BabataError::config)?;
+    let base_url = http_base_url()?;
 
     let runtime = build_runtime()?;
     runtime.block_on(async move {
         let response = Client::new()
-            .post(format!(
-                "{DEFAULT_HTTP_BASE_URL}/api/tasks/{task_id}/control"
-            ))
+            .post(format!("{base_url}/api/tasks/{task_id}/control"))
             .json(&ControlTaskRequest { action })
             .send()
             .await
@@ -105,6 +104,7 @@ fn run_create(
     if prompt.trim().is_empty() {
         return Err(BabataError::config("prompt cannot be empty"));
     }
+    let base_url = http_base_url()?;
 
     let runtime = build_runtime()?;
     runtime.block_on(async move {
@@ -127,7 +127,7 @@ fn run_create(
             never_ends,
         };
         let response = Client::new()
-            .post(format!("{DEFAULT_HTTP_BASE_URL}/api/tasks"))
+            .post(format!("{base_url}/api/tasks"))
             .json(&request)
             .send()
             .await
@@ -156,10 +156,11 @@ fn run_create(
 }
 
 fn run_list(status: Option<&str>, limit: Option<usize>, pretty_format: bool) -> BabataResult<()> {
+    let base_url = http_base_url()?;
     let runtime = build_runtime()?;
     runtime.block_on(async move {
         let client = Client::new();
-        let mut request = client.get(format!("{DEFAULT_HTTP_BASE_URL}/api/tasks"));
+        let mut request = client.get(format!("{base_url}/api/tasks"));
         if let Some(status) = status {
             request = request.query(&[("status", status)]);
         }
@@ -199,10 +200,11 @@ fn run_list(status: Option<&str>, limit: Option<usize>, pretty_format: bool) -> 
 }
 
 fn run_get(task_id: &str) -> BabataResult<()> {
+    let base_url = http_base_url()?;
     let runtime = build_runtime()?;
     runtime.block_on(async move {
         let response = Client::new()
-            .get(format!("{DEFAULT_HTTP_BASE_URL}/api/tasks/{task_id}"))
+            .get(format!("{base_url}/api/tasks/{task_id}"))
             .send()
             .await
             .map_err(|err| {
@@ -230,10 +232,11 @@ fn run_get(task_id: &str) -> BabataResult<()> {
 }
 
 fn run_count(status: Option<&str>) -> BabataResult<()> {
+    let base_url = http_base_url()?;
     let runtime = build_runtime()?;
     runtime.block_on(async move {
         let client = Client::new();
-        let mut request = client.get(format!("{DEFAULT_HTTP_BASE_URL}/api/tasks/count"));
+        let mut request = client.get(format!("{base_url}/api/tasks/count"));
         if let Some(status) = status {
             request = request.query(&[("status", status)]);
         }

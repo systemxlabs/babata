@@ -5,7 +5,7 @@ use serde::Deserialize;
 use crate::{
     BabataResult,
     error::BabataError,
-    http::{CreateTaskResponse, DEFAULT_HTTP_BASE_URL},
+    http::{CreateTaskResponse, http_base_url},
     message::Content,
     task::CreateTaskRequest,
     tool::{Tool, ToolContext, ToolSpec, parse_tool_args},
@@ -38,6 +38,7 @@ impl Tool for CreateTaskTool {
 
     async fn execute(&self, args: &str, context: &ToolContext<'_>) -> BabataResult<String> {
         let args: CreateTaskArgs = parse_tool_args(args)?;
+        let base_url = http_base_url()?;
 
         let parent_task_id = match args.task_type.unwrap_or_default() {
             TaskType::RootTask => None,
@@ -53,7 +54,7 @@ impl Tool for CreateTaskTool {
 
         let response = self
             .http_client
-            .post(format!("{DEFAULT_HTTP_BASE_URL}/api/tasks"))
+            .post(format!("{base_url}/api/tasks"))
             .json(&request_body)
             .send()
             .await

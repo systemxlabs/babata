@@ -10,7 +10,7 @@ mod list_task_files;
 mod list_tasks;
 mod steer_task;
 
-use std::sync::Arc;
+use std::{env, sync::Arc};
 
 use axum::{
     Json, Router,
@@ -32,8 +32,9 @@ pub(crate) use steer_task::SteerTaskRequest;
 
 pub(crate) use list_tasks::ListTasksResponse;
 
-pub const DEFAULT_HTTP_ADDR: &str = "127.0.0.1:18800";
-pub const DEFAULT_HTTP_BASE_URL: &str = "http://127.0.0.1:18800";
+pub const BABATA_SERVER_PORT_ENV: &str = "BABATA_SERVER_PORT";
+pub const DEFAULT_HTTP_HOST: &str = "127.0.0.1";
+pub const DEFAULT_HTTP_PORT: u16 = 18800;
 
 #[derive(Clone)]
 pub(crate) struct HttpApp {
@@ -46,9 +47,10 @@ impl HttpApp {
     }
 
     pub async fn serve(&self) -> BabataResult<()> {
-        let listener = tokio::net::TcpListener::bind(DEFAULT_HTTP_ADDR).await?;
+        let http_addr = http_addr()?;
+        let listener = tokio::net::TcpListener::bind(&http_addr).await?;
 
-        log::info!("HTTP server listening on {}", DEFAULT_HTTP_ADDR);
+        log::info!("HTTP server listening on {}", http_addr);
 
         let app = router(self.task_manager.clone());
         axum::serve(listener, app).await.map_err(|err| {
@@ -102,4 +104,27 @@ pub(crate) fn ensure_task_exists(task_manager: &TaskManager, task_id: Uuid) -> B
         )));
     }
     Ok(())
+}
+
+pub(crate) fn http_port() -> BabataResult<u16> {
+    match env::var(BABATA_SERVER_PORT_ENV) {
+        Ok(raw) => raw.parse::<u16>().map_err(|err| {
+            BabataError::config(format!(
+                "Invalid {BABATA_SERVER_PORT_ENV} value '{}': {}",
+                raw, err
+            ))
+        }),
+        Err(env::VarError::NotPresent) => Ok(DEFAULT_HTTP_PORT),
+        Err(err) => Err(BabataError::config(format!(
+            "Failed to read {BABATA_SERVER_PORT_ENV}: {err}"
+        ))),
+    }
+}
+
+pub(crate) fn http_addr() -> BabataResult<String> {
+    Ok(format!("{DEFAULT_HTTP_HOST}:{}", http_port()?))
+}
+
+pub(crate) fn http_base_url() -> BabataResult<String> {
+    Ok(format!("http://{}", http_addr()?))
 }
