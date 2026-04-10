@@ -1,14 +1,19 @@
 mod collaborate_task;
 mod control_task;
 mod count_tasks;
+mod create_agent;
 mod create_task;
+mod delete_agent;
 mod delete_task;
+mod get_agent;
 mod get_task;
 mod get_task_file;
 mod get_task_logs;
+mod list_agents;
 mod list_task_files;
 mod list_tasks;
 mod steer_task;
+mod update_agent;
 
 use std::{env, sync::Arc};
 
@@ -62,6 +67,16 @@ impl HttpApp {
 fn router(task_manager: Arc<TaskManager>) -> Router {
     Router::new()
         .route("/api/health", get(health))
+        .route(
+            "/api/agents",
+            get(list_agents::handle).post(create_agent::handle),
+        )
+        .route(
+            "/api/agents/{name}",
+            get(get_agent::handle)
+                .put(update_agent::handle)
+                .delete(delete_agent::handle),
+        )
         .route("/api/tasks/count", get(count_tasks::handle))
         .route(
             "/api/tasks",
