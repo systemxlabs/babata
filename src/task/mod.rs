@@ -35,7 +35,7 @@ pub struct CreateTaskRequest {
 
 #[cfg(test)]
 mod tests {
-    use super::CreateTaskRequest;
+    use super::{CreateTaskRequest, TaskStatus};
     use crate::message::Content;
     use serde_json::json;
     use uuid::Uuid;
@@ -87,6 +87,15 @@ mod tests {
 
         assert!(error.to_string().contains("agent"));
     }
+
+    #[test]
+    fn task_status_identifies_terminal_statuses() {
+        assert!(!TaskStatus::Running.is_terminal_status());
+        assert!(!TaskStatus::Paused.is_terminal_status());
+        assert!(TaskStatus::Completed.is_terminal_status());
+        assert!(TaskStatus::Failed.is_terminal_status());
+        assert!(TaskStatus::Canceled.is_terminal_status());
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
@@ -94,16 +103,27 @@ mod tests {
 pub enum TaskStatus {
     #[default]
     Running,
-    Done,
+    Completed,
+    Failed,
     Canceled,
     Paused,
+}
+
+impl TaskStatus {
+    pub fn is_terminal_status(self) -> bool {
+        matches!(
+            self,
+            TaskStatus::Completed | TaskStatus::Failed | TaskStatus::Canceled
+        )
+    }
 }
 
 impl std::fmt::Display for TaskStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let value = match self {
             TaskStatus::Running => "running",
-            TaskStatus::Done => "done",
+            TaskStatus::Completed => "completed",
+            TaskStatus::Failed => "failed",
             TaskStatus::Canceled => "canceled",
             TaskStatus::Paused => "paused",
         };
@@ -117,7 +137,8 @@ impl std::str::FromStr for TaskStatus {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "running" => Ok(TaskStatus::Running),
-            "done" => Ok(TaskStatus::Done),
+            "completed" | "done" => Ok(TaskStatus::Completed),
+            "failed" => Ok(TaskStatus::Failed),
             "canceled" => Ok(TaskStatus::Canceled),
             "paused" => Ok(TaskStatus::Paused),
             _ => Err(format!("Unknown task status '{}'", s)),

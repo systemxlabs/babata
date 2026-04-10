@@ -92,7 +92,7 @@ struct WaitTaskArgs {
     #[schemars(description = "The UUID of the task to watch")]
     task_id: Uuid,
     #[schemars(
-        description = "One or more target task statuses to wait for: running, done, canceled, or paused"
+        description = "One or more target task statuses to wait for: running, completed, failed, canceled, or paused"
     )]
     task_statuses: Vec<TaskStatus>,
     #[schemars(description = "Optional timeout in seconds for the wait operation")]
@@ -120,8 +120,7 @@ fn is_unreachable_terminal_status(
     current_status: TaskStatus,
     target_statuses: &[TaskStatus],
 ) -> bool {
-    matches!(current_status, TaskStatus::Done | TaskStatus::Canceled)
-        && !target_statuses.contains(&current_status)
+    current_status.is_terminal_status() && !target_statuses.contains(&current_status)
 }
 
 fn remaining_sleep(deadline: Option<Instant>) -> Option<Duration> {
@@ -164,12 +163,12 @@ mod tests {
     fn validate_target_statuses_accepts_plural_parameter() {
         let args = serde_json::from_value::<WaitTaskArgs>(json!({
             "task_id": uuid::Uuid::new_v4(),
-            "task_statuses": ["done", "canceled"]
+            "task_statuses": ["completed", "canceled"]
         }))
         .expect("wait args");
 
         let statuses = validate_target_statuses(&args).expect("task statuses");
-        assert_eq!(statuses, vec![TaskStatus::Done, TaskStatus::Canceled]);
+        assert_eq!(statuses, vec![TaskStatus::Completed, TaskStatus::Canceled]);
     }
 
     #[test]
@@ -185,7 +184,7 @@ mod tests {
     fn parse_timeout_accepts_non_negative_integer() {
         let args = serde_json::from_value::<WaitTaskArgs>(json!({
             "task_id": uuid::Uuid::new_v4(),
-            "task_statuses": ["done"],
+            "task_statuses": ["completed"],
             "timeout_secs": 15
         }))
         .expect("wait args");
@@ -199,7 +198,7 @@ mod tests {
         let err = parse_tool_args::<WaitTaskArgs>(
             &json!({
                 "task_id": uuid::Uuid::new_v4(),
-                "task_statuses": ["done"],
+                "task_statuses": ["completed"],
                 "timeout_secs": "15"
             })
             .to_string(),
@@ -211,16 +210,20 @@ mod tests {
     #[test]
     fn unreachable_terminal_status_respects_target_statuses() {
         assert!(is_unreachable_terminal_status(
-            TaskStatus::Done,
+            TaskStatus::Completed,
             &[TaskStatus::Canceled]
         ));
         assert!(!is_unreachable_terminal_status(
-            TaskStatus::Done,
-            &[TaskStatus::Done, TaskStatus::Canceled]
+            TaskStatus::Completed,
+            &[TaskStatus::Completed, TaskStatus::Canceled]
         ));
         assert!(!is_unreachable_terminal_status(
             TaskStatus::Paused,
-            &[TaskStatus::Done]
+            &[TaskStatus::Completed]
+        ));
+        assert!(is_unreachable_terminal_status(
+            TaskStatus::Failed,
+            &[TaskStatus::Completed]
         ));
     }
 
@@ -246,7 +249,14 @@ mod tests {
 
     #[test]
     fn format_target_statuses_joins_statuses() {
-        let statuses = vec![TaskStatus::Done, TaskStatus::Canceled];
-        assert_eq!(format_target_statuses(&statuses), "done, canceled");
+        let statuses = vec![
+            TaskStatus::Completed,
+            TaskStatus::Failed,
+            TaskStatus::Canceled,
+        ];
+        assert_eq!(
+            format_target_statuses(&statuses),
+            "completed, failed, canceled"
+        );
     }
 }

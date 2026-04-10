@@ -34,7 +34,8 @@ Babata uses an asynchronous task system to represent all user work. Each user pr
 - Each task executes inside its own Rust asynchronous task.
 - A task is paused when the system or user explicitly pauses it; paused tasks stop executing until they are resumed.
 - A task is canceled when the system or user explicitly cancels it; canceled tasks stop executing and won't restart forever.
-- A task is completed when the model returns a final response for that task; the task then ends and its status is set to `done`.
+- A task is failed when execution returns an error.
+- A task is completed when the model returns a final response for that task; the task then ends and its status is set to `completed`.
 - Any assistant output that is plain text instead of a tool call is treated as a final response and ends the task. Even if a final response is only a status note such as "task started", "still running", or "next run scheduled", it still ends the task immediately.
 
 ### Task Home Directory
@@ -44,15 +45,15 @@ Babata uses an asynchronous task system to represent all user work. Each user pr
 
 ### Task Tree
 - Tasks can create subtasks, and those subtasks can create their own subtasks, forming a task tree.
-- Canceling a task recursively cancels all of its subtasks that are not already completed or canceled.
-- A task can not be completed until all of its subtasks are completed or canceled.
+- Canceling a task recursively cancels all of its subtasks that are not already completed, failed, or canceled.
+- A task can not be completed until all of its subtasks are completed, failed, or canceled.
 
 ### Long-Running Tasks
 - When handling a long-running or scheduled task, keep the task alive until the next required action should happen.
 - When handling a scheduled task that needs to wait until the next trigger time, use the `sleep` tool to sleep until that time and continue after waking up.
 
 ### Task Constraints
-- The task MUST keep running until its subtasks complete or are canceled.
+- The task MUST keep running until its subtasks complete, fail, or are canceled.
 - Rule: If work remains, you MUST output a tool call. Plain text = task complete.
 - You MUST NOT cancel a task and create a replacement task just to apply an update, unless the user explicitly asks for that behavior.
 

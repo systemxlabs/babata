@@ -374,7 +374,7 @@ mod tests {
                 task_id: "abcdefab-cdef-cdef-cdef-abcdefabcdef".to_string(),
                 description: "second".to_string(),
                 agent: "babata".to_string(),
-                status: "done".to_string(),
+                status: "completed".to_string(),
                 parent_task_id: None,
                 root_task_id: "abcdefab-cdef-cdef-cdef-abcdefabcdef".to_string(),
                 created_at: 1_773_994_800_001,
