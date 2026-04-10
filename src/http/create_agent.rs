@@ -1,5 +1,5 @@
-use axum::{Json, extract::State};
-use serde::{Deserialize, Serialize};
+use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
+use serde::Deserialize;
 
 use crate::{
     BabataResult,
@@ -12,7 +12,7 @@ use super::HttpApp;
 pub(super) async fn handle(
     State(_state): State<HttpApp>,
     Json(request): Json<CreateAgentRequest>,
-) -> BabataResult<Json<CreateAgentResponse>> {
+) -> BabataResult<impl IntoResponse> {
     // Validate name is not empty
     if request.name.trim().is_empty() {
         return Err(BabataError::invalid_input("name cannot be empty"));
@@ -52,9 +52,7 @@ pub(super) async fn handle(
     // Save the agent
     save_agent(&request.name, &frontmatter, &request.body)?;
 
-    Ok(Json(CreateAgentResponse {
-        name: request.name,
-    }))
+    Ok(StatusCode::CREATED)
 }
 
 #[derive(Debug, Deserialize)]
@@ -67,9 +65,4 @@ pub(crate) struct CreateAgentRequest {
     #[serde(default)]
     pub default: bool,
     pub body: String,
-}
-
-#[derive(Debug, Serialize)]
-pub(crate) struct CreateAgentResponse {
-    pub name: String,
 }

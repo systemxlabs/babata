@@ -1,5 +1,5 @@
 use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use crate::{
     BabataResult,
@@ -15,11 +15,6 @@ pub(crate) struct UpdateAgentRequest {
     pub allowed_tools: Vec<String>,
     pub default: bool,
     pub body: String,
-}
-
-#[derive(Debug, Serialize)]
-pub(crate) struct UpdateAgentResponse {
-    pub name: String,
 }
 
 pub(super) async fn handle(
@@ -57,7 +52,7 @@ pub(super) async fn handle(
     // Save the updated agent
     save_agent(&name, &frontmatter, &request.body)?;
 
-    Ok((StatusCode::OK, Json(UpdateAgentResponse { name })))
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// Unset the current default agent (set default to false)
@@ -113,15 +108,5 @@ mod tests {
         assert_eq!(request.allowed_tools, vec!["shell", "read_file"]);
         assert!(request.default);
         assert_eq!(request.body, "Updated agent body");
-    }
-
-    #[test]
-    fn test_update_agent_response_serialization() {
-        let response = UpdateAgentResponse {
-            name: "test-agent".to_string(),
-        };
-
-        let json = serde_json::to_value(&response).unwrap();
-        assert_eq!(json["name"], "test-agent");
     }
 }
