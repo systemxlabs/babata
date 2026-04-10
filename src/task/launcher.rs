@@ -18,10 +18,10 @@ use crate::{
 
 #[derive(Debug)]
 pub struct TaskLauncher {
-    default_agent: Arc<Agent>,
-    agents: HashMap<String, Arc<Agent>>,
-    memories: HashMap<String, Arc<Memory>>,
-    all_tools: HashMap<String, Arc<dyn Tool>>,
+    pub default_agent: Arc<Agent>,
+    pub agents: HashMap<String, Arc<Agent>>,
+    pub memories: HashMap<String, Arc<Memory>>,
+    pub all_tools: HashMap<String, Arc<dyn Tool>>,
 }
 
 impl TaskLauncher {
@@ -58,14 +58,11 @@ impl TaskLauncher {
             "Launching task {} with task record: {:?} and prompt: {:?}",
             task.task_id, task, prompt
         );
-        let agent = match task.agent.as_deref() {
-            Some(agent_name) => self
-                .agents
-                .get(agent_name)
-                .ok_or_else(|| BabataError::not_found(format!("Agent '{}' not found", agent_name)))?
-                .clone(),
-            None => self.default_agent.clone(),
-        };
+        let agent = self
+            .agents
+            .get(&task.agent)
+            .ok_or_else(|| BabataError::not_found(format!("Agent '{}' not found", task.agent)))?
+            .clone();
 
         let memory = self
             .memories
@@ -128,14 +125,11 @@ impl TaskLauncher {
             "Relaunching task {} with reason '{}' and task record: {:?}",
             task.task_id, reason, task
         );
-        let agent = match task.agent.as_deref() {
-            Some(agent_name) => self
-                .agents
-                .get(agent_name)
-                .ok_or_else(|| BabataError::not_found(format!("Agent '{}' not found", agent_name)))?
-                .clone(),
-            None => self.default_agent.clone(),
-        };
+        let agent = self
+            .agents
+            .get(&task.agent)
+            .ok_or_else(|| BabataError::not_found(format!("Agent '{}' not found", task.agent)))?
+            .clone();
 
         let memory = self
             .memories

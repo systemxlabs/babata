@@ -35,7 +35,7 @@ pub fn cancel(task_id: &str) {
     }
 }
 
-pub fn create(prompt: &str, agent: Option<&str>, parent_task_id: Option<&str>, never_ends: bool) {
+pub fn create(prompt: &str, agent: &str, parent_task_id: Option<&str>, never_ends: bool) {
     if let Err(err) = run_create(prompt, agent, parent_task_id, never_ends) {
         eprintln!("{err}");
         std::process::exit(1);
@@ -98,7 +98,7 @@ fn run_control(action: &str, task_id: &str) -> BabataResult<()> {
 
 fn run_create(
     prompt: &str,
-    agent: Option<&str>,
+    agent: &str,
     parent_task_id: Option<&str>,
     never_ends: bool,
 ) -> BabataResult<()> {
@@ -122,7 +122,7 @@ fn run_create(
             prompt: vec![Content::Text {
                 text: prompt.to_string(),
             }],
-            agent: agent.map(ToOwned::to_owned),
+            agent: agent.to_string(),
             parent_task_id,
             never_ends,
         };
@@ -296,7 +296,7 @@ fn format_tasks_table(tasks: &[TaskResponse]) -> String {
             task.task_id.clone(),
             task.status.clone(),
             task.never_ends.to_string(),
-            task.agent.clone().unwrap_or_else(|| "-".to_string()),
+            task.agent.clone(),
             task.parent_task_id
                 .clone()
                 .unwrap_or_else(|| "-".to_string()),
@@ -337,7 +337,7 @@ mod tests {
         let tasks = vec![TaskResponse {
             task_id: "12345678-1234-1234-1234-123456789abc".to_string(),
             description: "run a very long task prompt here".to_string(),
-            agent: Some("babata".to_string()),
+            agent: "babata".to_string(),
             status: "running".to_string(),
             parent_task_id: None,
             root_task_id: "12345678-1234-1234-1234-123456789abc".to_string(),
@@ -363,7 +363,7 @@ mod tests {
             TaskResponse {
                 task_id: "12345678-1234-1234-1234-123456789abc".to_string(),
                 description: "first".to_string(),
-                agent: Some("babata".to_string()),
+                agent: "babata".to_string(),
                 status: "running".to_string(),
                 parent_task_id: None,
                 root_task_id: "12345678-1234-1234-1234-123456789abc".to_string(),
@@ -373,7 +373,7 @@ mod tests {
             TaskResponse {
                 task_id: "abcdefab-cdef-cdef-cdef-abcdefabcdef".to_string(),
                 description: "second".to_string(),
-                agent: None,
+                agent: "babata".to_string(),
                 status: "done".to_string(),
                 parent_task_id: None,
                 root_task_id: "abcdefab-cdef-cdef-cdef-abcdefabcdef".to_string(),

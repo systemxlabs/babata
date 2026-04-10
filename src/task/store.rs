@@ -11,7 +11,7 @@ use crate::{BabataResult, error::BabataError, task::TaskStatus, utils::babata_di
 pub struct TaskRecord {
     pub task_id: Uuid,
     pub description: String,
-    pub agent: Option<String>,
+    pub agent: String,
     pub status: TaskStatus,
     pub parent_task_id: Option<Uuid>,
     pub root_task_id: Uuid,
@@ -412,7 +412,7 @@ impl TaskStore {
             "CREATE TABLE IF NOT EXISTS tasks (
                 task_id TEXT PRIMARY KEY,
                 description TEXT NOT NULL,
-                agent TEXT,
+                agent TEXT NOT NULL,
                 status TEXT NOT NULL,
                 parent_task_id TEXT,
                 root_task_id TEXT NOT NULL,
@@ -446,7 +446,7 @@ impl TaskStore {
 fn parse_task_record(row: &Row<'_>) -> rusqlite::Result<TaskRecord> {
     let task_id_raw = row.get::<_, String>(0)?;
     let description = row.get::<_, String>(1)?;
-    let agent = row.get::<_, Option<String>>(2)?;
+    let agent = row.get::<_, String>(2)?;
     let status_raw = row.get::<_, String>(3)?;
     let parent_task_id_raw = row.get::<_, Option<String>>(4)?;
     let root_task_id_raw = row.get::<_, String>(5)?;
@@ -513,7 +513,7 @@ mod tests {
         let mut payload = serde_json::to_value(TaskRecord {
             task_id,
             description: "missing never_ends".to_string(),
-            agent: Some("babata".to_string()),
+            agent: "babata".to_string(),
             status: TaskStatus::Running,
             parent_task_id: None,
             root_task_id: task_id,
@@ -542,7 +542,7 @@ mod tests {
             .insert_task(TaskRecord {
                 task_id,
                 description: "persist never_ends".to_string(),
-                agent: Some("babata".to_string()),
+                agent: "babata".to_string(),
                 status: TaskStatus::Running,
                 parent_task_id: None,
                 root_task_id: task_id,
@@ -567,7 +567,7 @@ mod tests {
             .insert_task(TaskRecord {
                 task_id,
                 description: "before".to_string(),
-                agent: Some("babata".to_string()),
+                agent: "babata".to_string(),
                 status: TaskStatus::Running,
                 parent_task_id: None,
                 root_task_id: task_id,
@@ -605,7 +605,7 @@ mod tests {
             .insert_task(TaskRecord {
                 task_id,
                 description: "exists".to_string(),
-                agent: Some("babata".to_string()),
+                agent: "babata".to_string(),
                 status: TaskStatus::Running,
                 parent_task_id: None,
                 root_task_id: task_id,

@@ -106,8 +106,8 @@ pub enum TaskAction {
     Create {
         #[arg(long, value_name = "PROMPT", help = "Task prompt text")]
         prompt: String,
-        #[arg(long, value_name = "AGENT", help = "Optional agent name")]
-        agent: Option<String>,
+        #[arg(long, value_name = "AGENT", help = "Agent name")]
+        agent: String,
         #[arg(
             long = "parent-task-id",
             value_name = "PARENT_TASK_ID",

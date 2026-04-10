@@ -97,7 +97,7 @@ async fn broadcast_service_started(task_manager: &Arc<TaskManager>) {
         description: "broadcast service started notification".to_string(),
         prompt: vec![prompt],
         parent_task_id: None,
-        agent: None,
+        agent: task_manager.default_agent().frontmatter.name.clone(),
         never_ends: false,
     };
     if let Err(e) = task_manager.create_task(task) {

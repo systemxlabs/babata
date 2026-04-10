@@ -36,12 +36,7 @@ fn main() {
                 agent,
                 parent_task_id,
                 never_ends,
-            } => babata::cli::task::create(
-                &prompt,
-                agent.as_deref(),
-                parent_task_id.as_deref(),
-                never_ends,
-            ),
+            } => babata::cli::task::create(&prompt, &agent, parent_task_id.as_deref(), never_ends),
             babata::cli::TaskAction::List {
                 status,
                 limit,

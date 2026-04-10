@@ -22,9 +22,7 @@ impl CreateTaskTool {
         Ok(Self {
             spec: ToolSpec {
                 name: "create_task".to_string(),
-                description:
-                    "Create a task. By default this creates a subtask of the current task. Use task_type='roottask' to create a root task instead. Supports an optional agent override."
-                        .to_string(),
+                description: "Create a root task or subtask to run asynchronously.".to_string(),
                 parameters: schemars::schema_for!(CreateTaskArgs),
             },
             http_client: Client::new(),
@@ -46,11 +44,9 @@ impl Tool for CreateTaskTool {
             TaskType::Subtask => Some(*context.task_id),
         };
         let request_body = CreateTaskRequest {
-            description: args.description.clone(),
-            prompt: vec![Content::Text {
-                text: args.prompt.clone(),
-            }],
-            agent: args.agent.clone(),
+            description: args.description,
+            prompt: vec![Content::Text { text: args.prompt }],
+            agent: args.agent,
             parent_task_id,
             never_ends: args.never_ends,
         };
@@ -90,8 +86,8 @@ struct CreateTaskArgs {
     description: String,
     #[schemars(description = "The prompt for the task to create")]
     prompt: String,
-    #[schemars(description = "Optional agent name for the task")]
-    agent: Option<String>,
+    #[schemars(description = "The agent name for the task")]
+    agent: String,
     #[schemars(description = "Boolean flag stored on the task record.")]
     never_ends: bool,
     #[schemars(
@@ -133,7 +129,7 @@ mod tests {
         };
 
         let args = parse_tool_args::<CreateTaskArgs>(
-            &json!({ "description": "x", "prompt": "x", "never_ends": false }).to_string(),
+            &json!({ "description": "x", "prompt": "x", "agent": "test_agent", "never_ends": false }).to_string(),
         )
         .expect("parse args");
         assert_eq!(parent_task_id(&args, &context), Some(task_id));
@@ -150,7 +146,7 @@ mod tests {
         };
 
         let args = parse_tool_args::<CreateTaskArgs>(
-            &json!({ "description": "x", "prompt": "x", "never_ends": false, "task_type": "roottask" }).to_string(),
+            &json!({ "description": "x", "prompt": "x", "agent": "test_agent", "never_ends": false, "task_type": "roottask" }).to_string(),
         )
         .expect("parse args");
         assert_eq!(parent_task_id(&args, &context), None);
@@ -160,7 +156,7 @@ mod tests {
     #[test]
     fn parse_task_type_rejects_unknown_value() {
         let error = parse_tool_args::<CreateTaskArgs>(
-            &json!({ "description": "x", "prompt": "x", "never_ends": false, "task_type": "other" }).to_string(),
+            &json!({ "description": "x", "prompt": "x", "agent": "test_agent", "never_ends": false, "task_type": "other" }).to_string(),
         )
         .expect_err("invalid task_type should fail");
 
@@ -170,7 +166,7 @@ mod tests {
     #[test]
     fn parse_never_ends_requires_parameter() {
         let error = parse_tool_args::<CreateTaskArgs>(
-            &json!({ "description": "x", "prompt": "x" }).to_string(),
+            &json!({ "description": "x", "prompt": "x", "agent": "test_agent" }).to_string(),
         )
         .expect_err("missing never_ends should fail");
         assert!(
@@ -182,7 +178,7 @@ mod tests {
     #[test]
     fn parse_never_ends_requires_boolean_value() {
         let error = parse_tool_args::<CreateTaskArgs>(
-            &json!({ "description": "x", "prompt": "x", "never_ends": "yes" }).to_string(),
+            &json!({ "description": "x", "prompt": "x", "agent": "test_agent", "never_ends": "yes" }).to_string(),
         )
         .expect_err("string should fail");
         assert!(error.to_string().contains("Invalid tool arguments"));
@@ -191,7 +187,7 @@ mod tests {
     #[test]
     fn parse_never_ends_accepts_boolean_value() {
         let args = parse_tool_args::<CreateTaskArgs>(
-            &json!({ "description": "x", "prompt": "x", "never_ends": true }).to_string(),
+            &json!({ "description": "x", "prompt": "x", "agent": "test_agent", "never_ends": true }).to_string(),
         )
         .expect("parse");
         assert!(args.never_ends);
@@ -211,25 +207,13 @@ mod tests {
         .expect("parse args");
         assert_eq!(args.description, "Task summary");
         assert_eq!(args.prompt, "Test prompt");
-        assert_eq!(args.agent, Some("test_agent".to_string()));
-    }
-
-    #[test]
-    fn parse_args_agent_is_optional() {
-        let args = parse_tool_args::<CreateTaskArgs>(
-            &json!({ "description": "Task summary", "prompt": "Test prompt", "never_ends": false })
-                .to_string(),
-        )
-        .expect("parse args");
-        assert_eq!(args.description, "Task summary");
-        assert_eq!(args.prompt, "Test prompt");
-        assert_eq!(args.agent, None);
+        assert_eq!(args.agent, "test_agent".to_string());
     }
 
     #[test]
     fn parse_args_allows_empty_prompt_string() {
         let args = parse_tool_args::<CreateTaskArgs>(
-            &json!({ "description": "Task summary", "prompt": "   ", "never_ends": false })
+            &json!({ "description": "Task summary", "prompt": "   ", "agent": "test_agent", "never_ends": false })
                 .to_string(),
         )
         .expect("empty prompt still parses");
@@ -239,7 +223,8 @@ mod tests {
     #[test]
     fn parse_args_rejects_missing_description() {
         let error = parse_tool_args::<CreateTaskArgs>(
-            &json!({ "prompt": "Test prompt", "never_ends": false }).to_string(),
+            &json!({ "prompt": "Test prompt", "agent": "test_agent", "never_ends": false })
+                .to_string(),
         )
         .expect_err("missing description");
         assert!(
@@ -251,12 +236,30 @@ mod tests {
     #[test]
     fn parse_args_rejects_missing_prompt() {
         let error = parse_tool_args::<CreateTaskArgs>(
-            &json!({ "description": "Task summary", "never_ends": false }).to_string(),
+            &json!({ "description": "Task summary", "agent": "test_agent", "never_ends": false })
+                .to_string(),
         )
         .expect_err("missing prompt");
         assert!(
             error.to_string().contains("Invalid tool arguments")
                 && error.to_string().contains("missing field `prompt`")
+        );
+    }
+
+    #[test]
+    fn parse_args_rejects_missing_agent() {
+        let error = parse_tool_args::<CreateTaskArgs>(
+            &json!({
+                "description": "Task summary",
+                "prompt": "Test prompt",
+                "never_ends": false
+            })
+            .to_string(),
+        )
+        .expect_err("missing agent");
+        assert!(
+            error.to_string().contains("Invalid tool arguments")
+                && error.to_string().contains("missing field `agent`")
         );
     }
 }

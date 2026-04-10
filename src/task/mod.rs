@@ -29,8 +29,7 @@ pub struct CreateTaskRequest {
     pub prompt: Vec<Content>,
     #[serde(default)]
     pub parent_task_id: Option<Uuid>,
-    #[serde(default)]
-    pub agent: Option<String>,
+    pub agent: String,
     pub never_ends: bool,
 }
 
@@ -46,6 +45,7 @@ mod tests {
         let error = serde_json::from_value::<CreateTaskRequest>(json!({
             "description": "hello",
             "prompt": [{ "type": "text", "text": "hello" }],
+            "agent": "babata",
         }))
         .expect_err("missing never_ends should fail");
 
@@ -72,8 +72,20 @@ mod tests {
         );
         assert_eq!(request.description, "demo task");
         assert_eq!(request.parent_task_id, Some(parent_task_id));
-        assert_eq!(request.agent.as_deref(), Some("babata"));
+        assert_eq!(request.agent, "babata");
         assert!(request.never_ends);
+    }
+
+    #[test]
+    fn create_task_request_requires_agent_when_deserializing() {
+        let error = serde_json::from_value::<CreateTaskRequest>(json!({
+            "description": "hello",
+            "prompt": [{ "type": "text", "text": "hello" }],
+            "never_ends": false,
+        }))
+        .expect_err("missing agent should fail");
+
+        assert!(error.to_string().contains("agent"));
     }
 }
 

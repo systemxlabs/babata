@@ -11,6 +11,7 @@ const MAX_TASK_TREE_DEPTH: usize = 5;
 
 use crate::{
     BabataResult,
+    agent::Agent,
     error::BabataError,
     http::CollaborateTaskRequest,
     message::Content,
@@ -227,8 +228,8 @@ impl TaskManager {
 
         let task_record = TaskRecord {
             task_id,
-            description: request.description.clone(),
-            agent: request.agent.clone(),
+            description: request.description,
+            agent: request.agent,
             status: TaskStatus::Running,
             parent_task_id: request.parent_task_id,
             root_task_id,
@@ -536,6 +537,10 @@ impl TaskManager {
             .update_task_status(task_id, TaskStatus::Canceled)?;
         Ok(())
     }
+
+    pub fn default_agent(&self) -> &Arc<Agent> {
+        &self.launcher.default_agent
+    }
 }
 
 #[derive(Debug)]
@@ -578,7 +583,7 @@ mod tests {
         TaskRecord {
             task_id,
             description: "test task".to_string(),
-            agent: Some("test-agent".to_string()),
+            agent: "test-agent".to_string(),
             status: TaskStatus::Running,
             parent_task_id: None,
             root_task_id: task_id,
@@ -591,7 +596,7 @@ mod tests {
         TaskRecord {
             task_id: Uuid::new_v4(),
             description: "test subtask".to_string(),
-            agent: Some("test-agent".to_string()),
+            agent: "test-agent".to_string(),
             status: TaskStatus::Running,
             parent_task_id: Some(parent_task_id),
             root_task_id,
@@ -742,7 +747,7 @@ mod tests {
                     text: "test create task".to_string(),
                 }],
                 parent_task_id: None,
-                agent: Some("test-agent".to_string()),
+                agent: "test-agent".to_string(),
                 never_ends: false,
             })
             .expect("create task");

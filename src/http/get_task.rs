@@ -23,7 +23,7 @@ pub(super) async fn handle(
 pub(crate) struct TaskResponse {
     pub(crate) task_id: String,
     pub(crate) description: String,
-    pub(crate) agent: Option<String>,
+    pub(crate) agent: String,
     pub(crate) status: String,
     pub(crate) parent_task_id: Option<String>,
     pub(crate) root_task_id: String,

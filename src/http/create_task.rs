@@ -19,6 +19,9 @@ pub(super) async fn handle(
     if request.description.trim().is_empty() {
         return Err(BabataError::invalid_input("description cannot be empty"));
     }
+    if request.agent.trim().is_empty() {
+        return Err(BabataError::invalid_input("agent cannot be empty"));
+    }
 
     let task_id = state.task_manager.create_task(request)?;
     Ok(Json(CreateTaskResponse {

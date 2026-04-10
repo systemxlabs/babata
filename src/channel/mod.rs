@@ -85,7 +85,7 @@ pub fn start_channel_loops(
                                 description,
                                 prompt,
                                 parent_task_id: None,
-                                agent: None,
+                                agent: task_manager.default_agent().frontmatter.name.clone(),
                                 never_ends: false,
                             };
 
