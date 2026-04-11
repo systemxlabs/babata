@@ -8,7 +8,7 @@ use crate::{
     error::BabataError,
     http::{
         ControlTaskRequest, CountTasksResponse, ListRootTasksResponse, RootTaskResponse,
-        TaskAction, TaskResponse, http_base_url,
+        TaskAction, http_base_url,
     },
     message::Content,
     task::CreateTaskRequest,
@@ -326,167 +326,9 @@ fn format_root_tasks_json_lines(tasks: &[RootTaskResponse]) -> BabataResult<Stri
     Ok(lines.join("\n"))
 }
 
-fn format_tasks_table(tasks: &[RootTaskResponse]) -> String {
-    if tasks.is_empty() {
-        return "No tasks found.".to_string();
-    }
-
-    let mut table = Table::new();
-    table
-        .load_preset(ASCII_MARKDOWN)
-        .set_content_arrangement(ContentArrangement::Disabled)
-        .set_header([
-            "TASK ID",
-            "STATUS",
-            "NEVER ENDS",
-            "AGENT",
-            "SUBTASKS",
-            "CREATED AT",
-            "DESCRIPTION",
-        ]);
-
-    for task in tasks {
-        table.add_row([
-            task.task_id.clone(),
-            task.status.clone(),
-            task.never_ends.to_string(),
-            task.agent.clone(),
-            task.subtask_count.to_string(),
-            format_timestamp(task.created_at),
-            task.description.clone(),
-        ]);
-    }
-
-    table.to_string()
-}
-
-fn format_tasks_json_lines(tasks: &[TaskResponse]) -> BabataResult<String> {
-    let lines = tasks
-        .iter()
-        .map(|task| {
-            serde_json::to_string(task).map_err(|err| {
-                BabataError::internal(format!("Failed to serialize task list item: {}", err))
-            })
-        })
-        .collect::<BabataResult<Vec<_>>>()?;
-
-    Ok(lines.join("\n"))
-}
-
-fn format_root_tasks_table(tasks: &[RootTaskResponse]) -> String {
-    if tasks.is_empty() {
-        return "No tasks found.".to_string();
-    }
-
-    let mut table = Table::new();
-    table
-        .load_preset(ASCII_MARKDOWN)
-        .set_content_arrangement(ContentArrangement::Disabled)
-        .set_header([
-            "TASK ID",
-            "STATUS",
-            "NEVER ENDS",
-            "AGENT",
-            "SUBTASKS",
-            "CREATED AT",
-            "DESCRIPTION",
-        ]);
-
-    for task in tasks {
-        table.add_row([
-            task.task_id.clone(),
-            task.status.clone(),
-            task.never_ends.to_string(),
-            task.agent.clone(),
-            task.subtask_count.to_string(),
-            format_timestamp(task.created_at),
-            task.description.clone(),
-        ]);
-    }
-
-    table.to_string()
-}
-
-fn format_root_tasks_json_lines(tasks: &[RootTaskResponse]) -> BabataResult<String> {
-    let lines = tasks
-        .iter()
-        .map(|task| {
-            serde_json::to_string(task).map_err(|err| {
-                BabataError::internal(format!("Failed to serialize task list item: {}", err))
-            })
-        })
-        .collect::<BabataResult<Vec<_>>>()?;
-
-    Ok(lines.join("\n"))
-}
-
 fn format_timestamp(timestamp_millis: i64) -> String {
     match Local.timestamp_millis_opt(timestamp_millis).single() {
         Some(datetime) => datetime.format("%Y-%m-%d %H:%M:%S").to_string(),
         None => timestamp_millis.to_string(),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn format_tasks_table_renders_headers_and_rows() {
-        let tasks = vec![TaskResponse {
-            task_id: "12345678-1234-1234-1234-123456789abc".to_string(),
-            description: "run a very long task prompt here".to_string(),
-            agent: "babata".to_string(),
-            status: "running".to_string(),
-            parent_task_id: None,
-            root_task_id: "12345678-1234-1234-1234-123456789abc".to_string(),
-            created_at: 1_773_994_800_000,
-            never_ends: false,
-        }];
-
-        let table = format_tasks_table(&tasks);
-
-        assert!(table.contains("TASK ID"));
-        assert!(table.contains("STATUS"));
-        assert!(table.contains("NEVER ENDS"));
-        assert!(table.contains("12345678-1234-1234-1234-123456789abc"));
-        assert!(table.contains("running"));
-        assert!(table.contains("false"));
-        assert!(table.contains("babata"));
-        assert!(table.contains("run a very long task prompt here"));
-    }
-
-    #[test]
-    fn format_tasks_json_lines_renders_one_json_per_line() {
-        let tasks = vec![
-            TaskResponse {
-                task_id: "12345678-1234-1234-1234-123456789abc".to_string(),
-                description: "first".to_string(),
-                agent: "babata".to_string(),
-                status: "running".to_string(),
-                parent_task_id: None,
-                root_task_id: "12345678-1234-1234-1234-123456789abc".to_string(),
-                created_at: 1_773_994_800_000,
-                never_ends: true,
-            },
-            TaskResponse {
-                task_id: "abcdefab-cdef-cdef-cdef-abcdefabcdef".to_string(),
-                description: "second".to_string(),
-                agent: "babata".to_string(),
-                status: "completed".to_string(),
-                parent_task_id: None,
-                root_task_id: "abcdefab-cdef-cdef-cdef-abcdefabcdef".to_string(),
-                created_at: 1_773_994_800_001,
-                never_ends: false,
-            },
-        ];
-
-        let output = format_tasks_json_lines(&tasks).expect("format json lines");
-        let lines: Vec<&str> = output.lines().collect();
-
-        assert_eq!(lines.len(), 2);
-        assert!(lines[0].contains("\"task_id\":\"12345678-1234-1234-1234-123456789abc\""));
-        assert!(lines[0].contains("\"never_ends\":true"));
-        assert!(lines[1].contains("\"task_id\":\"abcdefab-cdef-cdef-cdef-abcdefabcdef\""));
     }
 }
