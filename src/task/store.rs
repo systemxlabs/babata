@@ -264,24 +264,22 @@ impl TaskStore {
         }
 
         let conn = self.connect()?;
-        
+
         // Build the WHERE clause based on filters
         let mut conditions = vec!["parent_task_id IS NULL".to_string()];
         let mut query_params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
-        
+
         if let Some(status) = status {
             conditions.push("status = ?".to_string());
             query_params.push(Box::new(status.to_string()));
         }
 
         let where_clause = conditions.join(" AND ");
-        
+
         // Convert params for query
-        let params_refs: Vec<&dyn rusqlite::ToSql> = query_params
-            .iter()
-            .map(|p| p.as_ref())
-            .collect();
-        
+        let params_refs: Vec<&dyn rusqlite::ToSql> =
+            query_params.iter().map(|p| p.as_ref()).collect();
+
         let sql = format!(
             "SELECT task_id, description, agent, status, parent_task_id, root_task_id, created_at, never_ends
              FROM tasks
@@ -290,35 +288,38 @@ impl TaskStore {
              LIMIT ? OFFSET ?",
             where_clause
         );
-        
+
         let mut stmt = conn.prepare(&sql).map_err(|err| {
             BabataError::internal(format!(
                 "Failed to prepare root task list query statement: {}",
                 err
             ))
         })?;
-        
+
         // Bind limit and offset separately to avoid borrow issues
         let limit_i64 = limit as i64;
         let offset_i64 = offset as i64;
-        
+
         let tasks = collect_task_records(
-            stmt.query_map(rusqlite::params_from_iter(
-                params_refs.iter().copied().chain([&limit_i64 as &dyn rusqlite::ToSql, &offset_i64])
-            ), parse_task_record)
-                .map_err(|err| {
-                    BabataError::internal(format!("Failed to query root task rows: {}", err))
-                })?,
+            stmt.query_map(
+                rusqlite::params_from_iter(
+                    params_refs
+                        .iter()
+                        .copied()
+                        .chain([&limit_i64 as &dyn rusqlite::ToSql, &offset_i64]),
+                ),
+                parse_task_record,
+            )
+            .map_err(|err| {
+                BabataError::internal(format!("Failed to query root task rows: {}", err))
+            })?,
         )?;
-        
+
         Ok(tasks)
     }
-    
+
     /// Count root tasks with optional filtering
-    pub fn count_root_tasks(
-        &self,
-        status: Option<TaskStatus>,
-    ) -> BabataResult<usize> {
+    pub fn count_root_tasks(&self, status: Option<TaskStatus>) -> BabataResult<usize> {
         let conn = self.connect()?;
 
         // Build the WHERE clause based on filters
@@ -333,14 +334,13 @@ impl TaskStore {
         let where_clause = conditions.join(" AND ");
 
         // Convert params for query
-        let params_refs: Vec<&dyn rusqlite::ToSql> = query_params
-            .iter()
-            .map(|p| p.as_ref())
-            .collect();
+        let params_refs: Vec<&dyn rusqlite::ToSql> =
+            query_params.iter().map(|p| p.as_ref()).collect();
 
         let sql = format!("SELECT COUNT(*) FROM tasks WHERE {}", where_clause);
 
-        let count: i64 = conn.query_row(&sql, params_refs.as_slice(), |row| row.get(0))
+        let count: i64 = conn
+            .query_row(&sql, params_refs.as_slice(), |row| row.get(0))
             .map_err(|err| {
                 BabataError::internal(format!("Failed to count root task rows: {}", err))
             })?;

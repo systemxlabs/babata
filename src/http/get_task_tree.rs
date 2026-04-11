@@ -25,13 +25,13 @@ fn build_task_tree(
 ) -> BabataResult<TaskTreeResponse> {
     let task = task_manager.get_task(task_id)?;
     let children_records = task_manager.get_task_children(task_id)?;
-    
+
     let mut children = Vec::new();
     for child in children_records {
         let child_tree = build_task_tree(task_manager, child.task_id)?;
         children.push(child_tree);
     }
-    
+
     Ok(TaskTreeResponse::from_record(task, children))
 }
 
