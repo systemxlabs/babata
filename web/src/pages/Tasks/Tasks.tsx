@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Task, RootTask, TaskFilter } from '../../types';
-import { getRootTasks, getTaskTree, deleteTask, getAgentsList, controlTask } from '../../api';
+import { getRootTasks, getTaskTree, deleteTask, controlTask } from '../../api';
 import { TaskListHeader } from './components/TaskListHeader';
 import { TaskTreeItem } from './components/TaskTreeItem';
 import { TaskPagination } from './components/TaskPagination';
@@ -19,26 +19,16 @@ export function Tasks() {
   const [tasks, setTasks] = useState<TaskWithChildren[]>([]);
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
-  const [agents, setAgents] = useState<string[]>([]);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
   
   // 筛选条件
   const [filter, setFilter] = useState<TaskFilter>({
-    status: 'all',
-    agent: 'all',
-    search: '',
+    status: 'running',
     page: 1,
     pageSize: 20,
   });
-
-  // 获取 Agent 列表
-  useEffect(() => {
-    getAgentsList()
-      .then((agents: { name: string; description: string }[]) => setAgents(agents.map((a: { name: string }) => a.name)))
-      .catch(console.error);
-  }, []);
 
   // 获取根任务列表
   const fetchTasks = useCallback(async () => {
@@ -163,7 +153,6 @@ export function Tasks() {
     <div className="tasks-page">
       <TaskListHeader
         filter={filter}
-        agents={agents}
         onFilterChange={handleFilterChange}
         loading={loading}
       />
