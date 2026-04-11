@@ -85,7 +85,12 @@ export interface AgentFrontmatter {
 // Agent 基础类型（列表使用）
 export interface Agent {
   name: string;
-  description?: string;
+  description: string;
+  provider: string;
+  model: string;
+  allowed_tools: string[];
+  default: boolean;
+  body: string;
 }
 
 // Agent 完整类型（详情使用）
@@ -120,15 +125,12 @@ export interface UpdateAgentRequest {
   body: string;
 }
 
-// 获取 Agent 详情响应
-export interface GetAgentResponse {
-  name: string;
-  description: string;
-  provider: string;
-  model: string;
-  allowed_tools: string[];
-  default: boolean;
-  body: string;
+// 获取 Agent 响应
+export type GetAgentResponse = Agent;
+
+// Agent 列表响应
+export interface ListAgentsResponse {
+  agents: Agent[];
 }
 
 // ========== Skill 类型定义 ==========
