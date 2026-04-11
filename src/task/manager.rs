@@ -323,11 +323,9 @@ impl TaskManager {
         status: Option<TaskStatus>,
         limit: usize,
         offset: usize,
-        agent: Option<&str>,
-        search: Option<&str>,
     ) -> BabataResult<(Vec<(TaskRecord, usize)>, usize)> {
-        let tasks = self.store.list_root_tasks(status, limit, offset, agent, search)?;
-        let total = self.store.count_root_tasks(status, agent, search)?;
+        let tasks = self.store.list_root_tasks(status, limit, offset, None)?;
+        let total = self.store.count_root_tasks(status, None)?;
         
         // Get subtask count for each task
         let tasks_with_count: Vec<(TaskRecord, usize)> = tasks

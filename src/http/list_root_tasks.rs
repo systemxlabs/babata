@@ -30,7 +30,7 @@ pub(super) async fn handle(
 
     let (tasks, total) = state
         .task_manager
-        .list_root_tasks(status, page_size, offset, query.agent.as_deref(), query.search.as_deref())?;
+        .list_root_tasks(status, page_size, offset)?;
 
     Ok(Json(ListRootTasksResponse {
         tasks: tasks
@@ -47,8 +47,6 @@ pub(super) async fn handle(
 pub(super) struct ListRootTasksQuery {
     #[serde(default)]
     status: Option<String>,
-    #[serde(default)]
-    agent: Option<String>,
     #[serde(default)]
     search: Option<String>,
     #[serde(default)]

@@ -15,7 +15,7 @@ mod list_agents;
 mod list_root_tasks;
 mod list_skills;
 mod list_task_files;
-mod list_tasks;
+
 mod steer_task;
 mod update_agent;
 
@@ -37,9 +37,8 @@ pub(crate) use control_task::{ControlTaskRequest, TaskAction};
 pub(crate) use count_tasks::CountTasksResponse;
 pub(crate) use create_task::CreateTaskResponse;
 pub(crate) use get_task::TaskResponse;
+pub(crate) use list_root_tasks::{ListRootTasksResponse, RootTaskResponse};
 pub(crate) use steer_task::SteerTaskRequest;
-
-pub(crate) use list_tasks::ListTasksResponse;
 
 pub const BABATA_SERVER_PORT_ENV: &str = "BABATA_SERVER_PORT";
 pub const DEFAULT_HTTP_HOST: &str = "127.0.0.1";

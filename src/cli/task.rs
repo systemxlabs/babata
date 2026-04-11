@@ -7,8 +7,8 @@ use crate::{
     BabataResult,
     error::BabataError,
     http::{
-        ControlTaskRequest, CountTasksResponse, ListTasksResponse, TaskAction, TaskResponse,
-        http_base_url,
+        ControlTaskRequest, CountTasksResponse, ListRootTasksResponse, RootTaskResponse,
+        TaskAction, TaskResponse, http_base_url,
     },
     message::Content,
     task::CreateTaskRequest,
@@ -187,13 +187,13 @@ fn run_list(status: Option<&str>, limit: Option<usize>, pretty_format: bool) -> 
         let body = response.text().await.map_err(|err| {
             BabataError::internal(format!("Failed to read task list response body: {}", err))
         })?;
-        let response: ListTasksResponse = serde_json::from_str(&body).map_err(|err| {
+        let response: ListRootTasksResponse = serde_json::from_str(&body).map_err(|err| {
             BabataError::internal(format!("Failed to parse task list response body: {}", err))
         })?;
         if pretty_format {
-            println!("{}", format_tasks_table(&response.tasks));
+            println!("{}", format_root_tasks_table(&response.tasks));
         } else {
-            println!("{}", format_tasks_json_lines(&response.tasks)?);
+            println!("{}", format_root_tasks_json_lines(&response.tasks)?);
         }
         Ok(())
     })
@@ -275,7 +275,7 @@ fn build_runtime() -> BabataResult<tokio::runtime::Runtime> {
         .map_err(|err| BabataError::internal(format!("Failed to build Tokio runtime: {err}")))
 }
 
-fn format_tasks_table(tasks: &[TaskResponse]) -> String {
+fn format_root_tasks_table(tasks: &[RootTaskResponse]) -> String {
     if tasks.is_empty() {
         return "No tasks found.".to_string();
     }
@@ -290,6 +290,7 @@ fn format_tasks_table(tasks: &[TaskResponse]) -> String {
             "NEVER ENDS",
             "AGENT",
             "PARENT",
+            "SUBTASKS",
             "CREATED AT",
             "DESCRIPTION",
         ]);
@@ -303,6 +304,54 @@ fn format_tasks_table(tasks: &[TaskResponse]) -> String {
             task.parent_task_id
                 .clone()
                 .unwrap_or_else(|| "-".to_string()),
+            task.subtask_count.to_string(),
+            format_timestamp(task.created_at),
+            task.description.clone(),
+        ]);
+    }
+
+    table.to_string()
+}
+
+fn format_root_tasks_json_lines(tasks: &[RootTaskResponse]) -> BabataResult<String> {
+    let lines = tasks
+        .iter()
+        .map(|task| {
+            serde_json::to_string(task).map_err(|err| {
+                BabataError::internal(format!("Failed to serialize task list item: {}", err))
+            })
+        })
+        .collect::<BabataResult<Vec<_>>>()?;
+
+    Ok(lines.join("\n"))
+}
+
+fn format_tasks_table(tasks: &[RootTaskResponse]) -> String {
+    if tasks.is_empty() {
+        return "No tasks found.".to_string();
+    }
+
+    let mut table = Table::new();
+    table
+        .load_preset(ASCII_MARKDOWN)
+        .set_content_arrangement(ContentArrangement::Disabled)
+        .set_header([
+            "TASK ID",
+            "STATUS",
+            "NEVER ENDS",
+            "AGENT",
+            "SUBTASKS",
+            "CREATED AT",
+            "DESCRIPTION",
+        ]);
+
+    for task in tasks {
+        table.add_row([
+            task.task_id.clone(),
+            task.status.clone(),
+            task.never_ends.to_string(),
+            task.agent.clone(),
+            task.subtask_count.to_string(),
             format_timestamp(task.created_at),
             task.description.clone(),
         ]);
@@ -312,6 +361,53 @@ fn format_tasks_table(tasks: &[TaskResponse]) -> String {
 }
 
 fn format_tasks_json_lines(tasks: &[TaskResponse]) -> BabataResult<String> {
+    let lines = tasks
+        .iter()
+        .map(|task| {
+            serde_json::to_string(task).map_err(|err| {
+                BabataError::internal(format!("Failed to serialize task list item: {}", err))
+            })
+        })
+        .collect::<BabataResult<Vec<_>>>()?;
+
+    Ok(lines.join("\n"))
+}
+
+fn format_root_tasks_table(tasks: &[RootTaskResponse]) -> String {
+    if tasks.is_empty() {
+        return "No tasks found.".to_string();
+    }
+
+    let mut table = Table::new();
+    table
+        .load_preset(ASCII_MARKDOWN)
+        .set_content_arrangement(ContentArrangement::Disabled)
+        .set_header([
+            "TASK ID",
+            "STATUS",
+            "NEVER ENDS",
+            "AGENT",
+            "SUBTASKS",
+            "CREATED AT",
+            "DESCRIPTION",
+        ]);
+
+    for task in tasks {
+        table.add_row([
+            task.task_id.clone(),
+            task.status.clone(),
+            task.never_ends.to_string(),
+            task.agent.clone(),
+            task.subtask_count.to_string(),
+            format_timestamp(task.created_at),
+            task.description.clone(),
+        ]);
+    }
+
+    table.to_string()
+}
+
+fn format_root_tasks_json_lines(tasks: &[RootTaskResponse]) -> BabataResult<String> {
     let lines = tasks
         .iter()
         .map(|task| {
