@@ -1,0 +1,137 @@
+.task-tree-list {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+
+.task-tree-list__content {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 200px;
+  max-height: calc(100vh - 200px);
+}
+
+.task-tree-list__items {
+  width: 100%;
+}
+
+.task-tree-list__loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  color: #8c8c8c;
+  gap: 16px;
+}
+
+.task-tree-list__spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #f0f0f0;
+  border-top-color: #1890ff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.task-tree-list__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  color: #8c8c8c;
+  text-align: center;
+}
+
+.task-tree-list__empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.task-tree-list__empty p {
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+.task-tree-list__refresh-link {
+  font-size: 14px;
+  color: #1890ff;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.task-tree-list__refresh-link:hover:not(:disabled) {
+  color: #40a9ff;
+  background-color: #e6f7ff;
+}
+
+.task-tree-list__refresh-link:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  text-decoration: none;
+}
+
+.task-tree-list__error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background-color: #fff1f0;
+  border: 1px solid #ffccc7;
+  border-radius: 6px;
+  margin: 16px;
+  color: #cf1322;
+  font-size: 14px;
+}
+
+.task-tree-list__error-icon {
+  font-size: 16px;
+}
+
+.task-tree-list__error-close {
+  margin-left: auto;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: #595959;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.task-tree-list__error-close:hover {
+  color: #262626;
+  background-color: #ffccc7;
+}
+
+.task-tree-list__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 12px 16px;
+  background-color: #fafafa;
+  border-top: 1px solid #f0f0f0;
+}
+
+.task-tree-list__stats {
+  font-size: 12px;
+  color: #8c8c8c;
+}

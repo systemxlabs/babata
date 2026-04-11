@@ -4,14 +4,18 @@ mod count_tasks;
 mod create_agent;
 mod create_task;
 mod delete_agent;
+mod delete_skill;
 mod delete_task;
 mod get_agent;
 mod get_task;
 mod get_task_file;
 mod get_task_logs;
+mod get_task_tree;
 mod list_agents;
+mod list_root_tasks;
+mod list_skills;
 mod list_task_files;
-mod list_tasks;
+
 mod steer_task;
 mod update_agent;
 
@@ -20,7 +24,7 @@ use std::{env, sync::Arc};
 use axum::{
     Json, Router,
     response::IntoResponse,
-    routing::{get, post},
+    routing::{delete, get, post},
 };
 use serde_json::json;
 use tower_http::services::ServeDir;
@@ -32,10 +36,8 @@ pub(crate) use collaborate_task::CollaborateTaskRequest;
 pub(crate) use control_task::{ControlTaskRequest, TaskAction};
 pub(crate) use count_tasks::CountTasksResponse;
 pub(crate) use create_task::CreateTaskResponse;
-pub(crate) use get_task::TaskResponse;
+pub(crate) use list_root_tasks::{ListRootTasksResponse, RootTaskResponse};
 pub(crate) use steer_task::SteerTaskRequest;
-
-pub(crate) use list_tasks::ListTasksResponse;
 
 pub const BABATA_SERVER_PORT_ENV: &str = "BABATA_SERVER_PORT";
 pub const DEFAULT_HTTP_HOST: &str = "127.0.0.1";
@@ -77,15 +79,18 @@ fn router(task_manager: Arc<TaskManager>) -> Router {
                 .put(update_agent::handle)
                 .delete(delete_agent::handle),
         )
+        .route("/api/skills", get(list_skills::handle))
+        .route("/api/skills/{name}", delete(delete_skill::handle))
         .route("/api/tasks/count", get(count_tasks::handle))
         .route(
             "/api/tasks",
-            get(list_tasks::handle).post(create_task::handle),
+            get(list_root_tasks::handle).post(create_task::handle),
         )
         .route(
             "/api/tasks/{task_id}",
             get(get_task::handle).delete(delete_task::handle),
         )
+        .route("/api/tasks/{task_id}/tree", get(get_task_tree::handle))
         .route("/api/tasks/{task_id}/files", get(list_task_files::handle))
         .route(
             "/api/tasks/{task_id}/files/{*path}",

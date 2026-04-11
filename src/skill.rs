@@ -1,13 +1,44 @@
 use std::path::{Path, PathBuf};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{BabataResult, error::BabataError, utils::babata_dir};
 
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct SkillFrontmatter {
     pub name: String,
     pub description: String,
+}
+
+/// Get the skill directory path for a given skill name
+fn skill_dir(name: &str) -> BabataResult<PathBuf> {
+    Ok(babata_dir()?.join("skills").join(name))
+}
+
+/// Get the SKILL.md file path for a given skill name
+fn skill_file_path(name: &str) -> BabataResult<PathBuf> {
+    Ok(skill_dir(name)?.join("SKILL.md"))
+}
+
+/// Check if a skill exists by name
+pub fn skill_exists(name: &str) -> BabataResult<bool> {
+    let path = skill_file_path(name)?;
+    Ok(path.exists())
+}
+
+/// Delete a skill by name
+pub fn delete_skill(name: &str) -> BabataResult<()> {
+    let dir = skill_dir(name)?;
+    if dir.exists() {
+        std::fs::remove_dir_all(&dir).map_err(|err| {
+            BabataError::internal(format!(
+                "Failed to delete skill directory '{}': {}",
+                dir.display(),
+                err
+            ))
+        })?;
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, PartialEq)]
