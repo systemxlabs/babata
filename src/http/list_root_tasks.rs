@@ -48,8 +48,6 @@ pub(super) struct ListRootTasksQuery {
     #[serde(default)]
     status: Option<String>,
     #[serde(default)]
-    search: Option<String>,
-    #[serde(default)]
     page: Option<usize>,
     #[serde(default)]
     page_size: Option<usize>,
