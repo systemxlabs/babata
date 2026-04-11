@@ -1,10 +1,17 @@
-import type { 
-  FileEntry, 
-  Task, 
-  TaskStatus, 
-  TaskFilter, 
-  TaskListResponse, 
-  TaskControlAction 
+// API 客户端
+import type {
+  FileEntry,
+  Task,
+  TaskStatus,
+  TaskFilter,
+  TaskListResponse,
+  TaskControlAction,
+  CountResponse,
+  TasksResponse,
+  AgentsResponse,
+  SkillsResponse,
+  CreateTaskRequest,
+  CreateTaskResponse,
 } from './types';
 
 const API_BASE_URL = '/api';
@@ -41,7 +48,7 @@ export interface TaskTreeResponse {
 // 获取根任务列表（支持分页和筛选）
 export function getRootTasks(filter: TaskFilter): Promise<TaskListResponse> {
   const params = new URLSearchParams();
-  
+
   if (filter.status && filter.status !== 'all') {
     params.append('status', filter.status);
   }
@@ -129,7 +136,7 @@ export function getTasks(params?: { status?: TaskStatus; limit?: number }): Prom
 }
 
 // 获取所有 Agent 列表（用于筛选）
-export function getAgents(): Promise<{ name: string; description: string }[]> {
+export function getAgentsList(): Promise<{ name: string; description: string }[]> {
   return fetchApi<{ agents: { name: string; description: string }[] }>('/agents')
     .then(res => res.agents);
 }
@@ -143,3 +150,42 @@ export function getTaskCount(status?: TaskStatus): Promise<{ count: number }> {
   const queryString = params.toString();
   return fetchApi<{ count: number }>(`/tasks/count${queryString ? `?${queryString}` : ''}`);
 }
+
+// API 对象（兼容主分支的 Dashboard 组件）
+export const api = {
+  // 获取运行中任务数量
+  getRunningTasksCount(): Promise<CountResponse> {
+    return fetchApi<CountResponse>(`/tasks/count?status=running`);
+  },
+
+  // 获取总任务数量
+  getTotalTasksCount(): Promise<CountResponse> {
+    return fetchApi<CountResponse>(`/tasks/count`);
+  },
+
+  // 获取 Agent 列表
+  getAgents(): Promise<AgentsResponse> {
+    return fetchApi<AgentsResponse>(`/agents`);
+  },
+
+  // 获取 Skill 列表
+  getSkills(): Promise<SkillsResponse> {
+    return fetchApi<SkillsResponse>(`/skills`);
+  },
+
+  // 获取运行中的任务列表
+  getRunningTasks(limit: number = 20): Promise<TasksResponse> {
+    return fetchApi<TasksResponse>(`/tasks?status=running&limit=${limit}`);
+  },
+
+  // 创建新任务
+  createTask(request: CreateTaskRequest): Promise<CreateTaskResponse> {
+    return fetchApi<CreateTaskResponse>(`/tasks`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    });
+  },
+};

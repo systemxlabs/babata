@@ -1,3 +1,5 @@
+// API 类型定义
+
 // 任务状态类型
 export type TaskStatus = 'running' | 'completed' | 'failed' | 'canceled' | 'paused';
 
@@ -13,7 +15,7 @@ export interface Task {
   description: string;
   agent: string;
   status: TaskStatus;
-  parent_task_id: string | null;
+  parent_task_id?: string | null;
   root_task_id: string;
   created_at: number;
   never_ends: boolean;
@@ -66,6 +68,47 @@ export interface TaskDetail extends Task {
   files: TaskFile[];
   logs: string[];
   final_response?: string;
+}
+
+// Agent 类型
+export interface Agent {
+  name: string;
+  description?: string;
+}
+
+// Skill 类型
+export interface Skill {
+  name: string;
+  description?: string;
+}
+
+// API 响应类型
+export interface CountResponse {
+  count: number;
+}
+
+export interface TasksResponse {
+  tasks: Task[];
+}
+
+export interface AgentsResponse {
+  agents: Agent[];
+}
+
+export interface SkillsResponse {
+  skills: Skill[];
+}
+
+export interface CreateTaskRequest {
+  agent: string;
+  prompt: string;
+  description: string;
+  task_type?: 'roottask' | 'subtask';
+}
+
+export interface CreateTaskResponse {
+  task_id: string;
+  status: string;
 }
 
 // 状态颜色映射
