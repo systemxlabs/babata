@@ -258,7 +258,6 @@ impl TaskStore {
         status: Option<TaskStatus>,
         limit: usize,
         offset: usize,
-        agent: Option<&str>,
     ) -> BabataResult<Vec<TaskRecord>> {
         if limit == 0 {
             return Ok(Vec::new());
@@ -273,11 +272,6 @@ impl TaskStore {
         if let Some(status) = status {
             conditions.push("status = ?".to_string());
             query_params.push(Box::new(status.to_string()));
-        }
-        
-        if let Some(agent) = agent {
-            conditions.push("agent = ?".to_string());
-            query_params.push(Box::new(agent.to_string()));
         }
 
         let where_clause = conditions.join(" AND ");
@@ -324,7 +318,6 @@ impl TaskStore {
     pub fn count_root_tasks(
         &self,
         status: Option<TaskStatus>,
-        agent: Option<&str>,
     ) -> BabataResult<usize> {
         let conn = self.connect()?;
 
@@ -335,11 +328,6 @@ impl TaskStore {
         if let Some(status) = status {
             conditions.push("status = ?".to_string());
             query_params.push(Box::new(status.to_string()));
-        }
-
-        if let Some(agent) = agent {
-            conditions.push("agent = ?".to_string());
-            query_params.push(Box::new(agent.to_string()));
         }
 
         let where_clause = conditions.join(" AND ");
