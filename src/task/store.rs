@@ -252,6 +252,152 @@ impl TaskStore {
         Ok(tasks)
     }
 
+    /// List root tasks (tasks with no parent) with optional filtering
+    pub fn list_root_tasks(
+        &self,
+        status: Option<TaskStatus>,
+        limit: usize,
+        offset: usize,
+        agent: Option<&str>,
+        search: Option<&str>,
+    ) -> BabataResult<Vec<TaskRecord>> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+
+        let conn = self.connect()?;
+        
+        // Build the WHERE clause based on filters
+        let mut conditions = vec!["parent_task_id IS NULL".to_string()];
+        let mut query_params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+        
+        if let Some(status) = status {
+            conditions.push("status = ?".to_string());
+            query_params.push(Box::new(status.to_string()));
+        }
+        
+        if let Some(agent) = agent {
+            conditions.push("agent = ?".to_string());
+            query_params.push(Box::new(agent.to_string()));
+        }
+        
+        if let Some(search) = search {
+            conditions.push("description LIKE ?".to_string());
+            query_params.push(Box::new(format!("%{}%", search)));
+        }
+        
+        let where_clause = conditions.join(" AND ");
+        
+        // Convert params for query
+        let params_refs: Vec<&dyn rusqlite::ToSql> = query_params
+            .iter()
+            .map(|p| p.as_ref())
+            .collect();
+        
+        let sql = format!(
+            "SELECT task_id, description, agent, status, parent_task_id, root_task_id, created_at, never_ends
+             FROM tasks
+             WHERE {}
+             ORDER BY created_at DESC
+             LIMIT ? OFFSET ?",
+            where_clause
+        );
+        
+        let mut stmt = conn.prepare(&sql).map_err(|err| {
+            BabataError::internal(format!(
+                "Failed to prepare root task list query statement: {}",
+                err
+            ))
+        })?;
+        
+        // Bind limit and offset separately to avoid borrow issues
+        let limit_i64 = limit as i64;
+        let offset_i64 = offset as i64;
+        
+        let tasks = collect_task_records(
+            stmt.query_map(rusqlite::params_from_iter(
+                params_refs.iter().copied().chain([&limit_i64 as &dyn rusqlite::ToSql, &offset_i64])
+            ), parse_task_record)
+                .map_err(|err| {
+                    BabataError::internal(format!("Failed to query root task rows: {}", err))
+                })?,
+        )?;
+        
+        Ok(tasks)
+    }
+    
+    /// Count root tasks with optional filtering
+    pub fn count_root_tasks(
+        &self,
+        status: Option<TaskStatus>,
+        agent: Option<&str>,
+        search: Option<&str>,
+    ) -> BabataResult<usize> {
+        let conn = self.connect()?;
+        
+        // Build the WHERE clause based on filters
+        let mut conditions = vec!["parent_task_id IS NULL".to_string()];
+        let mut query_params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+        
+        if let Some(status) = status {
+            conditions.push("status = ?".to_string());
+            query_params.push(Box::new(status.to_string()));
+        }
+        
+        if let Some(agent) = agent {
+            conditions.push("agent = ?".to_string());
+            query_params.push(Box::new(agent.to_string()));
+        }
+        
+        if let Some(search) = search {
+            conditions.push("description LIKE ?".to_string());
+            query_params.push(Box::new(format!("%{}%", search)));
+        }
+        
+        let where_clause = conditions.join(" AND ");
+        
+        // Convert params for query
+        let params_refs: Vec<&dyn rusqlite::ToSql> = query_params
+            .iter()
+            .map(|p| p.as_ref())
+            .collect();
+        
+        let sql = format!("SELECT COUNT(*) FROM tasks WHERE {}", where_clause);
+        
+        let count: i64 = conn.query_row(&sql, params_refs.as_slice(), |row| row.get(0))
+            .map_err(|err| {
+                BabataError::internal(format!("Failed to count root task rows: {}", err))
+            })?;
+        
+        usize::try_from(count).map_err(|err| {
+            BabataError::internal(format!(
+                "Failed to convert task count '{}' to usize: {}",
+                count, err
+            ))
+        })
+    }
+
+    /// Count subtasks for a given task
+    pub fn count_subtasks(&self, task_id: Uuid) -> BabataResult<usize> {
+        let conn = self.connect()?;
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM tasks WHERE parent_task_id = ?1",
+                params![task_id.to_string()],
+                |row| row.get(0),
+            )
+            .map_err(|err| {
+                BabataError::internal(format!("Failed to count subtask rows: {}", err))
+            })?;
+
+        usize::try_from(count).map_err(|err| {
+            BabataError::internal(format!(
+                "Failed to convert subtask count '{}' to usize: {}",
+                count, err
+            ))
+        })
+    }
+
     pub fn count_tasks(&self, status: Option<TaskStatus>) -> BabataResult<usize> {
         let conn = self.connect()?;
         let count = match status {

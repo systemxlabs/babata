@@ -8,9 +8,11 @@ mod delete_skill;
 mod delete_task;
 mod get_agent;
 mod get_task;
+mod get_task_children;
 mod get_task_file;
 mod get_task_logs;
 mod list_agents;
+mod list_root_tasks;
 mod list_skills;
 mod list_task_files;
 mod list_tasks;
@@ -82,6 +84,7 @@ fn router(task_manager: Arc<TaskManager>) -> Router {
         .route("/api/skills", get(list_skills::handle))
         .route("/api/skills/{name}", delete(delete_skill::handle))
         .route("/api/tasks/count", get(count_tasks::handle))
+        .route("/api/tasks/roots", get(list_root_tasks::handle))
         .route(
             "/api/tasks",
             get(list_tasks::handle).post(create_task::handle),
@@ -90,6 +93,7 @@ fn router(task_manager: Arc<TaskManager>) -> Router {
             "/api/tasks/{task_id}",
             get(get_task::handle).delete(delete_task::handle),
         )
+        .route("/api/tasks/{task_id}/children", get(get_task_children::handle))
         .route("/api/tasks/{task_id}/files", get(list_task_files::handle))
         .route(
             "/api/tasks/{task_id}/files/{*path}",

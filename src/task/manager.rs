@@ -317,6 +317,35 @@ impl TaskManager {
         self.store.list_tasks(status, limit, offset)
     }
 
+    /// List root tasks with pagination and filtering
+    pub fn list_root_tasks(
+        &self,
+        status: Option<TaskStatus>,
+        limit: usize,
+        offset: usize,
+        agent: Option<&str>,
+        search: Option<&str>,
+    ) -> BabataResult<(Vec<(TaskRecord, usize)>, usize)> {
+        let tasks = self.store.list_root_tasks(status, limit, offset, agent, search)?;
+        let total = self.store.count_root_tasks(status, agent, search)?;
+        
+        // Get subtask count for each task
+        let tasks_with_count: Vec<(TaskRecord, usize)> = tasks
+            .into_iter()
+            .map(|task| {
+                let count = self.store.count_subtasks(task.task_id).unwrap_or(0);
+                (task, count)
+            })
+            .collect();
+        
+        Ok((tasks_with_count, total))
+    }
+
+    /// Get children of a task
+    pub fn get_task_children(&self, task_id: Uuid) -> BabataResult<Vec<TaskRecord>> {
+        self.store.list_subtasks(task_id)
+    }
+
     pub fn get_task(&self, task_id: Uuid) -> BabataResult<TaskRecord> {
         self.store.get_task(task_id)
     }
