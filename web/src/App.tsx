@@ -4,6 +4,7 @@ import { api } from './api';
 import type { Task, Agent, Skill } from './types';
 import { Agents } from './pages/Agents/Agents';
 import { Skills } from './pages/Skills/Skills';
+import { Tasks } from './pages/Tasks/Tasks';
 
 // 格式化时间显示
 function formatTimeAgo(timestamp: number): string {
@@ -350,14 +351,9 @@ function DashboardPage() {
   );
 }
 
-// Tasks 页面占位
+// Tasks 页面
 function TasksPage() {
-  return (
-    <div className="placeholder-page">
-      <h1>📋 任务管理</h1>
-      <p>任务管理页面正在开发中...</p>
-    </div>
-  );
+  return <Tasks />;
 }
 
 // Agents 页面包装器
