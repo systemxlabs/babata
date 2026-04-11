@@ -12,6 +12,9 @@ import type {
   SkillsResponse,
   CreateTaskRequest,
   CreateTaskResponse,
+  CreateAgentRequest,
+  UpdateAgentRequest,
+  GetAgentResponse,
 } from './types';
 
 const API_BASE_URL = '/api';
@@ -203,3 +206,33 @@ export const api = {
     });
   },
 };
+
+// ========== Agent CRUD API 函数 ==========
+
+// 创建 Agent
+export function createAgent(agent: CreateAgentRequest): Promise<void> {
+  return fetchApi<void>('/agents', {
+    method: 'POST',
+    body: JSON.stringify(agent),
+  });
+}
+
+// 获取单个 Agent 详情
+export function getAgent(name: string): Promise<GetAgentResponse> {
+  return fetchApi<GetAgentResponse>(`/agents/${encodeURIComponent(name)}`);
+}
+
+// 更新 Agent
+export function updateAgent(name: string, agent: UpdateAgentRequest): Promise<void> {
+  return fetchApi<void>(`/agents/${encodeURIComponent(name)}`, {
+    method: 'PUT',
+    body: JSON.stringify(agent),
+  });
+}
+
+// 删除 Agent
+export function deleteAgent(name: string): Promise<void> {
+  return fetchApi<void>(`/agents/${encodeURIComponent(name)}`, {
+    method: 'DELETE',
+  });
+}
