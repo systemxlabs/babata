@@ -1,0 +1,64 @@
+/* 状态标签样式 */
+
+.task-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.task-status-badge.size-sm {
+  padding: 2px 6px;
+  font-size: 11px;
+  gap: 4px;
+}
+
+.task-status-badge.size-sm .status-icon {
+  width: 12px;
+  height: 12px;
+}
+
+.task-status-badge.size-md {
+  padding: 4px 10px;
+  font-size: 13px;
+}
+
+.task-status-badge.size-md .status-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.task-status-badge.size-lg {
+  padding: 6px 12px;
+  font-size: 14px;
+}
+
+.task-status-badge.size-lg .status-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.status-icon {
+  flex-shrink: 0;
+}
+
+.status-icon.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.status-label {
+  line-height: 1;
+}

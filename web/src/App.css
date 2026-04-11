@@ -1,12 +1,169 @@
+/* App 样式 */
+
 .app {
-  display: flex;
-  justify-content: center;
-  align-items: center;
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #0f172a;
+}
+
+/* 导航栏 */
+.main-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  height: 64px;
+  background: #1e293b;
+  border-bottom: 1px solid #334155;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #f8fafc;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.nav-brand svg {
+  color: #3b82f6;
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  color: #94a3b8;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 8px;
+  transition: all 0.15s;
+}
+
+.nav-link:hover {
+  color: #f8fafc;
+  background: #334155;
+}
+
+.nav-link.active {
+  color: #3b82f6;
+  background: rgba(59, 130, 246, 0.1);
+}
+
+/* 主内容区 */
+.main-content {
+  flex: 1;
+  overflow: auto;
+}
+
+/* 首页 */
+.home-page {
+  padding: 48px 24px;
+  max-width: 1200px;
+  margin: 0 auto;
   text-align: center;
 }
 
-h1 {
-  font-size: 2.5rem;
-  color: #333;
+.home-page h1 {
+  font-size: 36px;
+  font-weight: 700;
+  color: #f8fafc;
+  margin: 0 0 16px 0;
+}
+
+.home-page p {
+  font-size: 18px;
+  color: #94a3b8;
+  margin: 0 0 32px 0;
+}
+
+.quick-links {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 48px;
+}
+
+.quick-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 24px;
+  background: #3b82f6;
+  color: #fff;
+  text-decoration: none;
+  font-size: 16px;
+  font-weight: 500;
+  border-radius: 12px;
+  transition: all 0.15s;
+}
+
+.quick-link:hover {
+  background: #2563eb;
+  transform: translateY(-2px);
+}
+
+/* 页面占位符 */
+.page-placeholder {
+  padding: 48px 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.page-placeholder h1 {
+  font-size: 28px;
+  font-weight: 600;
+  color: #f8fafc;
+  margin: 0 0 16px 0;
+}
+
+.page-placeholder p {
+  font-size: 16px;
+  color: #94a3b8;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .main-nav {
+    padding: 0 16px;
+    height: 56px;
+  }
+
+  .nav-brand {
+    font-size: 18px;
+  }
+
+  .nav-brand span {
+    display: none;
+  }
+
+  .nav-link {
+    padding: 8px 12px;
+  }
+
+  .nav-link span {
+    display: none;
+  }
+
+  .home-page h1 {
+    font-size: 28px;
+  }
+
+  .home-page p {
+    font-size: 16px;
+  }
 }

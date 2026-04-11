@@ -1,0 +1,262 @@
+.task-logs-tab {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: #1e1e1e;
+}
+
+.logs-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #252526;
+  border-bottom: 1px solid #333;
+}
+
+.logs-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.logs-count {
+  font-size: 0.875rem;
+  color: #9ca3af;
+}
+
+.auto-scroll-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.875rem;
+  color: #9ca3af;
+  cursor: pointer;
+  user-select: none;
+}
+
+.auto-scroll-toggle input {
+  cursor: pointer;
+}
+
+.refresh-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #3b82f6;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: background 0.2s;
+}
+
+.refresh-btn:hover:not(:disabled) {
+  background: #2563eb;
+}
+
+.refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.refresh-btn.refreshing .refresh-icon {
+  animation: spin 1s linear infinite;
+}
+
+.refresh-icon {
+  width: 16px;
+  height: 16px;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.logs-container {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: auto;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+.logs-list {
+  padding: 8px 0;
+  min-width: fit-content;
+}
+
+.log-line {
+  display: flex;
+  padding: 2px 16px;
+  white-space: nowrap;
+  transition: background 0.1s;
+}
+
+.log-line:hover {
+  background: #2d2d30;
+}
+
+.log-line-number {
+  width: 50px;
+  flex-shrink: 0;
+  color: #6b7280;
+  text-align: right;
+  padding-right: 16px;
+  user-select: none;
+}
+
+.log-content {
+  color: #d4d4d4;
+  white-space: pre;
+}
+
+.log-timestamp {
+  color: #6b7280;
+}
+
+.log-level {
+  font-weight: 600;
+}
+
+.log-level-info {
+  color: #3b82f6;
+}
+
+.log-level-error {
+  color: #ef4444;
+}
+
+.log-level-warn {
+  color: #f59e0b;
+}
+
+.log-level-debug {
+  color: #8b5cf6;
+}
+
+.log-level-trace {
+  color: #9ca3af;
+}
+
+.logs-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 12px;
+  color: #9ca3af;
+}
+
+.spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #374151;
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.logs-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 20px;
+  color: #ef4444;
+  text-align: center;
+}
+
+.logs-error p {
+  margin: 0 0 8px;
+}
+
+.error-message {
+  font-size: 0.875rem;
+  color: #9ca3af;
+}
+
+.retry-btn {
+  margin-top: 16px;
+  padding: 8px 16px;
+  background: #3b82f6;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: background 0.2s;
+}
+
+.retry-btn:hover {
+  background: #2563eb;
+}
+
+.logs-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #6b7280;
+  text-align: center;
+}
+
+.logs-empty p {
+  margin: 0;
+}
+
+.empty-hint {
+  font-size: 0.875rem;
+  color: #4b5563;
+  margin-top: 8px !important;
+}
+
+.scroll-to-bottom-btn {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  padding: 8px 16px;
+  background: #3b82f6;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+  transition: background 0.2s;
+}
+
+.scroll-to-bottom-btn:hover {
+  background: #2563eb;
+}
+
+/* 滚动条样式 */
+.logs-container::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.logs-container::-webkit-scrollbar-track {
+  background: #1e1e1e;
+}
+
+.logs-container::-webkit-scrollbar-thumb {
+  background: #4b5563;
+  border-radius: 5px;
+}
+
+.logs-container::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
+}
