@@ -3,8 +3,9 @@ use axum::{
     extract::{Path, State},
 };
 use serde::Serialize;
+use uuid::Uuid;
 
-use crate::{BabataResult, task::TaskRecord};
+use crate::{BabataResult, task::TaskRecord, task::TaskStatus};
 
 use super::{HttpApp, ensure_task_exists, parse_task_id};
 
@@ -37,12 +38,12 @@ fn build_task_tree(
 
 #[derive(Debug, Serialize)]
 pub(crate) struct TaskTreeResponse {
-    pub(crate) task_id: String,
+    pub(crate) task_id: Uuid,
     pub(crate) description: String,
     pub(crate) agent: String,
-    pub(crate) status: String,
-    pub(crate) parent_task_id: Option<String>,
-    pub(crate) root_task_id: String,
+    pub(crate) status: TaskStatus,
+    pub(crate) parent_task_id: Option<Uuid>,
+    pub(crate) root_task_id: Uuid,
     pub(crate) created_at: i64,
     pub(crate) never_ends: bool,
     pub(crate) children: Vec<TaskTreeResponse>,
@@ -51,12 +52,12 @@ pub(crate) struct TaskTreeResponse {
 impl TaskTreeResponse {
     fn from_record(record: TaskRecord, children: Vec<TaskTreeResponse>) -> Self {
         Self {
-            task_id: record.task_id.to_string(),
+            task_id: record.task_id,
             description: record.description,
             agent: record.agent,
-            status: record.status.to_string(),
-            parent_task_id: record.parent_task_id.map(|id| id.to_string()),
-            root_task_id: record.root_task_id.to_string(),
+            status: record.status,
+            parent_task_id: record.parent_task_id,
+            root_task_id: record.root_task_id,
             created_at: record.created_at,
             never_ends: record.never_ends,
             children,

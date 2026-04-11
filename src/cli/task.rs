@@ -297,12 +297,12 @@ fn format_root_tasks_table(tasks: &[RootTaskResponse]) -> String {
 
     for task in tasks {
         table.add_row([
-            task.task_id.clone(),
-            task.status.clone(),
+            task.task_id.to_string(),
+            task.status.to_string(),
             task.never_ends.to_string(),
             task.agent.clone(),
             task.parent_task_id
-                .clone()
+                .map(|id| id.to_string())
                 .unwrap_or_else(|| "-".to_string()),
             task.subtask_count.to_string(),
             format_timestamp(task.created_at),

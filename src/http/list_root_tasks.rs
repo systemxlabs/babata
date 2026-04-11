@@ -3,10 +3,10 @@ use axum::{
     extract::{Query, State},
 };
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use crate::{
     BabataResult,
-    error::BabataError,
     task::{TaskRecord, TaskStatus},
 };
 
@@ -16,21 +16,13 @@ pub(super) async fn handle(
     State(state): State<HttpApp>,
     Query(query): Query<ListRootTasksQuery>,
 ) -> BabataResult<Json<ListRootTasksResponse>> {
-    let status = match query.status {
-        Some(status) => match status.parse::<TaskStatus>() {
-            Ok(status) => Some(status),
-            Err(err) => return Err(BabataError::invalid_input(err)),
-        },
-        None => None,
-    };
-
     let page = query.page.unwrap_or(1);
     let page_size = query.page_size.unwrap_or(20);
     let offset = (page.saturating_sub(1)) * page_size;
 
     let (tasks, total) = state
         .task_manager
-        .list_root_tasks(status, page_size, offset)?;
+        .list_root_tasks(query.status, page_size, offset)?;
 
     Ok(Json(ListRootTasksResponse {
         tasks: tasks
@@ -46,7 +38,7 @@ pub(super) async fn handle(
 #[derive(Debug, Deserialize)]
 pub(super) struct ListRootTasksQuery {
     #[serde(default)]
-    status: Option<String>,
+    status: Option<TaskStatus>,
     #[serde(default)]
     page: Option<usize>,
     #[serde(default)]
@@ -63,12 +55,12 @@ pub(crate) struct ListRootTasksResponse {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct RootTaskResponse {
-    pub(crate) task_id: String,
+    pub(crate) task_id: Uuid,
     pub(crate) description: String,
     pub(crate) agent: String,
-    pub(crate) status: String,
-    pub(crate) parent_task_id: Option<String>,
-    pub(crate) root_task_id: String,
+    pub(crate) status: TaskStatus,
+    pub(crate) parent_task_id: Option<Uuid>,
+    pub(crate) root_task_id: Uuid,
     pub(crate) created_at: i64,
     pub(crate) never_ends: bool,
     pub(crate) subtask_count: usize,
@@ -77,12 +69,12 @@ pub(crate) struct RootTaskResponse {
 impl RootTaskResponse {
     pub(crate) fn from_record((record, subtask_count): (TaskRecord, usize)) -> Self {
         Self {
-            task_id: record.task_id.to_string(),
+            task_id: record.task_id,
             description: record.description,
             agent: record.agent,
-            status: record.status.to_string(),
-            parent_task_id: record.parent_task_id.map(|task_id| task_id.to_string()),
-            root_task_id: record.root_task_id.to_string(),
+            status: record.status,
+            parent_task_id: record.parent_task_id,
+            root_task_id: record.root_task_id,
             created_at: record.created_at,
             never_ends: record.never_ends,
             subtask_count,
