@@ -94,7 +94,6 @@ function Sidebar({ currentPage, onPageChange }: { currentPage: PageType; onPageC
 function DashboardPage() {
   // 统计数据
   const [runningCount, setRunningCount] = useState<number>(0);
-  const [totalCount, setTotalCount] = useState<number>(0);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [skills, setSkills] = useState<Skill[]>([]);
 
@@ -114,14 +113,12 @@ function DashboardPage() {
   // 获取统计数据
   const fetchStats = useCallback(async () => {
     try {
-      const [runningRes, totalRes, agentsRes, skillsRes] = await Promise.all([
+      const [runningRes, agentsRes, skillsRes] = await Promise.all([
         api.getRunningTasksCount(),
-        api.getTotalTasksCount(),
         api.getAgents(),
         api.getSkills(),
       ]);
       setRunningCount(runningRes.count);
-      setTotalCount(totalRes.count);
       setAgents(agentsRes.agents);
       setSkills(skillsRes.skills);
       if (agentsRes.agents.length > 0 && !selectedAgent) {
@@ -246,11 +243,11 @@ function DashboardPage() {
             <div className="stats-label">运行中任务</div>
           </div>
         </div>
-        <div className="stats-card total">
-          <div className="stats-icon">📋</div>
+        <div className="stats-card root-tasks">
+          <div className="stats-icon">🌳</div>
           <div className="stats-content">
-            <div className="stats-value">{totalCount}</div>
-            <div className="stats-label">总任务数</div>
+            <div className="stats-value">{rootTasksWithChildren.length}</div>
+            <div className="stats-label">运行中的根任务</div>
           </div>
         </div>
         <div className="stats-card agents">
