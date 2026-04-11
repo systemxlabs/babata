@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::{
     BabataResult,
     error::BabataError,
-    http::{ControlTaskRequest, DEFAULT_HTTP_BASE_URL, TaskAction},
+    http::{ControlTaskRequest, TaskAction, http_base_url},
     tool::{Tool, ToolContext, ToolSpec, parse_tool_args},
 };
 
@@ -39,8 +39,9 @@ impl Tool for ControlTaskTool {
 
     async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
         let args: ControlTaskArgs = parse_tool_args(args)?;
+        let base_url = http_base_url()?;
 
-        let url = format!("{DEFAULT_HTTP_BASE_URL}/api/tasks/{}/control", args.task_id);
+        let url = format!("{base_url}/api/tasks/{}/control", args.task_id);
 
         let response = self
             .http_client

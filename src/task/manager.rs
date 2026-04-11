@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use chrono::Utc;
 use futures::FutureExt;
-use log::{error, info, warn};
+use log::{error, info};
 use parking_lot::Mutex;
 use tokio::{sync::mpsc, task::JoinHandle};
 use uuid::Uuid;
@@ -297,7 +297,7 @@ impl TaskManager {
     pub fn cancel_task(&self, task_id: Uuid) -> BabataResult<()> {
         info!("Cancelling task {}", task_id);
         let task = self.store.get_task(task_id)?;
-        if matches!(task.status, TaskStatus::Done | TaskStatus::Canceled) {
+        if task.status.is_terminal_status() {
             return Err(BabataError::invalid_input(format!(
                 "Task '{}' cannot be canceled from status '{}'",
                 task_id, task.status
@@ -315,6 +315,33 @@ impl TaskManager {
         offset: Option<usize>,
     ) -> BabataResult<Vec<TaskRecord>> {
         self.store.list_tasks(status, limit, offset)
+    }
+
+    /// List root tasks with pagination and filtering
+    pub fn list_root_tasks(
+        &self,
+        status: Option<TaskStatus>,
+        limit: usize,
+        offset: usize,
+    ) -> BabataResult<(Vec<(TaskRecord, usize)>, usize)> {
+        let tasks = self.store.list_root_tasks(status, limit, offset)?;
+        let total = self.store.count_root_tasks(status)?;
+
+        // Get subtask count for each task
+        let tasks_with_count: Vec<(TaskRecord, usize)> = tasks
+            .into_iter()
+            .map(|task| {
+                let count = self.store.count_subtasks(task.task_id).unwrap_or(0);
+                (task, count)
+            })
+            .collect();
+
+        Ok((tasks_with_count, total))
+    }
+
+    /// Get children of a task
+    pub fn get_task_children(&self, task_id: Uuid) -> BabataResult<Vec<TaskRecord>> {
+        self.store.list_subtasks(task_id)
     }
 
     pub fn get_task(&self, task_id: Uuid) -> BabataResult<TaskRecord> {
@@ -424,7 +451,7 @@ impl TaskManager {
 
         if self.has_unfinished_subtasks(task_id) {
             let reason = format!(
-                "Task {} is being relaunched because it attempted to finish while there are still unfinished subtasks. A parent task must remain running until all of its subtasks are done or canceled.",
+                "Task {} is being relaunched because it attempted to finish while there are still unfinished subtasks. A parent task must remain running until all of its subtasks are completed, failed, or canceled.",
                 task.task_id
             );
             self.relaunch_after_completion(&task, &reason, "deferred completion");
@@ -441,9 +468,12 @@ impl TaskManager {
         }
 
         info!("Task {} completed successfully", task_id);
-        if let Err(err) = self.store.update_task_status(task_id, TaskStatus::Done) {
+        if let Err(err) = self
+            .store
+            .update_task_status(task_id, TaskStatus::Completed)
+        {
             error!(
-                "Failed to update status to done for task {}: {}",
+                "Failed to update status to completed for task {}: {}",
                 task_id, err
             );
         }
@@ -487,25 +517,20 @@ impl TaskManager {
             return;
         }
 
-        warn!("Task {} failed and will be relaunched: {}", task_id, error);
-        let reason = format!(
-            "Task {} is being relaunched after the previous execution failed with error: {}",
-            task_id, error
-        );
-        match self.launcher.relaunch(&task, self.exit_tx.clone(), &reason) {
-            Ok(running_task) => {
-                self.running_tasks.lock().insert(task_id, running_task);
-            }
-            Err(err) => {
-                error!("Failed to relaunch task {} after failure: {}", task_id, err);
-            }
+        error!("Task {task_id} failed: {error}");
+        if let Err(err) = self.store.update_task_status(task_id, TaskStatus::Failed) {
+            error!(
+                "Failed to update status to failed for task {}: {}",
+                task_id, err
+            );
         }
     }
+
     fn has_unfinished_subtasks(&self, task_id: Uuid) -> bool {
         match self.store.list_subtasks(task_id) {
             Ok(subtasks) => subtasks
                 .into_iter()
-                .any(|task| !matches!(task.status, TaskStatus::Done | TaskStatus::Canceled)),
+                .any(|task| !task.status.is_terminal_status()),
             Err(err) => {
                 error!(
                     "Failed to load subtasks for task {} while checking completion: {}",
@@ -524,7 +549,7 @@ impl TaskManager {
             self.cancel_task_recursive(subtask.task_id)?;
         }
 
-        if matches!(task.status, TaskStatus::Done | TaskStatus::Canceled) {
+        if task.status.is_terminal_status() {
             return Ok(());
         }
 
@@ -689,7 +714,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn handle_task_completed_marks_root_task_done() {
+    async fn handle_task_completed_marks_root_task_completed() {
         let temp_root = temp_test_root("manager-complete-root");
         fs::create_dir_all(&temp_root).expect("create temp root");
         let manager = build_test_manager(&temp_root);
@@ -702,7 +727,7 @@ mod tests {
         manager.handle_task_completed(task.task_id);
 
         let stored_task = manager.store.get_task(task.task_id).expect("load task");
-        assert_eq!(stored_task.status, TaskStatus::Done);
+        assert_eq!(stored_task.status, TaskStatus::Completed);
         let _ = fs::remove_dir_all(&temp_root);
     }
 
@@ -732,6 +757,26 @@ mod tests {
         assert!(manager.running_tasks.lock().contains_key(&task.task_id));
 
         cleanup_task_artifacts(&manager, task.task_id);
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[tokio::test]
+    async fn handle_task_failed_marks_task_failed_without_relaunch() {
+        let temp_root = temp_test_root("manager-failure-no-relaunch");
+        fs::create_dir_all(&temp_root).expect("create temp root");
+        let manager = build_test_manager(&temp_root);
+        let task = task_record(false);
+        manager
+            .store
+            .insert_task(task.clone())
+            .expect("insert task record");
+
+        manager.handle_task_failed(task.task_id, BabataError::tool("boom"));
+
+        let stored_task = manager.store.get_task(task.task_id).expect("load task");
+        assert_eq!(stored_task.status, TaskStatus::Failed);
+        assert!(!manager.running_tasks.lock().contains_key(&task.task_id));
+
         let _ = fs::remove_dir_all(&temp_root);
     }
 

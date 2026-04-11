@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::{
     BabataResult,
     error::BabataError,
-    http::{DEFAULT_HTTP_BASE_URL, SteerTaskRequest},
+    http::{SteerTaskRequest, http_base_url},
     message::Content,
     tool::{Tool, ToolContext, ToolSpec, parse_tool_args},
 };
@@ -45,16 +45,14 @@ impl Tool for SteerTaskTool {
 
     async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
         let args: SteerTaskArgs = parse_tool_args(args)?;
+        let base_url = http_base_url()?;
         let request = SteerTaskRequest {
             content: vec![Content::Text { text: args.content }],
         };
 
         let response = self
             .http_client
-            .post(format!(
-                "{DEFAULT_HTTP_BASE_URL}/api/tasks/{}/steer",
-                args.task_id
-            ))
+            .post(format!("{base_url}/api/tasks/{}/steer", args.task_id))
             .json(&request)
             .send()
             .await

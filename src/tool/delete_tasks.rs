@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::{
     BabataResult,
     error::BabataError,
-    http::DEFAULT_HTTP_BASE_URL,
+    http::http_base_url,
     tool::{Tool, ToolContext, ToolSpec, parse_tool_args},
 };
 
@@ -37,13 +37,14 @@ impl Tool for DeleteTasksTool {
 
     async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
         let args: DeleteTasksArgs = parse_tool_args(args)?;
+        let base_url = http_base_url()?;
 
         // Delete tasks
         let mut success_ids = Vec::new();
         let mut failures = Vec::new();
 
         for task_id in args.tasks {
-            match delete_task(&self.http_client, task_id).await {
+            match delete_task(&self.http_client, &base_url, task_id).await {
                 Ok(_) => success_ids.push(task_id.to_string()),
                 Err(err) => failures.push((task_id.to_string(), err.to_string())),
             }
@@ -83,8 +84,8 @@ struct DeleteTasksArgs {
     tasks: Vec<Uuid>,
 }
 
-async fn delete_task(http_client: &Client, task_id: Uuid) -> BabataResult<String> {
-    let url = format!("{DEFAULT_HTTP_BASE_URL}/api/tasks/{task_id}");
+async fn delete_task(http_client: &Client, base_url: &str, task_id: Uuid) -> BabataResult<String> {
+    let url = format!("{base_url}/api/tasks/{task_id}");
 
     let response = http_client.delete(&url).send().await.map_err(|err| {
         BabataError::tool(format!("Failed to call delete_task HTTP API: {}", err))
