@@ -12,10 +12,6 @@ import type {
   SkillsResponse,
   CreateTaskRequest,
   CreateTaskResponse,
-  AgentDetail,
-  CreateAgentRequest,
-  UpdateAgentRequest,
-  GetAgentResponse,
 } from './types';
 
 const API_BASE_URL = '/api';
@@ -35,8 +31,6 @@ async function fetchApi<T>(url: string, options?: RequestInit): Promise<T> {
 
   return response.json();
 }
-
-// ========== 任务相关 API ==========
 
 // 任务树响应类型
 export interface TaskTreeResponse {
@@ -113,6 +107,13 @@ export function deleteTask(taskId: string): Promise<void> {
   });
 }
 
+// 删除技能
+export function deleteSkill(name: string): Promise<void> {
+  return fetchApi<void>(`/skills/${encodeURIComponent(name)}`, {
+    method: 'DELETE',
+  });
+}
+
 // 控制任务（暂停/恢复/取消）
 export function controlTask(taskId: string, action: TaskControlAction): Promise<void> {
   return fetchApi<void>(`/tasks/${taskId}/control`, {
@@ -141,49 +142,11 @@ export function getTasks(params?: { status?: TaskStatus; limit?: number }): Prom
   return fetchApi<Task[]>(`/tasks${queryString ? `?${queryString}` : ''}`);
 }
 
-// ========== Agent 相关 API ==========
-
-// 获取单个 Agent 详情
-export function getAgent(name: string): Promise<GetAgentResponse> {
-  return fetchApi<GetAgentResponse>(`/agents/${encodeURIComponent(name)}`);
-}
-
-// 创建 Agent
-export function createAgent(request: CreateAgentRequest): Promise<AgentDetail> {
-  return fetchApi<AgentDetail>(`/agents`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(request),
-  });
-}
-
-// 更新 Agent
-export function updateAgent(name: string, request: UpdateAgentRequest): Promise<AgentDetail> {
-  return fetchApi<AgentDetail>(`/agents/${encodeURIComponent(name)}`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(request),
-  });
-}
-
-// 删除 Agent
-export function deleteAgent(name: string): Promise<void> {
-  return fetchApi<void>(`/agents/${encodeURIComponent(name)}`, {
-    method: 'DELETE',
-  });
-}
-
 // 获取所有 Agent 列表（用于筛选）
 export function getAgentsList(): Promise<{ name: string; description: string }[]> {
   return fetchApi<{ agents: { name: string; description: string }[] }>('/agents')
     .then(res => res.agents);
 }
-
-// ========== 统计相关 API ==========
 
 // 获取任务数量统计
 export function getTaskCount(status?: TaskStatus): Promise<{ count: number }> {
@@ -195,8 +158,7 @@ export function getTaskCount(status?: TaskStatus): Promise<{ count: number }> {
   return fetchApi<{ count: number }>(`/tasks/count${queryString ? `?${queryString}` : ''}`);
 }
 
-// ========== API 对象（兼容 Dashboard 组件） ==========
-
+// API 对象（兼容主分支的 Dashboard 组件）
 export const api = {
   // 获取运行中任务数量
   getRunningTasksCount(): Promise<CountResponse> {
@@ -234,17 +196,10 @@ export const api = {
     });
   },
 
-  // ========== Agent CRUD API ==========
-
-  // 获取单个 Agent 详情
-  getAgent,
-
-  // 创建 Agent
-  createAgent,
-
-  // 更新 Agent
-  updateAgent,
-
-  // 删除 Agent
-  deleteAgent,
+  // 删除技能
+  deleteSkill(name: string): Promise<void> {
+    return fetchApi<void>(`/skills/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
+    });
+  },
 };
