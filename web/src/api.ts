@@ -214,6 +214,19 @@ export const api = {
     });
   },
 
+  // 获取单个 Agent 详情
+  async getAgent(name: string): Promise<Agent | null> {
+    try {
+      const response = await fetchApi<GetAgentResponse>(`/agents/${encodeURIComponent(name)}`);
+      return response;
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('404')) {
+        return null;
+      }
+      throw error;
+    }
+  },
+
   // 创建 Agent
   createAgent(agent: CreateAgentRequest): Promise<void> {
     return fetchApi<void>('/agents', {
@@ -230,21 +243,15 @@ export const api = {
     });
   },
 
-  // 获取单个 Agent 详情
-  async getAgent(name: string): Promise<Agent | null> {
-    try {
-      const response = await fetchApi<GetAgentResponse>(`/agents/${encodeURIComponent(name)}`);
-      return response;
-    } catch (error) {
-      if (error instanceof Error && error.message.includes('404')) {
-        return null;
-      }
-      throw error;
-    }
+  // 删除 Agent
+  deleteAgent(name: string): Promise<void> {
+    return fetchApi<void>(`/agents/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
+    });
   },
 };
 
-// ========== Agent CRUD API 函数 ==========
+// ========== Agent CRUD API 函数 (独立导出) ==========
 
 /**
  * 获取单个 Agent 详情
