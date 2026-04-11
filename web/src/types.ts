@@ -9,6 +9,7 @@ export interface Task {
   root_task_id: string;
   created_at: number;
   never_ends: boolean;
+  subtask_count: number;
 }
 
 export interface Agent {

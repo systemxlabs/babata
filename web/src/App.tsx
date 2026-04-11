@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import './App.css';
 import { api } from './api';
 import type { Task, Agent, Skill } from './types';
@@ -151,24 +151,8 @@ function App() {
     }
   };
 
-  // 计算根任务及其子任务数
-  const rootTasksWithChildren = useMemo(() => {
-    // 获取所有根任务（parent_task_id 为 null 或 undefined）
-    const rootTasks = tasks.filter(
-      (task) => !task.parent_task_id || task.parent_task_id === null
-    );
-
-    // 计算每个根任务的子任务数
-    return rootTasks.map((rootTask) => {
-      const childrenCount = tasks.filter(
-        (task) =>
-          task.root_task_id === rootTask.task_id &&
-          task.parent_task_id &&
-          task.parent_task_id !== null
-      ).length;
-      return { ...rootTask, childrenCount };
-    });
-  }, [tasks]);
+  // 获取根任务列表（API 返回的已经是根任务列表）
+  const rootTasks = tasks;
 
   return (
     <div className="dashboard">
@@ -267,15 +251,15 @@ function App() {
       <section className="tasks-section">
         <h2>
           ▶️ 正在运行的根任务
-          <span className="task-count">({rootTasksWithChildren.length})</span>
+          <span className="task-count">({rootTasks.length})</span>
         </h2>
-        {rootTasksWithChildren.length === 0 ? (
+        {rootTasks.length === 0 ? (
           <div className="empty-state">
             <p>📭 暂无运行中的根任务</p>
           </div>
         ) : (
           <div className="task-list">
-            {rootTasksWithChildren.map((task) => (
+            {rootTasks.map((task) => (
               <div key={task.task_id} className="task-item">
                 <div className="task-main">
                   <div className="task-header">
@@ -294,9 +278,9 @@ function App() {
                     <span className="task-time">
                       ⏱️ {formatTimeAgo(task.created_at)}
                     </span>
-                    {task.childrenCount > 0 && (
+                    {task.subtask_count > 0 && (
                       <span className="task-children">
-                        📎 {task.childrenCount}个子任务
+                        📎 {task.subtask_count}个子任务
                       </span>
                     )}
                     {task.never_ends && (
