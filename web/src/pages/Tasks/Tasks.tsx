@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Task, RootTask, TaskFilter } from '../../types';
-import { getRootTasks, getTaskChildren, deleteTask, getAgents } from '../../api';
+import { getRootTasks, getTaskTree, deleteTask, getAgents } from '../../api';
 import { TaskListHeader } from './components/TaskListHeader';
 import { TaskTreeItem } from './components/TaskTreeItem';
 import { TaskPagination } from './components/TaskPagination';
@@ -74,8 +74,8 @@ export function Tasks() {
         updatedTasks[taskIndex] = { ...task, isLoadingChildren: true };
 
         // 异步加载子任务
-        getTaskChildren(taskId)
-          .then(({ children }) => {
+        getTaskTree(taskId)
+          .then((tree) => {
             setTasks(currentTasks => {
               const idx = currentTasks.findIndex(t => t.task_id === taskId);
               if (idx === -1) return currentTasks;
@@ -83,7 +83,7 @@ export function Tasks() {
               newTasks[idx] = { 
                 ...newTasks[idx], 
                 isExpanded: true, 
-                children, 
+                children: tree.children, 
                 isLoadingChildren: false 
               };
               return newTasks;

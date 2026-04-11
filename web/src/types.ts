@@ -15,7 +15,7 @@ export interface Task {
   status: TaskStatus;
   parent_task_id: string | null;
   root_task_id: string;
-  created_at: string;
+  created_at: number;
   never_ends: boolean;
 }
 

@@ -25,6 +25,19 @@ async function fetchApi<T>(url: string, options?: RequestInit): Promise<T> {
   return response.json();
 }
 
+// 任务树响应类型
+export interface TaskTreeResponse {
+  task_id: string;
+  description: string;
+  agent: string;
+  status: TaskStatus;
+  parent_task_id: string | null;
+  root_task_id: string;
+  created_at: number;
+  never_ends: boolean;
+  children: TaskTreeResponse[];
+}
+
 // 获取根任务列表（支持分页和筛选）
 export function getRootTasks(filter: TaskFilter): Promise<TaskListResponse> {
   const params = new URLSearchParams();
@@ -32,22 +45,17 @@ export function getRootTasks(filter: TaskFilter): Promise<TaskListResponse> {
   if (filter.status && filter.status !== 'all') {
     params.append('status', filter.status);
   }
-  if (filter.agent && filter.agent !== 'all') {
-    params.append('agent', filter.agent);
-  }
-  if (filter.search) {
-    params.append('search', filter.search);
-  }
+  // 注意：主分支 API 目前不支持 agent 筛选和搜索
   params.append('page', filter.page.toString());
   params.append('page_size', filter.pageSize.toString());
 
   const queryString = params.toString();
-  return fetchApi<TaskListResponse>(`/tasks/roots${queryString ? `?${queryString}` : ''}`);
+  return fetchApi<TaskListResponse>(`/tasks${queryString ? `?${queryString}` : ''}`);
 }
 
-// 获取子任务
-export function getTaskChildren(taskId: string): Promise<{ children: Task[] }> {
-  return fetchApi<{ children: Task[] }>(`/tasks/${taskId}/children`);
+// 获取任务树（包含所有层级的子任务）
+export function getTaskTree(taskId: string): Promise<TaskTreeResponse> {
+  return fetchApi<TaskTreeResponse>(`/tasks/${taskId}/tree`);
 }
 
 // 获取任务文件列表

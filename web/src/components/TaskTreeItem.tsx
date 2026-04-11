@@ -14,8 +14,8 @@ interface TaskTreeItemProps {
 }
 
 // Format relative time (e.g., "5 minutes ago")
-function formatRelativeTime(dateString: string): string {
-  const date = new Date(dateString);
+function formatRelativeTime(timestamp: number): string {
+  const date = new Date(timestamp * 1000);
   const now = new Date();
   const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 

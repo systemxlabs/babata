@@ -53,8 +53,8 @@ export function TaskDetailPanel({ taskId, onTaskClick, onClose }: TaskDetailPane
     }
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
+  const formatDate = (timestamp: number) => {
+    const date = new Date(timestamp * 1000);
     return date.toLocaleString('zh-CN', {
       year: 'numeric',
       month: '2-digit',
