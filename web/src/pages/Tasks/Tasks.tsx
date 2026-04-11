@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Task, RootTask, TaskFilter } from '../../types';
-import { getRootTasks, getTaskTree, deleteTask, getAgentsList } from '../../api';
+import { getRootTasks, getTaskTree, deleteTask, getAgentsList, controlTask } from '../../api';
 import { TaskListHeader } from './components/TaskListHeader';
 import { TaskTreeItem } from './components/TaskTreeItem';
 import { TaskPagination } from './components/TaskPagination';
@@ -144,6 +144,16 @@ export function Tasks() {
     setTaskToDelete(null);
   }, [taskToDelete, fetchTasks]);
 
+  // 处理任务控制操作（暂停/恢复/取消）
+  const handleControlTask = useCallback(async (taskId: string, action: 'pause' | 'resume' | 'cancel') => {
+    try {
+      await controlTask(taskId, action);
+      await fetchTasks();
+    } catch (error) {
+      console.error(`Failed to ${action} task:`, error);
+    }
+  }, [fetchTasks]);
+
   // 格式化时间
   const formatTime = useCallback((timestamp: string | number) => {
     return new Date(timestamp).toLocaleString('zh-CN');
@@ -179,6 +189,7 @@ export function Tasks() {
                 onToggle={() => handleToggleExpand(task.task_id)}
                 onClick={() => handleTaskClick(task.task_id)}
                 onDelete={(e: React.MouseEvent) => handleDeleteClick(task, e)}
+                onControlTask={handleControlTask}
                 formatTime={formatTime}
               />
             ))}

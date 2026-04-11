@@ -187,6 +187,21 @@
   background: rgba(239, 68, 68, 0.1);
 }
 
+.pause-btn:hover {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.resume-btn:hover {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.1);
+}
+
+.cancel-btn:hover {
+  color: #6b7280;
+  background: rgba(107, 114, 128, 0.1);
+}
+
 /* 子任务列表 */
 .subtask-list {
   background: #0f172a;
