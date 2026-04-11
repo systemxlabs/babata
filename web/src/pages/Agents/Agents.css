@@ -1,0 +1,184 @@
+/* Agent 管理页面样式 */
+
+.agents-page {
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+  min-height: 100vh;
+}
+
+.agents-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #334155;
+}
+
+.agents-header h1 {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.agents-count {
+  font-size: 14px;
+  color: #94a3b8;
+  padding: 6px 16px;
+  background: #334155;
+  border-radius: 20px;
+  font-weight: 500;
+}
+
+/* Agent 卡片网格 */
+.agents-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
+}
+
+.agent-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 24px;
+  background: #1e293b;
+  border-radius: 12px;
+  border: 1px solid #334155;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.agent-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+  border-color: #475569;
+  background: #252f47;
+}
+
+.agent-icon {
+  font-size: 48px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.agent-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.agent-name {
+  margin: 0 0 10px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #f8fafc;
+  word-break: break-word;
+}
+
+.agent-description {
+  margin: 0;
+  font-size: 14px;
+  color: #94a3b8;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+/* 加载状态 */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+  color: #64748b;
+}
+
+.loading-spinner {
+  width: 48px;
+  height: 48px;
+  border: 3px solid #334155;
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 错误状态 */
+.error-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.05);
+  border-radius: 12px;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.error-state p {
+  margin: 0 0 20px 0;
+  font-size: 16px;
+}
+
+.error-state button {
+  padding: 10px 20px;
+  background: #334155;
+  color: #f8fafc;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background 0.2s;
+}
+
+.error-state button:hover {
+  background: #475569;
+}
+
+/* 空状态 */
+.empty-state {
+  text-align: center;
+  padding: 80px 20px;
+  color: #64748b;
+}
+
+.empty-state p {
+  margin: 0;
+  font-size: 16px;
+}
+
+/* 响应式适配 */
+@media (max-width: 768px) {
+  .agents-page {
+    padding: 16px;
+  }
+
+  .agents-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .agents-header h1 {
+    font-size: 24px;
+  }
+
+  .agents-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-card {
+    padding: 20px;
+  }
+
+  .agent-icon {
+    font-size: 40px;
+  }
+}
