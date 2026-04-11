@@ -125,7 +125,9 @@ function DashboardPage() {
       setAgents(agentsRes.agents);
       setSkills(skillsRes.skills);
       if (agentsRes.agents.length > 0 && !selectedAgent) {
-        setSelectedAgent(agentsRes.agents[0].name);
+        // 优先选择 default agent，否则选择第一个
+        const defaultAgent = agentsRes.agents.find(a => a.name === 'default');
+        setSelectedAgent(defaultAgent?.name || agentsRes.agents[0].name);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : '获取统计数据失败');
