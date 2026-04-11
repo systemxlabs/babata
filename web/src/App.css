@@ -72,6 +72,7 @@ body {
   transition: all 0.2s;
   text-align: left;
   width: 100%;
+  text-decoration: none;
 }
 
 .nav-item:hover {

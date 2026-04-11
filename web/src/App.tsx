@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { BrowserRouter, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import './App.css';
 import { api } from './api';
 import type { Task, Agent, Skill } from './types';
@@ -59,14 +60,17 @@ function getStatusText(status: string): string {
 // 导航项类型
 type PageType = 'dashboard' | 'tasks' | 'agents' | 'skills';
 
+// 导航配置
+const navItems: { key: PageType; path: string; label: string; icon: string }[] = [
+  { key: 'dashboard', path: '/', label: 'Dashboard', icon: '📊' },
+  { key: 'tasks', path: '/tasks', label: 'Tasks', icon: '📋' },
+  { key: 'agents', path: '/agents', label: 'Agents', icon: '🤖' },
+  { key: 'skills', path: '/skills', label: 'Skills', icon: '🛠️' },
+];
+
 // 侧边栏导航组件
-function Sidebar({ currentPage, onPageChange }: { currentPage: PageType; onPageChange: (page: PageType) => void }) {
-  const navItems: { key: PageType; label: string; icon: string }[] = [
-    { key: 'dashboard', label: 'Dashboard', icon: '📊' },
-    { key: 'tasks', label: 'Tasks', icon: '📋' },
-    { key: 'agents', label: 'Agents', icon: '🤖' },
-    { key: 'skills', label: 'Skills', icon: '🛠️' },
-  ];
+function Sidebar() {
+  const location = useLocation();
 
   return (
     <aside className="sidebar">
@@ -76,14 +80,14 @@ function Sidebar({ currentPage, onPageChange }: { currentPage: PageType; onPageC
       </div>
       <nav className="sidebar-nav">
         {navItems.map((item) => (
-          <button
+          <Link
             key={item.key}
-            className={`nav-item ${currentPage === item.key ? 'active' : ''}`}
-            onClick={() => onPageChange(item.key)}
+            to={item.path}
+            className={`nav-item ${location.pathname === item.path ? 'active' : ''}`}
           >
             <span className="nav-icon">{item.icon}</span>
             <span className="nav-label">{item.label}</span>
-          </button>
+          </Link>
         ))}
       </nav>
     </aside>
@@ -365,20 +369,30 @@ function SkillsPage() {
   return <Skills />;
 }
 
-// 主应用组件
-function App() {
-  const [currentPage, setCurrentPage] = useState<PageType>('dashboard');
-
+// 应用内容组件（在 Router 内部使用）
+function AppContent() {
   return (
     <div className="app">
-      <Sidebar currentPage={currentPage} onPageChange={setCurrentPage} />
+      <Sidebar />
       <main className="main-content">
-        {currentPage === 'dashboard' && <DashboardPage />}
-        {currentPage === 'tasks' && <TasksPage />}
-        {currentPage === 'agents' && <AgentsPage />}
-        {currentPage === 'skills' && <SkillsPage />}
+        <Routes>
+          <Route path="/" element={<DashboardPage />} />
+          <Route path="/tasks" element={<TasksPage />} />
+          <Route path="/agents" element={<AgentsPage />} />
+          <Route path="/skills" element={<SkillsPage />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
       </main>
     </div>
+  );
+}
+
+// 主应用组件
+function App() {
+  return (
+    <BrowserRouter>
+      <AppContent />
+    </BrowserRouter>
   );
 }
 
