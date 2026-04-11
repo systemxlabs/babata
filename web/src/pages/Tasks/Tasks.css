@@ -1,0 +1,105 @@
+/* 任务管理页面样式 */
+
+.tasks-page {
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+  min-height: 100vh;
+}
+
+.tasks-header {
+  margin-bottom: 24px;
+}
+
+.tasks-header h1 {
+  font-size: 28px;
+  font-weight: 600;
+  color: #f8fafc;
+  margin: 0;
+}
+
+/* 任务列表容器 */
+.tasks-list-container {
+  background: #1e293b;
+  border-radius: 12px;
+  border: 1px solid #334155;
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+
+.tasks-list {
+  display: flex;
+  flex-direction: column;
+}
+
+/* 加载状态 */
+.tasks-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: #94a3b8;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #334155;
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 空状态 */
+.tasks-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: #94a3b8;
+}
+
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.tasks-empty p {
+  font-size: 16px;
+  margin: 0 0 16px 0;
+}
+
+.clear-filter-btn {
+  padding: 8px 16px;
+  background: #334155;
+  color: #f8fafc;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.2s;
+}
+
+.clear-filter-btn:hover {
+  background: #475569;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .tasks-page {
+    padding: 16px;
+  }
+
+  .tasks-header h1 {
+    font-size: 24px;
+  }
+}
