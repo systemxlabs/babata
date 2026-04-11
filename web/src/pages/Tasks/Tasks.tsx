@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Task, RootTask, TaskFilter } from '../../types';
-import { getRootTasks, getTaskTree, deleteTask, getAgents } from '../../api';
+import { getRootTasks, getTaskTree, deleteTask, getAgentsList } from '../../api';
 import { TaskListHeader } from './components/TaskListHeader';
 import { TaskTreeItem } from './components/TaskTreeItem';
 import { TaskPagination } from './components/TaskPagination';
@@ -35,8 +35,8 @@ export function Tasks() {
 
   // 获取 Agent 列表
   useEffect(() => {
-    getAgents()
-      .then(agents => setAgents(agents.map(a => a.name)))
+    getAgentsList()
+      .then((agents: { name: string; description: string }[]) => setAgents(agents.map((a: { name: string }) => a.name)))
       .catch(console.error);
   }, []);
 
