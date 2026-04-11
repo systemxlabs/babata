@@ -30,6 +30,43 @@ use serde_json::json;
 use tower_http::services::ServeDir;
 use uuid::Uuid;
 
+/// 获取 Web UI 静态文件路径
+/// 按优先级尝试:
+/// 1. 环境变量 BABATA_WEB_DIST
+/// 2. 可执行文件所在目录的 web/dist
+/// 3. 可执行文件父目录的 web/dist (开发模式)
+/// 4. 回退到相对路径 web/dist
+fn web_dist_path() -> String {
+    // 1. 首先尝试从环境变量获取
+    if let Ok(path) = env::var("BABATA_WEB_DIST") {
+        return path;
+    }
+
+    // 2. 尝试从可执行文件位置推断
+    if let Ok(exe_path) = env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            // 检查 exe_dir/web/dist 是否存在
+            let dist_path = exe_dir.join("web").join("dist");
+            if dist_path.exists() {
+                return dist_path.to_string_lossy().to_string();
+            }
+
+            // 检查 exe_dir/../web/dist (开发模式)
+            let dev_dist_path = exe_dir
+                .parent()
+                .map(|p| p.join("web").join("dist"));
+            if let Some(ref path) = dev_dist_path {
+                if path.exists() {
+                    return path.to_string_lossy().to_string();
+                }
+            }
+        }
+    }
+
+    // 3. 回退到相对路径
+    "web/dist".to_string()
+}
+
 use crate::{BabataResult, error::BabataError, task::TaskManager};
 
 pub(crate) use collaborate_task::CollaborateTaskRequest;
@@ -103,7 +140,7 @@ fn router(task_manager: Arc<TaskManager>) -> Router {
         )
         .route("/api/tasks/{task_id}/control", post(control_task::handle))
         .route("/api/tasks/{task_id}/steer", post(steer_task::handle))
-        .fallback_service(ServeDir::new("web/dist"))
+        .fallback_service(ServeDir::new(web_dist_path()))
         .with_state(HttpApp { task_manager })
 }
 
