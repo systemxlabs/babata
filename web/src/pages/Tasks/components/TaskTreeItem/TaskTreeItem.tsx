@@ -11,6 +11,7 @@ interface TaskTreeItemProps {
   onToggle: () => void;
   onClick: () => void;
   onDelete: (e: React.MouseEvent) => void;
+  onControlTask?: (taskId: string, action: 'pause' | 'resume' | 'cancel') => void;
   formatTime: (timestamp: string | number) => string;
 }
 
@@ -23,6 +24,7 @@ export function TaskTreeItem({
   onToggle,
   onClick,
   onDelete,
+  onControlTask,
   formatTime,
 }: TaskTreeItemProps) {
   const isRootTask = !task.parent_task_id;
@@ -107,6 +109,45 @@ export function TaskTreeItem({
 
           {/* 操作按钮 */}
           <div className="task-actions" onClick={(e) => e.stopPropagation()}>
+            {/* 暂停/恢复/取消控制按钮 */}
+            {(task.status === 'running' || task.status === 'paused') && onControlTask && (
+              <>
+                {task.status === 'running' && (
+                  <button
+                    className="action-btn pause-btn"
+                    onClick={() => onControlTask(task.task_id, 'pause')}
+                    title="暂停任务"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="6" y="4" width="4" height="16" rx="1" />
+                      <rect x="14" y="4" width="4" height="16" rx="1" />
+                    </svg>
+                  </button>
+                )}
+                {task.status === 'paused' && (
+                  <button
+                    className="action-btn resume-btn"
+                    onClick={() => onControlTask(task.task_id, 'resume')}
+                    title="恢复任务"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polygon points="5 3 19 12 5 21 5 3" />
+                    </svg>
+                  </button>
+                )}
+                <button
+                  className="action-btn cancel-btn"
+                  onClick={() => onControlTask(task.task_id, 'cancel')}
+                  title="取消任务"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="m15 9-6 6" />
+                    <path d="m9 9 6 6" />
+                  </svg>
+                </button>
+              </>
+            )}
             <button
               className="action-btn delete-btn"
               onClick={onDelete}
@@ -134,6 +175,7 @@ export function TaskTreeItem({
               onToggle={() => {}}
               onClick={() => {}}
               onDelete={() => {}}
+              onControlTask={onControlTask}
               formatTime={formatTime}
             />
           ))}
