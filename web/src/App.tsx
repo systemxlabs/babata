@@ -126,7 +126,7 @@ function DashboardPage() {
       setSkills(skillsRes.skills);
       if (agentsRes.agents.length > 0 && !selectedAgent) {
         // 优先选择 default agent，否则选择第一个
-        const defaultAgent = agentsRes.agents.find(a => a.name === 'default');
+        const defaultAgent = agentsRes.agents.find(a => a.default === true);
         setSelectedAgent(defaultAgent?.name || agentsRes.agents[0].name);
       }
     } catch (err) {
