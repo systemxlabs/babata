@@ -1,8 +1,8 @@
-
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import './App.css';
 import { api } from './api';
 import type { Task, Agent, Skill } from './types';
+import { Agents } from './pages/Agents/Agents';
 
 // 格式化时间显示
 function formatTimeAgo(timestamp: number): string {
@@ -54,7 +54,41 @@ function getStatusText(status: string): string {
   }
 }
 
-function App() {
+// 导航项类型
+type PageType = 'dashboard' | 'tasks' | 'agents';
+
+// 侧边栏导航组件
+function Sidebar({ currentPage, onPageChange }: { currentPage: PageType; onPageChange: (page: PageType) => void }) {
+  const navItems: { key: PageType; label: string; icon: string }[] = [
+    { key: 'dashboard', label: 'Dashboard', icon: '📊' },
+    { key: 'tasks', label: 'Tasks', icon: '📋' },
+    { key: 'agents', label: 'Agents', icon: '🤖' },
+  ];
+
+  return (
+    <aside className="sidebar">
+      <div className="sidebar-brand">
+        <span className="brand-icon">🧠</span>
+        <span className="brand-text">Babata</span>
+      </div>
+      <nav className="sidebar-nav">
+        {navItems.map((item) => (
+          <button
+            key={item.key}
+            className={`nav-item ${currentPage === item.key ? 'active' : ''}`}
+            onClick={() => onPageChange(item.key)}
+          >
+            <span className="nav-icon">{item.icon}</span>
+            <span className="nav-label">{item.label}</span>
+          </button>
+        ))}
+      </nav>
+    </aside>
+  );
+}
+
+// Dashboard 页面
+function DashboardPage() {
   // 统计数据
   const [runningCount, setRunningCount] = useState<number>(0);
   const [totalCount, setTotalCount] = useState<number>(0);
@@ -172,10 +206,10 @@ function App() {
   }, [tasks]);
 
   return (
-    <div className="dashboard">
+    <div className="dashboard-page">
       {/* 头部 */}
       <header className="dashboard-header">
-        <h1>🧠 Babata System Dashboard</h1>
+        <h1>Dashboard</h1>
         <div className="header-actions">
           <span className="last-update">
             最后更新: {lastUpdate.toLocaleTimeString()}
@@ -305,12 +339,42 @@ function App() {
                     )}
                   </div>
                 </div>
-
               </div>
             ))}
           </div>
         )}
       </section>
+    </div>
+  );
+}
+
+// Tasks 页面占位
+function TasksPage() {
+  return (
+    <div className="placeholder-page">
+      <h1>📋 任务管理</h1>
+      <p>任务管理页面正在开发中...</p>
+    </div>
+  );
+}
+
+// Agents 页面包装器
+function AgentsPage() {
+  return <Agents />;
+}
+
+// 主应用组件
+function App() {
+  const [currentPage, setCurrentPage] = useState<PageType>('dashboard');
+
+  return (
+    <div className="app">
+      <Sidebar currentPage={currentPage} onPageChange={setCurrentPage} />
+      <main className="main-content">
+        {currentPage === 'dashboard' && <DashboardPage />}
+        {currentPage === 'tasks' && <TasksPage />}
+        {currentPage === 'agents' && <AgentsPage />}
+      </main>
     </div>
   );
 }
