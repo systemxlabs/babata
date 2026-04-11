@@ -3,6 +3,7 @@ import './App.css';
 import { api } from './api';
 import type { Task, Agent, Skill } from './types';
 import { Agents } from './pages/Agents/Agents';
+import { Skills } from './pages/Skills/Skills';
 
 // 格式化时间显示
 function formatTimeAgo(timestamp: number): string {
@@ -55,7 +56,7 @@ function getStatusText(status: string): string {
 }
 
 // 导航项类型
-type PageType = 'dashboard' | 'tasks' | 'agents';
+type PageType = 'dashboard' | 'tasks' | 'agents' | 'skills';
 
 // 侧边栏导航组件
 function Sidebar({ currentPage, onPageChange }: { currentPage: PageType; onPageChange: (page: PageType) => void }) {
@@ -63,6 +64,7 @@ function Sidebar({ currentPage, onPageChange }: { currentPage: PageType; onPageC
     { key: 'dashboard', label: 'Dashboard', icon: '📊' },
     { key: 'tasks', label: 'Tasks', icon: '📋' },
     { key: 'agents', label: 'Agents', icon: '🤖' },
+    { key: 'skills', label: 'Skills', icon: '🛠️' },
   ];
 
   return (
@@ -363,6 +365,11 @@ function AgentsPage() {
   return <Agents />;
 }
 
+// Skills 页面包装器
+function SkillsPage() {
+  return <Skills />;
+}
+
 // 主应用组件
 function App() {
   const [currentPage, setCurrentPage] = useState<PageType>('dashboard');
@@ -374,6 +381,7 @@ function App() {
         {currentPage === 'dashboard' && <DashboardPage />}
         {currentPage === 'tasks' && <TasksPage />}
         {currentPage === 'agents' && <AgentsPage />}
+        {currentPage === 'skills' && <SkillsPage />}
       </main>
     </div>
   );

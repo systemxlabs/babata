@@ -107,6 +107,13 @@ export function deleteTask(taskId: string): Promise<void> {
   });
 }
 
+// 删除技能
+export function deleteSkill(name: string): Promise<void> {
+  return fetchApi<void>(`/skills/${encodeURIComponent(name)}`, {
+    method: 'DELETE',
+  });
+}
+
 // 控制任务（暂停/恢复/取消）
 export function controlTask(taskId: string, action: TaskControlAction): Promise<void> {
   return fetchApi<void>(`/tasks/${taskId}/control`, {
@@ -186,6 +193,13 @@ export const api = {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(request),
+    });
+  },
+
+  // 删除技能
+  deleteSkill(name: string): Promise<void> {
+    return fetchApi<void>(`/skills/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
     });
   },
 };

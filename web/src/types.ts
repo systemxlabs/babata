@@ -70,11 +70,68 @@ export interface TaskDetail extends Task {
   final_response?: string;
 }
 
-// Agent 类型
+// ========== Agent 类型定义 ==========
+
+// Agent Frontmatter（基础信息）
+export interface AgentFrontmatter {
+  name: string;
+  description: string;
+  provider: string;
+  model: string;
+  allowed_tools: string[];
+  default: boolean;
+}
+
+// Agent 基础类型（列表使用）
 export interface Agent {
   name: string;
   description?: string;
 }
+
+// Agent 完整类型（详情使用）
+export interface AgentDetail {
+  name: string;
+  description: string;
+  provider: string;
+  model: string;
+  allowed_tools: string[];
+  default: boolean;
+  body: string;
+}
+
+// 创建 Agent 请求
+export interface CreateAgentRequest {
+  name: string;
+  description: string;
+  provider: string;
+  model: string;
+  allowed_tools: string[];
+  default: boolean;
+  body: string;
+}
+
+// 更新 Agent 请求
+export interface UpdateAgentRequest {
+  description: string;
+  provider: string;
+  model: string;
+  allowed_tools: string[];
+  default: boolean;
+  body: string;
+}
+
+// 获取 Agent 详情响应
+export interface GetAgentResponse {
+  name: string;
+  description: string;
+  provider: string;
+  model: string;
+  allowed_tools: string[];
+  default: boolean;
+  body: string;
+}
+
+// ========== Skill 类型定义 ==========
 
 // Skill 类型
 export interface Skill {
@@ -82,7 +139,8 @@ export interface Skill {
   description?: string;
 }
 
-// API 响应类型
+// ========== API 响应类型 ==========
+
 export interface CountResponse {
   count: number;
 }
