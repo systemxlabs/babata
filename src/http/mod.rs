@@ -2,8 +2,10 @@ mod collaborate_task;
 mod control_task;
 mod count_tasks;
 mod create_agent;
+mod create_provider;
 mod create_task;
 mod delete_agent;
+mod delete_provider;
 mod delete_skill;
 mod delete_task;
 mod get_agent;
@@ -12,12 +14,14 @@ mod get_task_file;
 mod get_task_logs;
 mod get_task_tree;
 mod list_agents;
+mod list_providers;
 mod list_root_tasks;
 mod list_skills;
 mod list_task_files;
 
 mod steer_task;
 mod update_agent;
+mod update_provider;
 
 use std::{env, sync::Arc};
 
@@ -27,7 +31,7 @@ use axum::{
     extract::Request,
     http::{HeaderMap, Method, StatusCode, Uri, Version, header},
     response::{IntoResponse, Response},
-    routing::{delete, get, post},
+    routing::{delete, get, post, put},
 };
 use serde_json::json;
 use tower_http::services::{ServeDir, ServeFile};
@@ -79,6 +83,14 @@ fn router(task_manager: Arc<TaskManager>) -> Router {
             get(get_agent::handle)
                 .put(update_agent::handle)
                 .delete(delete_agent::handle),
+        )
+        .route(
+            "/api/providers",
+            get(list_providers::handle).post(create_provider::handle),
+        )
+        .route(
+            "/api/providers/{name}",
+            put(update_provider::handle).delete(delete_provider::handle),
         )
         .route("/api/skills", get(list_skills::handle))
         .route("/api/skills/{name}", delete(delete_skill::handle))
