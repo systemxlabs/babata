@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { deleteSkill, getSkills } from '../../api';
+import { SkillDetailModal } from '../../components/SkillDetailModal/SkillDetailModal';
 import type { Skill } from '../../types';
 import './Skills.css';
 
@@ -7,6 +8,7 @@ export function Skills() {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null);
 
   // 获取技能列表
   const fetchSkills = useCallback(async () => {
@@ -36,6 +38,9 @@ export function Skills() {
 
     try {
       await deleteSkill(skill.name);
+      if (selectedSkill?.name === skill.name) {
+        setSelectedSkill(null);
+      }
       await fetchSkills();
     } catch (err) {
       setError(err instanceof Error ? err.message : '删除技能失败');
@@ -90,18 +95,25 @@ export function Skills() {
         <div className="skills-grid">
           {skills.map((skill) => (
             <div key={skill.name} className="skill-card">
-              <div className="skill-card-content">
-                <div className="skill-icon">🛠️</div>
-                <div className="skill-info">
-                  <h3 className="skill-name">{skill.name}</h3>
-                  <p className="skill-description">
-                    {skill.description || '暂无描述'}
-                  </p>
+              <button
+                className="skill-card-trigger"
+                onClick={() => setSelectedSkill(skill)}
+                title={`查看 ${skill.name} 详情`}
+              >
+                <div className="skill-card-content">
+                  <div className="skill-icon">🛠️</div>
+                  <div className="skill-info">
+                    <h3 className="skill-name">{skill.name}</h3>
+                    <p className="skill-description">
+                      {skill.description || '暂无描述'}
+                    </p>
+                  </div>
                 </div>
-              </div>
+                <span className="skill-open-hint">查看详情</span>
+              </button>
               <button
                 className="skill-delete-btn"
-                onClick={() => handleDelete(skill)}
+                onClick={() => void handleDelete(skill)}
                 title="删除技能"
               >
                 🗑️
@@ -110,6 +122,11 @@ export function Skills() {
           ))}
         </div>
       )}
+      <SkillDetailModal
+        skill={selectedSkill}
+        isOpen={selectedSkill !== null}
+        onClose={() => setSelectedSkill(null)}
+      />
     </div>
   );
 }

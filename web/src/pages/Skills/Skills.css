@@ -73,11 +73,11 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px;
   background: #1e293b;
   border-radius: 12px;
   border: 1px solid #334155;
   transition: all 0.2s ease;
+  overflow: hidden;
 }
 
 .skill-card:hover {
@@ -85,6 +85,21 @@
   box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
   border-color: #475569;
   background: #252f47;
+}
+
+.skill-card-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex: 1;
+  min-width: 0;
+  padding: 20px;
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
 }
 
 .skill-card-content {
@@ -126,6 +141,13 @@
   overflow: hidden;
 }
 
+.skill-open-hint {
+  color: #60a5fa;
+  font-size: 13px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
 /* 删除按钮 */
 .skill-delete-btn {
   display: flex;
@@ -140,6 +162,7 @@
   font-size: 16px;
   transition: all 0.2s;
   margin-left: 12px;
+  margin-right: 20px;
   flex-shrink: 0;
 }
 
@@ -248,16 +271,21 @@
   }
 
   .skill-card {
-    padding: 16px;
+    align-items: stretch;
   }
 
   .skill-icon {
     font-size: 36px;
   }
 
+  .skill-card-trigger {
+    padding: 16px;
+  }
+
   .skill-delete-btn {
     width: 40px;
     height: 40px;
     font-size: 18px;
+    margin: 16px 16px 16px 0;
   }
 }

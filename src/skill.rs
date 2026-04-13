@@ -11,7 +11,7 @@ pub struct SkillFrontmatter {
 }
 
 /// Get the skill directory path for a given skill name
-fn skill_dir(name: &str) -> BabataResult<PathBuf> {
+pub(crate) fn skill_dir(name: &str) -> BabataResult<PathBuf> {
     Ok(babata_dir()?.join("skills").join(name))
 }
 

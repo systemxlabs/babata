@@ -1,10 +1,8 @@
-/* 任务目录标签页样式 */
-
-.task-directory-tab {
+.file-explorer {
   height: 100%;
 }
 
-.directory-layout {
+.file-explorer .directory-layout {
   display: flex;
   height: 400px;
   border: 1px solid #334155;
@@ -12,8 +10,7 @@
   overflow: hidden;
 }
 
-/* 文件树面板 */
-.file-tree-panel {
+.file-explorer .file-tree-panel {
   width: 280px;
   flex-shrink: 0;
   background: #0f172a;
@@ -22,7 +19,7 @@
   flex-direction: column;
 }
 
-.panel-header {
+.file-explorer .panel-header {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -34,11 +31,11 @@
   color: #f8fafc;
 }
 
-.panel-header.file-header {
+.file-explorer .panel-header.file-header {
   justify-content: space-between;
 }
 
-.file-path {
+.file-explorer .file-path {
   color: #f8fafc;
   font-size: 13px;
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
@@ -47,19 +44,19 @@
   white-space: nowrap;
 }
 
-.file-meta {
+.file-explorer .file-meta {
   color: #64748b;
   font-size: 12px;
   flex-shrink: 0;
 }
 
-.file-tree-content {
+.file-explorer .file-tree-content {
   flex: 1;
   overflow-y: auto;
   padding: 8px 0;
 }
 
-.empty-files {
+.file-explorer .empty-files {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -68,8 +65,7 @@
   font-size: 14px;
 }
 
-/* 文件树项 */
-.file-tree-item {
+.file-explorer .file-tree-item {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -79,28 +75,28 @@
   font-size: 13px;
 }
 
-.file-tree-item:hover {
+.file-explorer .file-tree-item:hover {
   background: #1e293b;
 }
 
-.file-tree-item.file.selected {
+.file-explorer .file-tree-item.file.selected {
   background: rgba(59, 130, 246, 0.2);
 }
 
-.file-icon {
+.file-explorer .file-icon {
   color: #64748b;
   flex-shrink: 0;
 }
 
-.file-tree-item.directory .file-icon {
+.file-explorer .file-tree-item.directory .file-icon {
   color: #f59e0b;
 }
 
-.file-tree-item.file .file-icon {
+.file-explorer .file-tree-item.file .file-icon {
   color: #60a5fa;
 }
 
-.file-name {
+.file-explorer .file-name {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -108,31 +104,30 @@
   color: #cbd5e1;
 }
 
-.file-tree-item.file .file-name {
+.file-explorer .file-tree-item.file .file-name {
   color: #f8fafc;
 }
 
-.file-size {
+.file-explorer .file-size {
   color: #64748b;
   font-size: 11px;
   flex-shrink: 0;
 }
 
-/* 文件内容面板 */
-.file-content-panel {
+.file-explorer .file-content-panel {
   flex: 1;
   background: #0f172a;
   display: flex;
   flex-direction: column;
 }
 
-.file-content {
+.file-explorer .file-content {
   flex: 1;
   overflow: auto;
 }
 
-.content-loading,
-.content-error {
+.file-explorer .content-loading,
+.file-explorer .content-error {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -141,27 +136,27 @@
   color: #94a3b8;
 }
 
-.content-loading .loading-spinner {
+.file-explorer .content-loading .loading-spinner {
   width: 32px;
   height: 32px;
   border: 2px solid #334155;
   border-top-color: #3b82f6;
   border-radius: 50%;
-  animation: spin 1s linear infinite;
+  animation: file-explorer-spin 1s linear infinite;
   margin-bottom: 12px;
 }
 
-@keyframes spin {
+@keyframes file-explorer-spin {
   to {
     transform: rotate(360deg);
   }
 }
 
-.content-error {
+.file-explorer .content-error {
   color: #ef4444;
 }
 
-.code-block {
+.file-explorer .code-block {
   margin: 0;
   padding: 16px;
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
@@ -173,12 +168,11 @@
   word-wrap: break-word;
 }
 
-.code-block code {
+.file-explorer .code-block code {
   font-family: inherit;
 }
 
-/* 未选择文件 */
-.no-file-selected {
+.file-explorer .no-file-selected {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -187,31 +181,30 @@
   color: #64748b;
 }
 
-.no-file-selected svg {
+.file-explorer .no-file-selected svg {
   margin-bottom: 16px;
   opacity: 0.5;
 }
 
-.no-file-selected p {
+.file-explorer .no-file-selected p {
   margin: 0;
   font-size: 14px;
 }
 
-/* 响应式设计 */
 @media (max-width: 768px) {
-  .directory-layout {
+  .file-explorer .directory-layout {
     flex-direction: column;
     height: 500px;
   }
 
-  .file-tree-panel {
+  .file-explorer .file-tree-panel {
     width: 100%;
     height: 200px;
     border-right: none;
     border-bottom: 1px solid #334155;
   }
 
-  .file-tree-content {
+  .file-explorer .file-tree-content {
     max-height: 150px;
   }
 }

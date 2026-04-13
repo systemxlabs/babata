@@ -87,14 +87,26 @@ export function getTaskFiles(taskId: string): Promise<FileEntry[]> {
   return fetchApi<FileEntry[]>(`/tasks/${taskId}/files`);
 }
 
-export async function getTaskFile(taskId: string, path: string): Promise<string> {
-  const response = await fetch(`${API_BASE_URL}/tasks/${taskId}/files/${path}`);
+function encodeFilePath(path: string): string {
+  return path
+    .split(/[\\/]+/)
+    .filter(Boolean)
+    .map((segment) => encodeURIComponent(segment))
+    .join('/');
+}
+
+async function fetchText(path: string): Promise<string> {
+  const response = await fetch(`${API_BASE_URL}${path}`);
 
   if (!response.ok) {
     throw new Error(`API Error: ${response.status} ${response.statusText}`);
   }
 
   return response.text();
+}
+
+export async function getTaskFile(taskId: string, path: string): Promise<string> {
+  return fetchText(`/tasks/${taskId}/files/${encodeFilePath(path)}`);
 }
 
 export function getTaskLogs(taskId: string, limit?: number, offset?: number): Promise<string[]> {
@@ -148,6 +160,14 @@ export function getTaskCount(status?: TaskStatus): Promise<CountResponse> {
 
 export function getSkills(): Promise<SkillsResponse> {
   return fetchApi<SkillsResponse>('/skills');
+}
+
+export function getSkillFiles(name: string): Promise<FileEntry[]> {
+  return fetchApi<FileEntry[]>(`/skills/${encodeURIComponent(name)}/files`);
+}
+
+export function getSkillFile(name: string, path: string): Promise<string> {
+  return fetchText(`/skills/${encodeURIComponent(name)}/files/${encodeFilePath(path)}`);
 }
 
 export function deleteSkill(name: string): Promise<void> {
@@ -255,6 +275,8 @@ export const api = {
   updateProvider,
   deleteProvider,
   getSkills,
+  getSkillFiles,
+  getSkillFile,
   deleteSkill,
 };
 

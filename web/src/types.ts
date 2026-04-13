@@ -40,7 +40,7 @@ export interface FileEntry {
   path: string;
   is_dir: boolean;
   size: number | null;
-  modified: number;
+  modified: number | null;
 }
 
 export interface TaskFile {
