@@ -76,9 +76,22 @@ impl TelegramChannel {
 
     async fn route_incoming(&self, incoming: Vec<IncomingPrivateMessage>) -> Vec<Content> {
         let mut content = Vec::new();
+        let now = chrono::Utc::now().timestamp();
+        let one_hour_ago = now - 3600;
 
         for message in incoming {
             if message.chat_id != self.user_id {
+                continue;
+            }
+
+            if message
+                .timestamp
+                .is_some_and(|ts| ts < one_hour_ago)
+            {
+                warn!(
+                    "Ignoring Telegram message from {} older than 1 hour (timestamp: {:?})",
+                    message.chat_id, message.timestamp
+                );
                 continue;
             }
 
@@ -334,6 +347,8 @@ struct IncomingPrivateMessage {
     image_media_type: Option<String>,
     audio_file_id: Option<String>,
     audio_media_type: Option<String>,
+    /// Unix timestamp in seconds
+    timestamp: Option<i64>,
 }
 
 fn extract_private_messages(
@@ -401,6 +416,7 @@ fn extract_private_messages(
             image_media_type,
             audio_file_id,
             audio_media_type,
+            timestamp: Some(message.date.timestamp()),
         });
     }
 
