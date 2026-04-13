@@ -8,6 +8,16 @@ interface TaskDirectoryTabProps {
   files: FileEntry[];
 }
 
+type FileTreeNode = FileEntry | FileTreeDirectory;
+
+interface FileTreeDirectory {
+  [key: string]: FileTreeNode;
+}
+
+function isFileEntry(node: FileTreeNode): node is FileEntry {
+  return 'path' in node;
+}
+
 export function TaskDirectoryTab({ taskId, files }: TaskDirectoryTabProps) {
   const [selectedFile, setSelectedFile] = useState<FileEntry | null>(null);
   const [fileContent, setFileContent] = useState<string>('');
@@ -16,7 +26,7 @@ export function TaskDirectoryTab({ taskId, files }: TaskDirectoryTabProps) {
 
   // 按目录组织文件
   const organizeFiles = (files: FileEntry[]) => {
-    const root: { [key: string]: FileEntry | { [key: string]: any } } = {};
+    const root: FileTreeDirectory = {};
     
     files.forEach(file => {
       const parts = file.path.split('/').filter(p => p);
@@ -26,10 +36,10 @@ export function TaskDirectoryTab({ taskId, files }: TaskDirectoryTabProps) {
         if (index === parts.length - 1) {
           current[part] = file;
         } else {
-          if (!current[part]) {
+          if (!current[part] || isFileEntry(current[part])) {
             current[part] = {};
           }
-          current = current[part] as { [key: string]: any };
+          current = current[part] as FileTreeDirectory;
         }
       });
     });
@@ -56,10 +66,10 @@ export function TaskDirectoryTab({ taskId, files }: TaskDirectoryTabProps) {
   }, [taskId]);
 
   // 渲染文件树
-  const renderFileTree = (items: { [key: string]: FileEntry | { [key: string]: any } }, level = 0) => {
+  const renderFileTree = (items: FileTreeDirectory, level = 0) => {
     const sortedKeys = Object.keys(items).sort((a, b) => {
-      const aIsDir = typeof items[a] === 'object' && !('path' in items[a]);
-      const bIsDir = typeof items[b] === 'object' && !('path' in items[b]);
+      const aIsDir = !isFileEntry(items[a]);
+      const bIsDir = !isFileEntry(items[b]);
       if (aIsDir && !bIsDir) return -1;
       if (!aIsDir && bIsDir) return 1;
       return a.localeCompare(b);
@@ -67,8 +77,9 @@ export function TaskDirectoryTab({ taskId, files }: TaskDirectoryTabProps) {
 
     return sortedKeys.map(key => {
       const item = items[key];
-      const isFile = 'path' in item;
-      const file = isFile ? (item as FileEntry) : null;
+      const isFile = isFileEntry(item);
+      const file = isFile ? item : null;
+      const directory = isFile ? null : item;
       const isSelected = file && selectedFile?.path === file.path;
 
       if (isFile && file) {
@@ -89,7 +100,7 @@ export function TaskDirectoryTab({ taskId, files }: TaskDirectoryTabProps) {
             )}
           </div>
         );
-      } else {
+      } else if (directory) {
         return (
           <div key={key}>
             <div
@@ -101,10 +112,12 @@ export function TaskDirectoryTab({ taskId, files }: TaskDirectoryTabProps) {
               </svg>
               <span className="file-name">{key}</span>
             </div>
-            {renderFileTree(item as { [key: string]: any }, level + 1)}
+            {renderFileTree(directory, level + 1)}
           </div>
         );
       }
+
+      return null;
     });
   };
 

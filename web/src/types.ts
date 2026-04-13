@@ -1,15 +1,9 @@
-// API 类型定义
-
-// 任务状态类型
 export type TaskStatus = 'running' | 'completed' | 'failed' | 'canceled' | 'paused';
 
-// 任务类型
 export type TaskType = 'roottask' | 'subtask';
 
-// 任务控制操作
 export type TaskControlAction = 'pause' | 'resume' | 'cancel';
 
-// 基础任务信息
 export interface Task {
   task_id: string;
   description: string;
@@ -21,13 +15,11 @@ export interface Task {
   never_ends: boolean;
 }
 
-// 根任务（包含子任务统计）
 export interface RootTask extends Task {
   subtask_count: number;
   children?: Task[];
 }
 
-// 任务筛选条件
 export interface TaskFilter {
   status?: TaskStatus | 'all';
   agent?: string;
@@ -36,7 +28,6 @@ export interface TaskFilter {
   pageSize: number;
 }
 
-// 任务列表响应
 export interface TaskListResponse {
   tasks: RootTask[];
   total: number;
@@ -44,7 +35,6 @@ export interface TaskListResponse {
   pageSize: number;
 }
 
-// 文件条目类型
 export interface FileEntry {
   name: string;
   path: string;
@@ -53,7 +43,6 @@ export interface FileEntry {
   modified: number;
 }
 
-// 任务文件
 export interface TaskFile {
   name: string;
   path: string;
@@ -62,7 +51,6 @@ export interface TaskFile {
   modifiedAt?: number;
 }
 
-// 任务详情
 export interface TaskDetail extends Task {
   children: Task[];
   files: TaskFile[];
@@ -70,9 +58,6 @@ export interface TaskDetail extends Task {
   final_response?: string;
 }
 
-// ========== Agent 类型定义 ==========
-
-// Agent Frontmatter（基础信息）
 export interface AgentFrontmatter {
   name: string;
   description: string;
@@ -82,40 +67,14 @@ export interface AgentFrontmatter {
   default: boolean;
 }
 
-// Agent 基础类型（列表使用）
-export interface Agent {
-  name: string;
-  description: string;
-  provider: string;
-  model: string;
-  allowed_tools: string[];
-  default: boolean;
+export type Agent = AgentFrontmatter;
+
+export interface AgentDetail extends AgentFrontmatter {
   body: string;
 }
 
-// Agent 完整类型（详情使用）
-export interface AgentDetail {
-  name: string;
-  description: string;
-  provider: string;
-  model: string;
-  allowed_tools: string[];
-  default: boolean;
-  body: string;
-}
+export type CreateAgentRequest = AgentDetail;
 
-// 创建 Agent 请求
-export interface CreateAgentRequest {
-  name: string;
-  description: string;
-  provider: string;
-  model: string;
-  allowed_tools: string[];
-  default: boolean;
-  body: string;
-}
-
-// 更新 Agent 请求
 export interface UpdateAgentRequest {
   description: string;
   provider: string;
@@ -125,23 +84,48 @@ export interface UpdateAgentRequest {
   body: string;
 }
 
-// 获取 Agent 响应
-export type GetAgentResponse = Agent;
+export type GetAgentResponse = AgentDetail;
 
-// Agent 列表响应
 export interface ListAgentsResponse {
-  agents: Agent[];
+  agents: AgentFrontmatter[];
 }
 
-// ========== Skill 类型定义 ==========
+export type BuiltinProviderName =
+  | 'openai'
+  | 'kimi'
+  | 'moonshot'
+  | 'deepseek'
+  | 'minimax'
+  | 'anthropic';
 
-// Skill 类型
+export type ProviderName = BuiltinProviderName | 'custom';
+
+export type CompatibleApi = 'openai' | 'anthropic';
+
+interface ProviderConfigBase {
+  api_key: string;
+}
+
+export interface BuiltinProviderConfig extends ProviderConfigBase {
+  name: BuiltinProviderName;
+}
+
+export interface CustomProviderConfig extends ProviderConfigBase {
+  name: 'custom';
+  base_url: string;
+  compatible_api: CompatibleApi;
+}
+
+export type ProviderConfig = BuiltinProviderConfig | CustomProviderConfig;
+
+export interface ProvidersResponse {
+  providers: ProviderConfig[];
+}
+
 export interface Skill {
   name: string;
   description?: string;
 }
-
-// ========== API 响应类型 ==========
 
 export interface CountResponse {
   count: number;
@@ -152,7 +136,7 @@ export interface TasksResponse {
 }
 
 export interface AgentsResponse {
-  agents: Agent[];
+  agents: AgentFrontmatter[];
 }
 
 export interface SkillsResponse {
@@ -171,16 +155,14 @@ export interface CreateTaskResponse {
   status: string;
 }
 
-// 状态颜色映射
 export const STATUS_COLORS: Record<TaskStatus, string> = {
-  running: '#F59E0B',   // 琥珀色
-  completed: '#10B981', // 翠绿色
-  failed: '#EF4444',    // 红色
-  paused: '#F97316',    // 橙色
-  canceled: '#6B7280',  // 灰色
+  running: '#F59E0B',
+  completed: '#10B981',
+  failed: '#EF4444',
+  paused: '#F97316',
+  canceled: '#6B7280',
 };
 
-// 状态标签映射
 export const STATUS_LABELS: Record<TaskStatus | 'all', string> = {
   all: '全部',
   running: '运行中',
@@ -190,7 +172,6 @@ export const STATUS_LABELS: Record<TaskStatus | 'all', string> = {
   canceled: '已取消',
 };
 
-// 状态背景色映射（用于深色主题）
 export const STATUS_BG_COLORS: Record<TaskStatus, string> = {
   running: 'bg-amber-500/10',
   completed: 'bg-emerald-500/10',
@@ -199,7 +180,6 @@ export const STATUS_BG_COLORS: Record<TaskStatus, string> = {
   canceled: 'bg-gray-500/10',
 };
 
-// 状态文字色映射
 export const STATUS_TEXT_COLORS: Record<TaskStatus, string> = {
   running: 'text-amber-500',
   completed: 'text-emerald-500',
@@ -208,5 +188,4 @@ export const STATUS_TEXT_COLORS: Record<TaskStatus, string> = {
   canceled: 'text-gray-500',
 };
 
-// 日志条目类型
 export type LogEntry = string;

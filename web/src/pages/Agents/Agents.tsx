@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { api, deleteAgent } from '../../api';
+import { createAgent, deleteAgent, getAgent, getAgents, getProviders, updateAgent } from '../../api';
 import type { AgentFrontmatter, AgentDetail, CreateAgentRequest, UpdateAgentRequest } from '../../types';
 import './Agents.css';
 
@@ -8,11 +8,12 @@ interface AgentModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (data: CreateAgentRequest | UpdateAgentRequest) => Promise<void>;
+  providerNames: string[];
   agent?: AgentDetail | null;
   mode: 'create' | 'edit';
 }
 
-function AgentModal({ isOpen, onClose, onSubmit, agent, mode }: AgentModalProps) {
+function AgentModal({ isOpen, onClose, onSubmit, providerNames, agent, mode }: AgentModalProps) {
   const [formData, setFormData] = useState<CreateAgentRequest>({
     name: '',
     description: '',
@@ -37,10 +38,11 @@ function AgentModal({ isOpen, onClose, onSubmit, agent, mode }: AgentModalProps)
         body: agent.body,
       });
     } else if (isOpen && mode === 'create') {
+      const initialProvider = providerNames[0] ?? 'openai';
       setFormData({
         name: '',
         description: '',
-        provider: 'openai',
+        provider: initialProvider,
         model: 'gpt-4',
         allowed_tools: [],
         default: false,
@@ -48,7 +50,7 @@ function AgentModal({ isOpen, onClose, onSubmit, agent, mode }: AgentModalProps)
       });
     }
     setError(null);
-  }, [isOpen, agent, mode]);
+  }, [isOpen, agent, mode, providerNames]);
 
   if (!isOpen) return null;
 
@@ -110,16 +112,22 @@ function AgentModal({ isOpen, onClose, onSubmit, agent, mode }: AgentModalProps)
             <div className="form-row">
               <div className="form-group">
                 <label>Provider</label>
-                <select
+                <input
+                  list="agent-provider-options"
+                  type="text"
                   value={formData.provider}
                   onChange={(e) => setFormData({ ...formData, provider: e.target.value })}
                   disabled={loading}
-                >
-                  <option value="openai">OpenAI</option>
-                  <option value="anthropic">Anthropic</option>
-                  <option value="google">Google</option>
-                  <option value="local">Local</option>
-                </select>
+                  placeholder={providerNames.length > 0 ? '选择或输入 Provider 名称' : '先在 Provider 页面配置 Provider'}
+                />
+                <datalist id="agent-provider-options">
+                  {providerNames.map((providerName) => (
+                    <option key={providerName} value={providerName} />
+                  ))}
+                </datalist>
+                {providerNames.length === 0 && (
+                  <small className="form-hint">当前还没有配置 Provider，建议先到 Provider 页面完成配置。</small>
+                )}
               </div>
               <div className="form-group">
                 <label>Model</label>
@@ -277,6 +285,7 @@ function AgentCard({ agent, onEdit, onDelete }: AgentCardProps) {
 // 主页面组件
 export function Agents() {
   const [agents, setAgents] = useState<AgentFrontmatter[]>([]);
+  const [providerNames, setProviderNames] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -288,17 +297,9 @@ export function Agents() {
   const fetchAgents = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await api.getAgents();
-      // 将 Agent 转换为 AgentFrontmatter 格式
-      const agentsList: AgentFrontmatter[] = response.agents.map(a => ({
-        name: a.name,
-        description: a.description || '',
-        provider: (a as any).provider || 'unknown',
-        model: (a as any).model || 'unknown',
-        allowed_tools: (a as any).allowed_tools || [],
-        default: (a as any).default || false,
-      }));
-      setAgents(agentsList);
+      const [agentsResponse, providersResponse] = await Promise.all([getAgents(), getProviders()]);
+      setAgents(agentsResponse.agents);
+      setProviderNames(providersResponse.providers.map((provider) => provider.name));
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : '获取 Agent 列表失败');
@@ -313,14 +314,14 @@ export function Agents() {
 
   const handleCreate = async (data: CreateAgentRequest | UpdateAgentRequest) => {
     const createData = data as CreateAgentRequest;
-    await api.createAgent(createData);
+    await createAgent(createData);
     await fetchAgents();
   };
 
   const handleEdit = async (data: CreateAgentRequest | UpdateAgentRequest) => {
     if (!selectedAgent) return;
     const updateData = data as UpdateAgentRequest;
-    await api.updateAgent(selectedAgent.name, updateData);
+    await updateAgent(selectedAgent.name, updateData);
     await fetchAgents();
   };
 
@@ -337,7 +338,10 @@ export function Agents() {
 
   const openEditModal = async (agent: AgentFrontmatter) => {
     try {
-      const detail = await api.getAgent(agent.name);
+      const detail = await getAgent(agent.name);
+      if (!detail) {
+        throw new Error(`Agent "${agent.name}" 不存在`);
+      }
       setSelectedAgent(detail);
       setModalMode('edit');
       setModalOpen(true);
@@ -422,6 +426,7 @@ export function Agents() {
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         onSubmit={modalMode === 'create' ? handleCreate : handleEdit}
+        providerNames={providerNames}
         agent={selectedAgent}
         mode={modalMode}
       />

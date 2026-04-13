@@ -37,7 +37,7 @@ export function TaskTreeList({ initialTasks = [] }: TaskTreeListProps) {
       const data = await getTasks({
         status: selectedStatus === 'all' ? undefined : selectedStatus,
       });
-      setTasks(data);
+      setTasks(data.tasks);
     } catch (err) {
       setError(err instanceof Error ? err.message : '获取任务列表失败');
     } finally {

@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { api } from '../../api';
+import { useCallback, useEffect, useState } from 'react';
+import { deleteSkill, getSkills } from '../../api';
 import type { Skill } from '../../types';
 import './Skills.css';
 
@@ -9,10 +9,10 @@ export function Skills() {
   const [error, setError] = useState<string | null>(null);
 
   // 获取技能列表
-  const fetchSkills = async () => {
+  const fetchSkills = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await api.getSkills();
+      const response = await getSkills();
       setSkills(response.skills);
       setError(null);
     } catch (err) {
@@ -20,11 +20,11 @@ export function Skills() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchSkills();
-  }, []);
+    void fetchSkills();
+  }, [fetchSkills]);
 
   // 删除技能
   const handleDelete = async (skill: Skill) => {
@@ -35,16 +35,7 @@ export function Skills() {
     if (!confirmed) return;
 
     try {
-      // 调用删除 API
-      const response = await fetch(`/api/skills/${encodeURIComponent(skill.name)}`, {
-        method: 'DELETE',
-      });
-
-      if (!response.ok) {
-        throw new Error(`删除失败: ${response.status} ${response.statusText}`);
-      }
-
-      // 删除成功后刷新列表
+      await deleteSkill(skill.name);
       await fetchSkills();
     } catch (err) {
       setError(err instanceof Error ? err.message : '删除技能失败');
