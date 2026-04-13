@@ -1,6 +1,8 @@
 import type {
   AgentDetail,
   AgentsResponse,
+  ChannelConfig,
+  ChannelsResponse,
   CountResponse,
   CreateAgentRequest,
   CreateTaskRequest,
@@ -180,6 +182,30 @@ export function getAgents(): Promise<AgentsResponse> {
   return fetchApi<AgentsResponse>('/agents');
 }
 
+export function getChannels(): Promise<ChannelsResponse> {
+  return fetchApi<ChannelsResponse>('/channels');
+}
+
+export function createChannel(channel: ChannelConfig): Promise<void> {
+  return fetchApi<void>('/channels', {
+    method: 'POST',
+    body: JSON.stringify(channel),
+  });
+}
+
+export function updateChannel(name: string, channel: ChannelConfig): Promise<void> {
+  return fetchApi<void>(`/channels/${encodeURIComponent(name)}`, {
+    method: 'PUT',
+    body: JSON.stringify(channel),
+  });
+}
+
+export function deleteChannel(name: string): Promise<void> {
+  return fetchApi<void>(`/channels/${encodeURIComponent(name)}`, {
+    method: 'DELETE',
+  });
+}
+
 export function getAgentFiles(name: string): Promise<FileEntry[]> {
   return fetchApi<FileEntry[]>(`/agents/${encodeURIComponent(name)}/files`);
 }
@@ -253,6 +279,11 @@ export async function listProviders(): Promise<ProviderConfig[]> {
   return response.providers;
 }
 
+export async function listChannels(): Promise<ChannelConfig[]> {
+  const response = await fetchApi<ChannelsResponse>('/channels');
+  return response.channels;
+}
+
 export const api = {
   getRunningTasksCount(): Promise<CountResponse> {
     return getTaskCount('running');
@@ -281,6 +312,10 @@ export const api = {
   updateAgent,
   deleteAgent,
   getProviders,
+  getChannels,
+  createChannel,
+  updateChannel,
+  deleteChannel,
   createProvider,
   updateProvider,
   deleteProvider,

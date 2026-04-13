@@ -102,6 +102,8 @@ export type ProviderName = BuiltinProviderName | 'custom';
 
 export type CompatibleApi = 'openai' | 'anthropic';
 
+export type ChannelName = 'telegram' | 'wechat';
+
 interface ProviderConfigBase {
   api_key: string;
 }
@@ -120,6 +122,24 @@ export type ProviderConfig = BuiltinProviderConfig | CustomProviderConfig;
 
 export interface ProvidersResponse {
   providers: ProviderConfig[];
+}
+
+export interface TelegramChannelConfig {
+  name: 'telegram';
+  bot_token: string;
+  user_id: number;
+}
+
+export interface WechatChannelConfig {
+  name: 'wechat';
+  bot_token: string;
+  user_id: string;
+}
+
+export type ChannelConfig = TelegramChannelConfig | WechatChannelConfig;
+
+export interface ChannelsResponse {
+  channels: ChannelConfig[];
 }
 
 export interface Skill {

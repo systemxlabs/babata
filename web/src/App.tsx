@@ -2,17 +2,19 @@ import { BrowserRouter, NavLink, Navigate, Route, Routes } from 'react-router-do
 import './App.css';
 import { Dashboard } from './pages/Dashboard/Dashboard';
 import { Agents } from './pages/Agents/Agents';
+import { Channels } from './pages/Channels/Channels';
 import { Providers } from './pages/Providers/Providers';
 import { Skills } from './pages/Skills/Skills';
 import { Tasks } from './pages/Tasks/Tasks';
 
-type PageType = 'dashboard' | 'tasks' | 'agents' | 'providers' | 'skills';
+type PageType = 'dashboard' | 'tasks' | 'agents' | 'providers' | 'channels' | 'skills';
 
 const navItems: { key: PageType; path: string; label: string; icon: string }[] = [
   { key: 'dashboard', path: '/', label: 'Dashboard', icon: '📊' },
   { key: 'tasks', path: '/tasks', label: 'Tasks', icon: '📋' },
   { key: 'agents', path: '/agents', label: 'Agents', icon: '🤖' },
   { key: 'providers', path: '/providers', label: 'Providers', icon: '🔌' },
+  { key: 'channels', path: '/channels', label: 'Channels', icon: '📡' },
   { key: 'skills', path: '/skills', label: 'Skills', icon: '🛠️' },
 ];
 
@@ -50,6 +52,7 @@ function AppContent() {
           <Route path="/tasks" element={<Tasks />} />
           <Route path="/agents" element={<Agents />} />
           <Route path="/providers" element={<Providers />} />
+          <Route path="/channels" element={<Channels />} />
           <Route path="/skills" element={<Skills />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
