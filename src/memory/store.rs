@@ -376,6 +376,116 @@ impl MessageStore {
         Ok(())
     }
 
+    pub fn scan_task_message_records(
+        &self,
+        task_id: Uuid,
+        offset: usize,
+        limit: usize,
+    ) -> BabataResult<Vec<MessageRecord>> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+
+        let query = "SELECT task_id, message_type, content, reasoning_content, tool_calls, result, created_at
+            FROM messages
+            WHERE task_id = ?1
+            ORDER BY datetime(created_at), rowid
+            LIMIT ?2 OFFSET ?3";
+
+        let task_id_param = task_id.to_string();
+        let limit_param = limit.min(i64::MAX as usize) as i64;
+        let offset_param = offset.min(i64::MAX as usize) as i64;
+
+        let conn = self.connect()?;
+        let mut stmt = conn.prepare(query).map_err(|err| {
+            BabataError::memory(format!(
+                "Failed to prepare task message scan statement: {}",
+                err
+            ))
+        })?;
+
+        let mut rows = stmt
+            .query(params![task_id_param, limit_param, offset_param])
+            .map_err(|err| {
+                BabataError::memory(format!(
+                    "Failed to query task messages from sqlite: {}",
+                    err
+                ))
+            })?;
+
+        let mut records = Vec::new();
+        while let Some(row) = rows.next().map_err(|err| {
+            BabataError::memory(format!("Failed to scan sqlite task message row: {}", err))
+        })? {
+            let task_id_str: String = row.get(0).map_err(|err| {
+                BabataError::memory(format!("Failed to read task_id from row: {}", err))
+            })?;
+            let task_id = Uuid::parse_str(&task_id_str).map_err(|err| {
+                BabataError::memory(format!(
+                    "Failed to parse task_id '{}': {}",
+                    task_id_str, err
+                ))
+            })?;
+            let message_type_str: String = row.get(1).map_err(|err| {
+                BabataError::memory(format!("Failed to read message_type from row: {}", err))
+            })?;
+            let content_json: Option<String> = row.get(2).map_err(|err| {
+                BabataError::memory(format!("Failed to read content from row: {}", err))
+            })?;
+            let reasoning_content: Option<String> = row.get(3).map_err(|err| {
+                BabataError::memory(format!(
+                    "Failed to read reasoning_content from row: {}",
+                    err
+                ))
+            })?;
+            let tool_calls_json: Option<String> = row.get(4).map_err(|err| {
+                BabataError::memory(format!("Failed to read tool_calls from row: {}", err))
+            })?;
+            let result: Option<String> = row.get(5).map_err(|err| {
+                BabataError::memory(format!("Failed to read result from row: {}", err))
+            })?;
+            let created_at_str: String = row.get(6).map_err(|err| {
+                BabataError::memory(format!("Failed to read created_at from row: {}", err))
+            })?;
+            let created_at = created_at_str.parse::<DateTime<Utc>>().map_err(|err| {
+                BabataError::memory(format!(
+                    "Failed to parse created_at '{}': {}",
+                    created_at_str, err
+                ))
+            })?;
+
+            let message_type: MessageType = message_type_str.parse()?;
+            let content: Option<Vec<Content>> = content_json
+                .as_ref()
+                .map(|c| {
+                    serde_json::from_str(c).map_err(|e| {
+                        BabataError::memory(format!("Failed to deserialize content: {}", e))
+                    })
+                })
+                .transpose()?;
+            let tool_calls: Option<Vec<ToolCall>> = tool_calls_json
+                .as_ref()
+                .map(|c| {
+                    serde_json::from_str(c).map_err(|e| {
+                        BabataError::memory(format!("Failed to deserialize tool_calls: {}", e))
+                    })
+                })
+                .transpose()?;
+
+            records.push(MessageRecord {
+                task_id,
+                message_type,
+                content,
+                reasoning_content,
+                tool_calls,
+                result,
+                created_at,
+            });
+        }
+
+        Ok(records)
+    }
+
     /// Scan recent messages ordered by time (oldest first among the recent ones).
     /// Returns empty vector if limit is 0.
     pub fn scan_recent_messages(&self, limit: usize) -> BabataResult<Vec<Message>> {
@@ -599,6 +709,69 @@ mod tests {
             .scan_recent_messages(0)
             .expect("scan zero messages from sqlite");
         assert!(scanned_empty.is_empty());
+
+        let _ = std::fs::remove_file(db_path);
+    }
+
+    #[test]
+    fn scan_task_message_records_returns_one_task_in_ascending_order_with_pagination() {
+        let db_path = std::env::temp_dir()
+            .join("babata-tests")
+            .join(format!("message-store-{}.db", Uuid::new_v4()));
+
+        let store = MessageStore::open(&db_path).expect("open sqlite message store");
+        let task_id = Uuid::new_v4();
+        let other_task_id = Uuid::new_v4();
+        let now = Utc::now();
+
+        store
+            .append_messages(
+                task_id,
+                &[
+                    Message::UserPrompt {
+                        content: vec![Content::Text {
+                            text: "m1".to_string(),
+                        }],
+                        created_at: now,
+                    },
+                    Message::UserSteering {
+                        content: vec![Content::Text {
+                            text: "m2".to_string(),
+                        }],
+                        created_at: now + chrono::Duration::seconds(1),
+                    },
+                    Message::AssistantResponse {
+                        content: vec![Content::Text {
+                            text: "m3".to_string(),
+                        }],
+                        reasoning_content: None,
+                        created_at: now + chrono::Duration::seconds(2),
+                    },
+                ],
+            )
+            .expect("insert task messages");
+
+        store
+            .append_messages(
+                other_task_id,
+                &[Message::UserPrompt {
+                    content: vec![Content::Text {
+                        text: "other".to_string(),
+                    }],
+                    created_at: now + chrono::Duration::seconds(3),
+                }],
+            )
+            .expect("insert other task message");
+
+        let records = store
+            .scan_task_message_records(task_id, 1, 2)
+            .expect("scan paginated task message records");
+
+        assert_eq!(records.len(), 2);
+        assert_eq!(records[0].task_id, task_id);
+        assert_eq!(records[0].message_type, MessageType::UserSteering);
+        assert_eq!(records[1].task_id, task_id);
+        assert_eq!(records[1].message_type, MessageType::AssistantResponse);
 
         let _ = std::fs::remove_file(db_path);
     }

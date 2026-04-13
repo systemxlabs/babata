@@ -17,6 +17,7 @@ mod get_skill_file;
 mod get_task;
 mod get_task_file;
 mod get_task_logs;
+mod get_task_messages;
 mod get_task_tree;
 mod list_agent_files;
 mod list_agents;
@@ -137,6 +138,10 @@ fn router(task_manager: Arc<TaskManager>) -> Router {
             get(get_task_file::handle),
         )
         .route("/api/tasks/{task_id}/logs", get(get_task_logs::handle))
+        .route(
+            "/api/tasks/{task_id}/messages",
+            get(get_task_messages::handle),
+        )
         .route(
             "/api/tasks/{task_id}/collaborate",
             get(collaborate_task::get).post(collaborate_task::create),

@@ -14,6 +14,7 @@ use crate::{
     agent::Agent,
     error::BabataError,
     http::CollaborateTaskRequest,
+    memory::MessageRecord,
     message::Content,
     task::{
         CollaborationTaskState, CreateTaskRequest, SteerMessage, TaskExitEvent, TaskRecord,
@@ -346,6 +347,20 @@ impl TaskManager {
 
     pub fn get_task(&self, task_id: Uuid) -> BabataResult<TaskRecord> {
         self.store.get_task(task_id)
+    }
+
+    pub fn get_task_messages(
+        &self,
+        task_id: Uuid,
+        offset: usize,
+        limit: usize,
+    ) -> BabataResult<Vec<MessageRecord>> {
+        let task = self.store.get_task(task_id)?;
+        let memory = self.launcher.memories.get(&task.agent).ok_or_else(|| {
+            BabataError::config(format!("Agent '{}' memory not found", task.agent))
+        })?;
+
+        memory.scan_task_message_records(task_id, offset, limit)
     }
 
     pub fn task_exists(&self, task_id: Uuid) -> BabataResult<bool> {

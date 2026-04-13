@@ -61,7 +61,10 @@ export function Tasks() {
     }
   }, [filter])
 
-  const fetchTree = useCallback(async (taskId: string) => {
+  const fetchTree = useCallback(async (
+    taskId: string,
+    options?: { preserveOnError?: boolean }
+  ) => {
     setTreeLoading(true)
     setTreeError(null)
 
@@ -70,7 +73,9 @@ export function Tasks() {
       setSelectedTree(sortTaskTreeByCreatedAt(tree))
     } catch (error) {
       console.error("Failed to fetch task tree:", error)
-      setSelectedTree(null)
+      if (!options?.preserveOnError) {
+        setSelectedTree(null)
+      }
       setTreeError(error instanceof Error ? error.message : "加载任务树失败")
     } finally {
       setTreeLoading(false)
@@ -135,7 +140,7 @@ export function Tasks() {
     if (!selectedRootTaskId) return
 
     const interval = window.setInterval(() => {
-      void fetchTree(selectedRootTaskId)
+      void fetchTree(selectedRootTaskId, { preserveOnError: true })
     }, 10000)
 
     return () => window.clearInterval(interval)
@@ -194,7 +199,7 @@ export function Tasks() {
       await controlTask(taskId, action)
       await fetchTasks()
       if (selectedRootTaskId) {
-        await fetchTree(selectedRootTaskId)
+        await fetchTree(selectedRootTaskId, { preserveOnError: true })
       }
     } catch (error) {
       console.error(`Failed to ${action} task:`, error)
@@ -206,7 +211,7 @@ export function Tasks() {
       await steerTask(taskId, message)
       await fetchTasks()
       if (selectedRootTaskId) {
-        await fetchTree(selectedRootTaskId)
+        await fetchTree(selectedRootTaskId, { preserveOnError: true })
       }
     } catch (error) {
       console.error("Failed to steer task:", error)
@@ -322,20 +327,48 @@ export function Tasks() {
                     点击节点查看任务详情、文件目录与执行日志。
                   </p>
                 </div>
-                {selectedRootTask ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="rounded-full text-destructive hover:text-destructive"
-                    onClick={handleDeleteTreeClick}
-                  >
-                    <Trash2 className="mr-1.5 size-4" />
-                    删除任务树
-                  </Button>
-                ) : null}
+                <div className="flex items-center gap-2">
+                  {treeLoading && selectedTree ? (
+                    <Badge variant="outline" className="rounded-full px-3 py-1.5">
+                      <RefreshCw className="mr-1.5 size-3.5 animate-spin" />
+                      刷新中
+                    </Badge>
+                  ) : null}
+                  {selectedRootTask ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="rounded-full text-destructive hover:text-destructive"
+                      onClick={handleDeleteTreeClick}
+                    >
+                      <Trash2 className="mr-1.5 size-4" />
+                      删除任务树
+                    </Button>
+                  ) : null}
+                </div>
               </CardHeader>
               <CardContent className="pt-0">
-                {treeLoading ? (
+                {selectedTree ? (
+                  <div className="space-y-4">
+                    {treeError ? (
+                      <div className="rounded-[1.3rem] border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+                        {treeError}
+                      </div>
+                    ) : null}
+                    <div className="overflow-x-auto pb-2">
+                      <div className="min-w-max px-4 pb-2 pt-3">
+                        <TaskTreeItem
+                          task={selectedTree}
+                          selectedTaskId={selectedTaskId}
+                          onClick={handleTaskClick}
+                          onControlTask={handleControlTask}
+                          onSteerTask={handleSteerTask}
+                          formatTime={formatTime}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ) : treeLoading ? (
                   <LoadingState
                     title="加载任务树"
                     description="正在展开当前根任务的完整层级。"
@@ -348,19 +381,6 @@ export function Tasks() {
                     description={treeError}
                     className="min-h-[460px] border-none bg-transparent shadow-none"
                   />
-                ) : selectedTree ? (
-                  <div className="overflow-x-auto pb-2">
-                    <div className="min-w-max px-4 pb-2 pt-3">
-                      <TaskTreeItem
-                        task={selectedTree}
-                        selectedTaskId={selectedTaskId}
-                        onClick={handleTaskClick}
-                        onControlTask={handleControlTask}
-                        onSteerTask={handleSteerTask}
-                        formatTime={formatTime}
-                      />
-                    </div>
-                  </div>
                 ) : (
                   <EmptyState
                     icon={Workflow}

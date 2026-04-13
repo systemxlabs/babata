@@ -1,5 +1,6 @@
 mod store;
 
+pub use store::MessageRecord;
 pub use store::MessageStore;
 
 use std::path::{Path, PathBuf};
@@ -75,6 +76,15 @@ This file stores important information that should persist across sessions.
 
     pub fn append_messages(&self, task_id: Uuid, messages: &[Message]) -> BabataResult<()> {
         self.store.append_messages(task_id, messages)
+    }
+
+    pub fn scan_task_message_records(
+        &self,
+        task_id: Uuid,
+        offset: usize,
+        limit: usize,
+    ) -> BabataResult<Vec<MessageRecord>> {
+        self.store.scan_task_message_records(task_id, offset, limit)
     }
 
     fn render_context(messages: &[Message]) -> String {
