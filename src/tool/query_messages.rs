@@ -13,6 +13,12 @@ pub struct QueryMessagesTool {
     spec: ToolSpec,
 }
 
+impl Default for QueryMessagesTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl QueryMessagesTool {
     pub fn new() -> Self {
         Self {
