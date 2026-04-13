@@ -34,6 +34,8 @@ export function Tasks() {
     pageSize: 20,
   });
 
+  const hasStatusFilter = filter.status !== undefined && filter.status !== 'all';
+
   // 获取根任务列表
   const fetchTasks = useCallback(async () => {
     setLoading(true);
@@ -167,7 +169,9 @@ export function Tasks() {
         ) : tasks.length === 0 ? (
           <div className="tasks-empty">
             <p>暂无任务</p>
-            <p className="empty-hint">尝试调整筛选条件</p>
+            <p className="empty-hint">
+              {hasStatusFilter ? '尝试切换其他状态标签，或再次点击当前标签查看全部根任务' : '当前没有任何根任务'}
+            </p>
           </div>
         ) : (
           <div className="tasks-list">

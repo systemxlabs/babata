@@ -12,31 +12,33 @@ interface TaskListHeaderProps {
 const STATUS_OPTIONS: (TaskStatus | 'all')[] = ['all', 'running', 'completed', 'failed', 'paused', 'canceled'];
 
 export function TaskListHeader({ filter, onFilterChange, loading }: TaskListHeaderProps) {
-  const handleStatusChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    onFilterChange({ status: e.target.value as TaskStatus | 'all' });
-  }, [onFilterChange]);
+  const handleStatusToggle = useCallback((status: TaskStatus) => {
+    const nextStatus = filter.status === status ? 'all' : status;
+    onFilterChange({ status: nextStatus });
+  }, [filter.status, onFilterChange]);
+
+  const activeStatus = filter.status && filter.status !== 'all' ? filter.status : null;
 
   return (
     <div className="task-list-header">
       <div className="filter-row">
-        <div className="filter-group">
-          <label htmlFor="status-filter">状态:</label>
-          <select
-            id="status-filter"
-            value={filter.status || 'all'}
-            onChange={handleStatusChange}
-            disabled={loading}
-            className="filter-select"
-          >
-            {STATUS_OPTIONS.map(status => (
-              <option key={status} value={status}>
-                {STATUS_LABELS[status]}
-              </option>
-            ))}
-          </select>
+        <div className="status-tabs" aria-label="任务状态筛选">
+          {(STATUS_OPTIONS.filter((status) => status !== 'all') as TaskStatus[]).map((status) => (
+            <button
+              key={status}
+              type="button"
+              className={`status-tab ${activeStatus === status ? 'active' : ''}`}
+              onClick={() => handleStatusToggle(status)}
+              disabled={loading}
+              aria-pressed={activeStatus === status}
+            >
+              {STATUS_LABELS[status]}
+            </button>
+          ))}
         </div>
-
-
+        <div className="status-filter-summary">
+          {activeStatus ? `当前筛选：${STATUS_LABELS[activeStatus]}` : '当前筛选：全部根任务'}
+        </div>
       </div>
     </div>
   );
