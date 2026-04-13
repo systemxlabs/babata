@@ -119,7 +119,6 @@ export function Dashboard() {
         agent: selectedAgent,
         prompt: taskDescription.trim(),
         description: taskDescription.trim(),
-        task_type: "roottask",
       })
       setTaskDescription("")
       await refreshData()

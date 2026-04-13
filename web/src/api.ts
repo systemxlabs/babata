@@ -13,6 +13,7 @@ import type {
   ProviderConfig,
   ProvidersResponse,
   Skill,
+  SteerTaskRequest,
   SkillsResponse,
   Task,
   TaskControlAction,
@@ -20,6 +21,7 @@ import type {
   TaskListResponse,
   TaskStatus,
   TasksResponse,
+  TextContent,
   UpdateAgentRequest,
 } from './types';
 
@@ -65,6 +67,13 @@ export interface TaskTreeResponse {
   created_at: number;
   never_ends: boolean;
   children: TaskTreeResponse[];
+}
+
+interface BackendCreateTaskRequest {
+  agent: string;
+  description: string;
+  prompt: TextContent[];
+  never_ends: boolean;
 }
 
 export function getRootTasks(filter: TaskFilter): Promise<TaskListResponse> {
@@ -130,6 +139,17 @@ export function controlTask(taskId: string, action: TaskControlAction): Promise<
   return fetchApi<void>(`/tasks/${taskId}/control`, {
     method: 'POST',
     body: JSON.stringify({ action }),
+  });
+}
+
+export function steerTask(taskId: string, message: string): Promise<void> {
+  const request: SteerTaskRequest = {
+    content: [{ type: 'text', text: message.trim() }],
+  };
+
+  return fetchApi<void>(`/tasks/${taskId}/steer`, {
+    method: 'POST',
+    body: JSON.stringify(request),
   });
 }
 
@@ -298,9 +318,16 @@ export const api = {
   },
 
   createTask(request: CreateTaskRequest): Promise<CreateTaskResponse> {
+    const payload: BackendCreateTaskRequest = {
+      agent: request.agent,
+      description: request.description.trim(),
+      prompt: [{ type: 'text', text: request.prompt.trim() }],
+      never_ends: request.never_ends ?? false,
+    };
+
     return fetchApi<CreateTaskResponse>('/tasks', {
       method: 'POST',
-      body: JSON.stringify(request),
+      body: JSON.stringify(payload),
     });
   },
 

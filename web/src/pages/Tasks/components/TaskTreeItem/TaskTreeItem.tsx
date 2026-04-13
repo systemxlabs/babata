@@ -12,6 +12,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import type { Task } from "@/types"
 import { TaskStatusBadge } from "../TaskStatusBadge/TaskStatusBadge"
+import { TaskSteerDialog } from "./TaskSteerDialog"
 
 type TreeTask = Task & {
   children?: TreeTask[]
@@ -22,6 +23,7 @@ interface TaskTreeItemProps {
   onClick: (taskId: string) => void
   selectedTaskId?: string | null
   onControlTask?: (taskId: string, action: "pause" | "resume" | "cancel") => void
+  onSteerTask?: (taskId: string, message: string) => Promise<void>
   formatTime: (timestamp: string | number) => string
 }
 
@@ -30,6 +32,7 @@ export function TaskTreeItem({
   onClick,
   selectedTaskId,
   onControlTask,
+  onSteerTask,
   formatTime,
 }: TaskTreeItemProps) {
   const isRootTask = !task.parent_task_id
@@ -113,6 +116,13 @@ export function TaskTreeItem({
                 </div>
               )}
               <div className="flex flex-wrap items-center gap-2" onClick={(event) => event.stopPropagation()}>
+              {task.status === "running" && onSteerTask ? (
+                <TaskSteerDialog
+                  taskId={task.task_id}
+                  taskDescription={task.description}
+                  onSubmit={onSteerTask}
+                />
+              ) : null}
               {(task.status === 'running' || task.status === 'paused') && onControlTask && (
                 <>
                     {task.status === "running" ? (
@@ -166,6 +176,7 @@ export function TaskTreeItem({
                   onClick={onClick}
                   selectedTaskId={selectedTaskId}
                   onControlTask={onControlTask}
+                  onSteerTask={onSteerTask}
                   formatTime={formatTime}
                 />
               </div>

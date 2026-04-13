@@ -167,12 +167,21 @@ export interface CreateTaskRequest {
   agent: string;
   prompt: string;
   description: string;
-  task_type?: 'roottask' | 'subtask';
+  never_ends?: boolean;
 }
 
 export interface CreateTaskResponse {
   task_id: string;
   status: string;
+}
+
+export interface TextContent {
+  type: 'text';
+  text: string;
+}
+
+export interface SteerTaskRequest {
+  content: TextContent[];
 }
 
 export const STATUS_COLORS: Record<TaskStatus, string> = {

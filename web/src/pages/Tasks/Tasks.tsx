@@ -1,13 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import {
-  FolderTree,
-  GitBranchPlus,
   RefreshCw,
   Trash2,
   Workflow,
 } from "lucide-react"
 
-import { controlTask, deleteTask, getRootTasks, getTaskTree } from "@/api"
+import { controlTask, deleteTask, getRootTasks, getTaskTree, steerTask } from "@/api"
 import type { TaskTreeResponse } from "@/api"
 import { DeleteConfirmModal } from "@/components/DeleteConfirmModal"
 import { EmptyState } from "@/components/empty-state"
@@ -23,11 +21,6 @@ import { TaskPagination } from "@/pages/Tasks/components/TaskPagination"
 import { TaskStatusBadge } from "@/pages/Tasks/components/TaskStatusBadge"
 import { TaskTreeItem } from "@/pages/Tasks/components/TaskTreeItem"
 import { STATUS_LABELS, type RootTask, type Task, type TaskFilter } from "@/types"
-
-function countTreeNodes(tree: TaskTreeResponse | null): number {
-  if (!tree) return 0
-  return 1 + tree.children.reduce((total, child) => total + countTreeNodes(child), 0)
-}
 
 export function Tasks() {
   const [tasks, setTasks] = useState<RootTask[]>([])
@@ -200,6 +193,19 @@ export function Tasks() {
     }
   }, [fetchTasks, fetchTree, selectedRootTaskId])
 
+  const handleSteerTask = useCallback(async (taskId: string, message: string) => {
+    try {
+      await steerTask(taskId, message)
+      await fetchTasks()
+      if (selectedRootTaskId) {
+        await fetchTree(selectedRootTaskId)
+      }
+    } catch (error) {
+      console.error("Failed to steer task:", error)
+      throw error
+    }
+  }, [fetchTasks, fetchTree, selectedRootTaskId])
+
   const formatTime = useCallback((timestamp: string | number) => {
     return new Date(timestamp).toLocaleString("zh-CN")
   }, [])
@@ -300,54 +306,6 @@ export function Tasks() {
 
           <div className="space-y-6">
             <Card className="rounded-[2rem] border-border/70 bg-card/70 shadow-[0_20px_65px_-36px_rgba(15,23,42,0.25)] backdrop-blur-xl">
-              <CardContent className="grid gap-4 p-6 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-                <div className="grid gap-4 md:grid-cols-3">
-                  <div className="rounded-[1.5rem] border border-border/70 bg-background/70 p-4">
-                    <div className="flex items-center gap-2 text-[0.72rem] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                      <FolderTree className="size-3.5" />
-                      当前根任务
-                    </div>
-                    <div className="mt-3 text-lg font-semibold tracking-tight text-foreground">
-                      {selectedRootTask?.description ?? "未选择"}
-                    </div>
-                  </div>
-                  <div className="rounded-[1.5rem] border border-border/70 bg-background/70 p-4">
-                    <div className="text-[0.72rem] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                      状态
-                    </div>
-                    <div className="mt-3">
-                      {selectedRootTask ? (
-                        <TaskStatusBadge status={selectedRootTask.status} />
-                      ) : (
-                        <span className="text-sm text-muted-foreground">未选择</span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="rounded-[1.5rem] border border-border/70 bg-background/70 p-4">
-                    <div className="flex items-center gap-2 text-[0.72rem] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                      <GitBranchPlus className="size-3.5" />
-                      节点总数
-                    </div>
-                    <div className="mt-3 text-3xl font-semibold tracking-tight text-foreground">
-                      {countTreeNodes(selectedTree)}
-                    </div>
-                  </div>
-                </div>
-
-                {selectedRootTask ? (
-                  <Button
-                    variant="outline"
-                    className="rounded-full text-destructive hover:text-destructive"
-                    onClick={handleDeleteTreeClick}
-                  >
-                    <Trash2 className="mr-2 size-4" />
-                    删除整棵任务树
-                  </Button>
-                ) : null}
-              </CardContent>
-            </Card>
-
-            <Card className="rounded-[2rem] border-border/70 bg-card/70 shadow-[0_20px_65px_-36px_rgba(15,23,42,0.25)] backdrop-blur-xl">
               <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
                   <div className="text-[0.7rem] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
@@ -359,9 +317,15 @@ export function Tasks() {
                   </p>
                 </div>
                 {selectedRootTask ? (
-                  <Badge variant="outline" className="rounded-full px-3 py-1.5">
-                    {selectedRootTask.agent}
-                  </Badge>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-full text-destructive hover:text-destructive"
+                    onClick={handleDeleteTreeClick}
+                  >
+                    <Trash2 className="mr-1.5 size-4" />
+                    删除任务树
+                  </Button>
                 ) : null}
               </CardHeader>
               <CardContent className="pt-0">
@@ -386,6 +350,7 @@ export function Tasks() {
                         selectedTaskId={selectedTaskId}
                         onClick={handleTaskClick}
                         onControlTask={handleControlTask}
+                        onSteerTask={handleSteerTask}
                         formatTime={formatTime}
                       />
                     </div>

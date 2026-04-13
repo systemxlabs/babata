@@ -5,6 +5,21 @@ use serde::Serialize;
 
 use crate::{BabataResult, error::BabataError};
 
+// Directories to skip when listing files (same as grep tool)
+const SKIP_DIRS: &[&str] = &[
+    ".git",
+    "node_modules",
+    "__pycache__",
+    ".venv",
+    "venv",
+    ".tox",
+    "dist",
+    "build",
+    "target",
+    ".idea",
+    ".vscode",
+];
+
 /// File or directory entry
 #[derive(Debug, Serialize)]
 pub(crate) struct FileEntry {
@@ -43,7 +58,7 @@ pub(crate) async fn read_directory_recursive(
             let is_dir = metadata.is_dir();
 
             entries.push(FileEntry {
-                name,
+                name: name.clone(),
                 path: rel_path,
                 is_dir,
                 size: if is_dir { None } else { Some(metadata.len()) },
@@ -55,7 +70,10 @@ pub(crate) async fn read_directory_recursive(
             });
 
             if is_dir {
-                dirs_to_process.push(full_path);
+                // Skip directories in the skip list
+                if !SKIP_DIRS.contains(&name.as_str()) {
+                    dirs_to_process.push(full_path);
+                }
             }
         }
     }
