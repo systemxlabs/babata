@@ -131,6 +131,8 @@
   html {
     scroll-behavior: smooth;
     @apply font-sans;
+    overflow-y: scroll;
+    scrollbar-gutter: stable;
   }
 
   body {
@@ -148,6 +150,10 @@
       radial-gradient(circle at top, rgba(99, 102, 241, 0.22), transparent 30%),
       radial-gradient(circle at 85% 18%, rgba(14, 165, 233, 0.18), transparent 22%),
       linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(2, 6, 23, 0.98));
+  }
+
+  body[style*="pointer-events: none"] {
+    margin-right: 0 !important;
   }
 
   #root {
