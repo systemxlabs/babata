@@ -27,26 +27,6 @@ fn main() {
             babata::cli::ProviderAction::Delete { name } => babata::cli::provider::delete(&name),
             babata::cli::ProviderAction::List => babata::cli::provider::list(),
         },
-        babata::cli::Command::Task { action } => match action {
-            babata::cli::TaskAction::Pause { task_id } => babata::cli::task::pause(&task_id),
-            babata::cli::TaskAction::Resume { task_id } => babata::cli::task::resume(&task_id),
-            babata::cli::TaskAction::Cancel { task_id } => babata::cli::task::cancel(&task_id),
-            babata::cli::TaskAction::Create {
-                prompt,
-                agent,
-                parent_task_id,
-                never_ends,
-            } => babata::cli::task::create(&prompt, &agent, parent_task_id.as_deref(), never_ends),
-            babata::cli::TaskAction::List {
-                status,
-                limit,
-                pretty_format,
-            } => babata::cli::task::list(status.as_deref(), limit, pretty_format),
-            babata::cli::TaskAction::Get { task_id } => babata::cli::task::get(&task_id),
-            babata::cli::TaskAction::Count { status } => {
-                babata::cli::task::count(status.as_deref())
-            }
-        },
         babata::cli::Command::Onboard => babata::cli::onboard::run(),
     }
 }

@@ -22,10 +22,10 @@ mod update_agent;
 use std::{env, sync::Arc};
 
 use axum::{
+    Json, Router,
     body::Body,
     extract::Request,
     http::{HeaderMap, Method, StatusCode, Uri, Version, header},
-    Json, Router,
     response::{IntoResponse, Response},
     routing::{delete, get, post},
 };
@@ -37,9 +37,7 @@ use crate::{BabataResult, error::BabataError, task::TaskManager};
 
 pub(crate) use collaborate_task::CollaborateTaskRequest;
 pub(crate) use control_task::{ControlTaskRequest, TaskAction};
-pub(crate) use count_tasks::CountTasksResponse;
 pub(crate) use create_task::CreateTaskResponse;
-pub(crate) use list_root_tasks::{ListRootTasksResponse, RootTaskResponse};
 pub(crate) use steer_task::SteerTaskRequest;
 
 pub const BABATA_SERVER_PORT_ENV: &str = "BABATA_SERVER_PORT";
@@ -144,12 +142,7 @@ async fn serve_web_ui(req: Request) -> Response {
         .into_response()
 }
 
-fn build_static_request(
-    method: Method,
-    uri: Uri,
-    version: Version,
-    headers: HeaderMap,
-) -> Request {
+fn build_static_request(method: Method, uri: Uri, version: Version, headers: HeaderMap) -> Request {
     let mut request = Request::builder()
         .method(method)
         .uri(uri)
@@ -167,7 +160,9 @@ fn should_serve_spa_index(method: &Method, uri: &Uri, headers: &HeaderMap) -> bo
 }
 
 fn path_has_extension(path: &str) -> bool {
-    path.rsplit('/').next().is_some_and(|segment| segment.contains('.'))
+    path.rsplit('/')
+        .next()
+        .is_some_and(|segment| segment.contains('.'))
 }
 
 fn request_accepts_html(headers: &HeaderMap) -> bool {
@@ -248,11 +243,17 @@ mod tests {
     #[test]
     fn html_accept_detection_requires_text_html() {
         let mut headers = HeaderMap::new();
-        headers.insert(header::ACCEPT, HeaderValue::from_static("text/html,application/xhtml+xml"));
+        headers.insert(
+            header::ACCEPT,
+            HeaderValue::from_static("text/html,application/xhtml+xml"),
+        );
         assert!(request_accepts_html(&headers));
 
         let mut asset_headers = HeaderMap::new();
-        asset_headers.insert(header::ACCEPT, HeaderValue::from_static("text/css,*/*;q=0.1"));
+        asset_headers.insert(
+            header::ACCEPT,
+            HeaderValue::from_static("text/css,*/*;q=0.1"),
+        );
         assert!(!request_accepts_html(&asset_headers));
     }
 }

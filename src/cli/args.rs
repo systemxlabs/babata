@@ -23,11 +23,6 @@ pub enum Command {
         #[command(subcommand)]
         action: ProviderAction,
     },
-    #[command(about = "Task management commands")]
-    Task {
-        #[command(subcommand)]
-        action: TaskAction,
-    },
     #[command(about = "Interactive setup (provider/agent/channel/service)")]
     Onboard,
 }
@@ -83,60 +78,4 @@ pub enum ChannelAction {
     },
     #[command(about = "List all channel configs (one JSON per line)")]
     List,
-}
-
-#[derive(Subcommand, Debug)]
-pub enum TaskAction {
-    #[command(about = "Pause a task by id")]
-    Pause {
-        #[arg(value_name = "TASK_ID", help = "Task UUID")]
-        task_id: String,
-    },
-    #[command(about = "Resume a task by id")]
-    Resume {
-        #[arg(value_name = "TASK_ID", help = "Task UUID")]
-        task_id: String,
-    },
-    #[command(about = "Cancel a task by id")]
-    Cancel {
-        #[arg(value_name = "TASK_ID", help = "Task UUID")]
-        task_id: String,
-    },
-    #[command(about = "Create a task")]
-    Create {
-        #[arg(long, value_name = "PROMPT", help = "Task prompt text")]
-        prompt: String,
-        #[arg(long, value_name = "AGENT", help = "Agent name")]
-        agent: String,
-        #[arg(
-            long = "parent-task-id",
-            value_name = "PARENT_TASK_ID",
-            help = "Optional parent task UUID"
-        )]
-        parent_task_id: Option<String>,
-        #[arg(long, help = "Set the never_ends flag on the created task record")]
-        never_ends: bool,
-    },
-    #[command(about = "List tasks")]
-    List {
-        #[arg(long, value_name = "STATUS", help = "Optional task status filter")]
-        status: Option<String>,
-        #[arg(long, value_name = "LIMIT", help = "Optional max number of tasks")]
-        limit: Option<usize>,
-        #[arg(
-            long,
-            help = "Render task list as a pretty table instead of JSON lines"
-        )]
-        pretty_format: bool,
-    },
-    #[command(about = "Get a task by id")]
-    Get {
-        #[arg(value_name = "TASK_ID", help = "Task UUID")]
-        task_id: String,
-    },
-    #[command(about = "Count tasks")]
-    Count {
-        #[arg(long, value_name = "STATUS", help = "Optional task status filter")]
-        status: Option<String>,
-    },
 }
