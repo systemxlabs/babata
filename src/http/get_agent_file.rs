@@ -6,13 +6,13 @@ use tower_http::services::ServeDir;
 
 use crate::{
     BabataResult,
+    agent::{agent_dir, agent_exists},
     error::BabataError,
-    skill::{skill_dir, skill_exists},
 };
 
 use super::file_browser::build_file_request;
 
-/// Handle GET /api/skills/{name}/files/{*path}
+/// Handle GET /api/agents/{name}/files/{*path}
 pub(super) async fn handle(
     Path((name, file_path)): Path<(String, String)>,
     request: Request,
@@ -24,20 +24,20 @@ pub(super) async fn handle(
 }
 
 async fn handle_inner(name: &str, file_path: &str, request: Request) -> BabataResult<Response> {
-    if !skill_exists(name)? {
+    if !agent_exists(name) {
         return Err(BabataError::not_found(format!(
-            "Skill '{}' not found",
+            "Agent '{}' not found",
             name
         )));
     }
 
-    let skill_dir = skill_dir(name)?;
+    let agent_dir = agent_dir(name)?;
     let forwarded_request = build_file_request(request, file_path)?;
 
-    let mut service = ServeDir::new(skill_dir).append_index_html_on_directories(false);
+    let mut service = ServeDir::new(agent_dir).append_index_html_on_directories(false);
     service
         .try_call(forwarded_request)
         .await
         .map(IntoResponse::into_response)
-        .map_err(|err| BabataError::internal(format!("Failed to serve skill file: {err}")))
+        .map_err(|err| BabataError::internal(format!("Failed to serve agent file: {err}")))
 }

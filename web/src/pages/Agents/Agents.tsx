@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createAgent, deleteAgent, getAgent, getAgents, getProviders, updateAgent } from '../../api';
+import { AgentDetailModal } from '../../components/AgentDetailModal/AgentDetailModal';
 import type { AgentFrontmatter, AgentDetail, CreateAgentRequest, UpdateAgentRequest } from '../../types';
 import './Agents.css';
 
@@ -239,37 +240,41 @@ function DeleteModal({ isOpen, onClose, onConfirm, agentName }: DeleteModalProps
 // Agent 卡片组件
 interface AgentCardProps {
   agent: AgentFrontmatter;
+  onView: (agent: AgentFrontmatter) => void;
   onEdit: (agent: AgentFrontmatter) => void;
   onDelete: (agent: AgentFrontmatter) => void;
 }
 
-function AgentCard({ agent, onEdit, onDelete }: AgentCardProps) {
+function AgentCard({ agent, onView, onEdit, onDelete }: AgentCardProps) {
   return (
     <div className="agent-card">
-      <div className="agent-card-header">
-        <div className="agent-icon">🤖</div>
-        <div className="agent-badges">
-          {agent.default && <span className="badge badge-default">默认</span>}
-        </div>
-      </div>
-      <div className="agent-info">
-        <h3 className="agent-name">{agent.name}</h3>
-        <p className="agent-description">{agent.description || '暂无描述'}</p>
-        <div className="agent-meta">
-          <span className="agent-provider">🔌 {agent.provider}</span>
-          <span className="agent-model">🧠 {agent.model}</span>
-        </div>
-        {agent.allowed_tools.length > 0 && (
-          <div className="agent-tools">
-            {agent.allowed_tools.slice(0, 3).map((tool) => (
-              <span key={tool} className="tool-tag">{tool}</span>
-            ))}
-            {agent.allowed_tools.length > 3 && (
-              <span className="tool-tag tool-more">+{agent.allowed_tools.length - 3}</span>
-            )}
+      <button className="agent-card-main" onClick={() => onView(agent)} title={`查看 ${agent.name} 详情`}>
+        <div className="agent-card-header">
+          <div className="agent-icon">🤖</div>
+          <div className="agent-badges">
+            {agent.default && <span className="badge badge-default">默认</span>}
           </div>
-        )}
-      </div>
+        </div>
+        <div className="agent-info">
+          <h3 className="agent-name">{agent.name}</h3>
+          <p className="agent-description">{agent.description || '暂无描述'}</p>
+          <div className="agent-meta">
+            <span className="agent-provider">🔌 {agent.provider}</span>
+            <span className="agent-model">🧠 {agent.model}</span>
+          </div>
+          {agent.allowed_tools.length > 0 && (
+            <div className="agent-tools">
+              {agent.allowed_tools.slice(0, 3).map((tool) => (
+                <span key={tool} className="tool-tag">{tool}</span>
+              ))}
+              {agent.allowed_tools.length > 3 && (
+                <span className="tool-tag tool-more">+{agent.allowed_tools.length - 3}</span>
+              )}
+            </div>
+          )}
+          <div className="agent-view-hint">查看详情</div>
+        </div>
+      </button>
       <div className="agent-actions">
         <button className="btn-icon" onClick={() => onEdit(agent)} title="编辑">
           ✏️
@@ -291,6 +296,7 @@ export function Agents() {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [selectedAgent, setSelectedAgent] = useState<AgentDetail | null>(null);
+  const [detailAgentName, setDetailAgentName] = useState<string | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteAgentName, setDeleteAgentName] = useState('');
 
@@ -327,6 +333,9 @@ export function Agents() {
 
   const handleDelete = async () => {
     await deleteAgent(deleteAgentName);
+    if (detailAgentName === deleteAgentName) {
+      setDetailAgentName(null);
+    }
     await fetchAgents();
   };
 
@@ -353,6 +362,10 @@ export function Agents() {
   const openDeleteModal = (agent: AgentFrontmatter) => {
     setDeleteAgentName(agent.name);
     setDeleteModalOpen(true);
+  };
+
+  const openDetailModal = (agent: AgentFrontmatter) => {
+    setDetailAgentName(agent.name);
   };
 
   if (loading && agents.length === 0) {
@@ -415,6 +428,7 @@ export function Agents() {
             <AgentCard
               key={agent.name}
               agent={agent}
+              onView={openDetailModal}
               onEdit={openEditModal}
               onDelete={openDeleteModal}
             />
@@ -436,6 +450,12 @@ export function Agents() {
         onClose={() => setDeleteModalOpen(false)}
         onConfirm={handleDelete}
         agentName={deleteAgentName}
+      />
+
+      <AgentDetailModal
+        agentName={detailAgentName}
+        isOpen={detailAgentName !== null}
+        onClose={() => setDetailAgentName(null)}
       />
     </div>
   );

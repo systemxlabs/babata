@@ -10,15 +10,17 @@ mod delete_skill;
 mod delete_task;
 mod file_browser;
 mod get_agent;
+mod get_agent_file;
 mod get_skill_file;
 mod get_task;
 mod get_task_file;
 mod get_task_logs;
 mod get_task_tree;
+mod list_agent_files;
 mod list_agents;
 mod list_providers;
-mod list_skill_files;
 mod list_root_tasks;
+mod list_skill_files;
 mod list_skills;
 mod list_task_files;
 
@@ -87,6 +89,11 @@ fn router(task_manager: Arc<TaskManager>) -> Router {
                 .put(update_agent::handle)
                 .delete(delete_agent::handle),
         )
+        .route("/api/agents/{name}/files", get(list_agent_files::handle))
+        .route(
+            "/api/agents/{name}/files/{*path}",
+            get(get_agent_file::handle),
+        )
         .route(
             "/api/providers",
             get(list_providers::handle).post(create_provider::handle),
@@ -98,7 +105,10 @@ fn router(task_manager: Arc<TaskManager>) -> Router {
         .route("/api/skills", get(list_skills::handle))
         .route("/api/skills/{name}", delete(delete_skill::handle))
         .route("/api/skills/{name}/files", get(list_skill_files::handle))
-        .route("/api/skills/{name}/files/{*path}", get(get_skill_file::handle))
+        .route(
+            "/api/skills/{name}/files/{*path}",
+            get(get_skill_file::handle),
+        )
         .route("/api/tasks/count", get(count_tasks::handle))
         .route(
             "/api/tasks",

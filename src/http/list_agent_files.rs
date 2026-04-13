@@ -2,23 +2,23 @@ use axum::{Json, extract::Path};
 
 use crate::{
     BabataResult,
+    agent::{agent_dir, agent_exists},
     error::BabataError,
-    skill::{skill_dir, skill_exists},
 };
 
 use super::file_browser::{FileEntry, read_directory_recursive};
 
-/// Handle GET /api/skills/{name}/files
+/// Handle GET /api/agents/{name}/files
 pub(super) async fn handle(Path(name): Path<String>) -> BabataResult<Json<Vec<FileEntry>>> {
-    if !skill_exists(&name)? {
+    if !agent_exists(&name) {
         return Err(BabataError::not_found(format!(
-            "Skill '{}' not found",
+            "Agent '{}' not found",
             name
         )));
     }
 
-    let skill_dir = skill_dir(&name)?;
-    let files = read_directory_recursive(&skill_dir)
+    let agent_dir = agent_dir(&name)?;
+    let files = read_directory_recursive(&agent_dir)
         .await
         .map_err(|err| BabataError::invalid_input(format!("Failed to read directory: {}", err)))?;
 

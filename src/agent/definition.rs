@@ -41,6 +41,10 @@ pub fn load_agents() -> BabataResult<HashMap<String, Arc<Agent>>> {
     load_agents_from_dir(&dir)
 }
 
+pub(crate) fn agent_dir(name: &str) -> BabataResult<PathBuf> {
+    Ok(babata_dir()?.join("agents").join(name))
+}
+
 fn load_agents_from_dir(dir: &Path) -> BabataResult<HashMap<String, Arc<Agent>>> {
     if !dir.exists() {
         return Ok(HashMap::new());
@@ -200,7 +204,7 @@ pub fn save_agent(frontmatter: &AgentFrontmatter, body: &str) -> BabataResult<()
 
 /// Delete an agent by name (removes the entire agent directory)
 pub fn delete_agent(name: &str) -> BabataResult<()> {
-    let agent_dir = babata_dir()?.join("agents").join(name);
+    let agent_dir = agent_dir(name)?;
 
     if !agent_dir.exists() {
         return Err(BabataError::config(format!(
@@ -233,7 +237,7 @@ pub fn agent_exists(name: &str) -> bool {
 
 /// Load a single agent by name
 pub fn load_agent_by_name(name: &str) -> BabataResult<Arc<Agent>> {
-    let agent_path = babata_dir()?.join("agents").join(name).join("AGENT.md");
+    let agent_path = agent_dir(name)?.join("AGENT.md");
 
     if !agent_path.is_file() {
         return Err(BabataError::config(format!(

@@ -1,10 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use axum::{
-    body::Body,
-    extract::Request,
-    http::Uri,
-};
+use axum::{body::Body, extract::Request, http::Uri};
 use serde::Serialize;
 
 use crate::{BabataResult, error::BabataError};

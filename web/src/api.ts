@@ -180,6 +180,14 @@ export function getAgents(): Promise<AgentsResponse> {
   return fetchApi<AgentsResponse>('/agents');
 }
 
+export function getAgentFiles(name: string): Promise<FileEntry[]> {
+  return fetchApi<FileEntry[]>(`/agents/${encodeURIComponent(name)}/files`);
+}
+
+export function getAgentFile(name: string, path: string): Promise<string> {
+  return fetchText(`/agents/${encodeURIComponent(name)}/files/${encodeFilePath(path)}`);
+}
+
 export async function getAgent(name: string): Promise<AgentDetail | null> {
   try {
     return await fetchApi<GetAgentResponse>(`/agents/${encodeURIComponent(name)}`);
@@ -267,6 +275,8 @@ export const api = {
 
   getAgents,
   getAgent,
+  getAgentFiles,
+  getAgentFile,
   createAgent,
   updateAgent,
   deleteAgent,
