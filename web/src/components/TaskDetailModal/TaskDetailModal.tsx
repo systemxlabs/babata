@@ -66,7 +66,7 @@ export function TaskDetailModal({ taskId, isOpen, onClose }: TaskDetailModalProp
 
   // 格式化时间戳
   const formatTime = (timestamp: string | number): string => {
-    const date = new Date(typeof timestamp === 'string' ? timestamp : timestamp * 1000);
+    const date = new Date(timestamp);
     return date.toLocaleString('zh-CN', {
       year: 'numeric',
       month: '2-digit',

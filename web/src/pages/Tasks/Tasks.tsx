@@ -11,8 +11,12 @@ import './Tasks.css';
 // 扩展的任务类型，包含展开状态和子任务
 interface TaskWithChildren extends RootTask {
   isExpanded?: boolean;
-  children?: Task[];
+  children?: TreeTask[];
   isLoadingChildren?: boolean;
+}
+
+interface TreeTask extends Task {
+  children?: TreeTask[];
 }
 
 export function Tasks() {
@@ -176,8 +180,8 @@ export function Tasks() {
                 children={task.children}
                 isLoading={task.isLoadingChildren || false}
                 onToggle={() => handleToggleExpand(task.task_id)}
-                onClick={() => handleTaskClick(task.task_id)}
-                onDelete={(e: React.MouseEvent) => handleDeleteClick(task, e)}
+                onClick={handleTaskClick}
+                onDelete={handleDeleteClick}
                 onControlTask={handleControlTask}
                 formatTime={formatTime}
               />

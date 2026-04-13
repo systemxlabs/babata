@@ -2,15 +2,19 @@ import type { Task, RootTask } from '../../../../types';
 import { TaskStatusBadge } from '../TaskStatusBadge/TaskStatusBadge';
 import './TaskTreeItem.css';
 
+type TreeTask = (RootTask | Task) & {
+  children?: TreeTask[];
+};
+
 interface TaskTreeItemProps {
-  task: RootTask | Task;
+  task: TreeTask;
   level: number;
   isExpanded: boolean;
-  children?: Task[];
+  children?: TreeTask[];
   isLoading?: boolean;
   onToggle: () => void;
-  onClick: () => void;
-  onDelete: (e: React.MouseEvent) => void;
+  onClick: (taskId: string) => void;
+  onDelete: (task: TreeTask, e: React.MouseEvent) => void;
   onControlTask?: (taskId: string, action: 'pause' | 'resume' | 'cancel') => void;
   formatTime: (timestamp: string | number) => string;
 }
@@ -44,7 +48,7 @@ export function TaskTreeItem({
         style={{ 
           paddingLeft: isRootTask ? '16px' : `${16 + level * 24}px`,
         }}
-        onClick={onClick}
+        onClick={() => onClick(task.task_id)}
       >
         <div className="task-item-content">
           {/* 展开/折叠按钮 */}
@@ -150,7 +154,7 @@ export function TaskTreeItem({
             )}
             <button
               className="action-btn delete-btn"
-              onClick={onDelete}
+              onClick={(e) => onDelete(task, e)}
               title="删除任务"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -171,10 +175,11 @@ export function TaskTreeItem({
               key={child.task_id}
               task={child}
               level={level + 1}
-              isExpanded={false}
+              isExpanded={Boolean(child.children?.length)}
+              children={child.children}
               onToggle={() => {}}
-              onClick={() => {}}
-              onDelete={() => {}}
+              onClick={onClick}
+              onDelete={onDelete}
               onControlTask={onControlTask}
               formatTime={formatTime}
             />
