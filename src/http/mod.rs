@@ -22,12 +22,15 @@ mod update_agent;
 use std::{env, sync::Arc};
 
 use axum::{
+    body::Body,
+    extract::Request,
+    http::{HeaderMap, Method, StatusCode, Uri, Version, header},
     Json, Router,
-    response::IntoResponse,
+    response::{IntoResponse, Response},
     routing::{delete, get, post},
 };
 use serde_json::json;
-use tower_http::services::ServeDir;
+use tower_http::services::{ServeDir, ServeFile};
 use uuid::Uuid;
 
 use crate::{BabataResult, error::BabataError, task::TaskManager};
@@ -103,12 +106,75 @@ fn router(task_manager: Arc<TaskManager>) -> Router {
         )
         .route("/api/tasks/{task_id}/control", post(control_task::handle))
         .route("/api/tasks/{task_id}/steer", post(steer_task::handle))
-        .fallback_service(ServeDir::new("web/dist"))
+        .fallback(serve_web_ui)
         .with_state(HttpApp { task_manager })
 }
 
 async fn health() -> impl IntoResponse {
     Json(json!( { "status": "ok" }))
+}
+
+async fn serve_web_ui(req: Request) -> Response {
+    let method = req.method().clone();
+    let uri = req.uri().clone();
+    let version = req.version();
+    let headers = req.headers().clone();
+    let serve_index = should_serve_spa_index(&method, &uri, &headers);
+
+    let mut static_service = ServeDir::new("web/dist");
+    let static_response = static_service
+        .try_call(build_static_request(
+            method.clone(),
+            uri.clone(),
+            version,
+            headers.clone(),
+        ))
+        .await
+        .expect("serving static files should not fail");
+
+    if static_response.status() != StatusCode::NOT_FOUND || !serve_index {
+        return static_response.into_response();
+    }
+
+    let mut index_service = ServeFile::new("web/dist/index.html");
+    index_service
+        .try_call(build_static_request(method, uri, version, headers))
+        .await
+        .expect("serving index.html should not fail")
+        .into_response()
+}
+
+fn build_static_request(
+    method: Method,
+    uri: Uri,
+    version: Version,
+    headers: HeaderMap,
+) -> Request {
+    let mut request = Request::builder()
+        .method(method)
+        .uri(uri)
+        .version(version)
+        .body(Body::empty())
+        .expect("static asset request should be valid");
+    *request.headers_mut() = headers;
+    request
+}
+
+fn should_serve_spa_index(method: &Method, uri: &Uri, headers: &HeaderMap) -> bool {
+    matches!(method, &Method::GET | &Method::HEAD)
+        && !path_has_extension(uri.path())
+        && request_accepts_html(headers)
+}
+
+fn path_has_extension(path: &str) -> bool {
+    path.rsplit('/').next().is_some_and(|segment| segment.contains('.'))
+}
+
+fn request_accepts_html(headers: &HeaderMap) -> bool {
+    headers
+        .get(header::ACCEPT)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value.contains("text/html"))
 }
 
 pub(crate) fn parse_task_id(task_id: &str) -> BabataResult<Uuid> {
@@ -147,4 +213,46 @@ pub(crate) fn http_addr() -> BabataResult<String> {
 
 pub(crate) fn http_base_url() -> BabataResult<String> {
     Ok(format!("http://{}", http_addr()?))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{path_has_extension, request_accepts_html, should_serve_spa_index};
+    use axum::http::{HeaderMap, HeaderValue, Method, Uri, header};
+
+    #[test]
+    fn spa_fallback_matches_html_navigation_routes() {
+        let mut headers = HeaderMap::new();
+        headers.insert(header::ACCEPT, HeaderValue::from_static("text/html"));
+
+        assert!(should_serve_spa_index(
+            &Method::GET,
+            &Uri::from_static("/tasks/123"),
+            &headers
+        ));
+    }
+
+    #[test]
+    fn spa_fallback_skips_static_assets() {
+        let mut headers = HeaderMap::new();
+        headers.insert(header::ACCEPT, HeaderValue::from_static("text/html"));
+
+        assert!(!should_serve_spa_index(
+            &Method::GET,
+            &Uri::from_static("/assets/index.js"),
+            &headers
+        ));
+        assert!(path_has_extension("/favicon.svg"));
+    }
+
+    #[test]
+    fn html_accept_detection_requires_text_html() {
+        let mut headers = HeaderMap::new();
+        headers.insert(header::ACCEPT, HeaderValue::from_static("text/html,application/xhtml+xml"));
+        assert!(request_accepts_html(&headers));
+
+        let mut asset_headers = HeaderMap::new();
+        asset_headers.insert(header::ACCEPT, HeaderValue::from_static("text/css,*/*;q=0.1"));
+        assert!(!request_accepts_html(&asset_headers));
+    }
 }
