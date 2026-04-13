@@ -1,109 +1,143 @@
-import { useRef, useEffect } from 'react';
-import './TaskLogsTab.css';
+import { useEffect, useRef, useState } from "react"
+import { Copy, FileText, RefreshCw } from "lucide-react"
+
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 interface TaskLogsTabProps {
-  logs: string[];
-  onRefresh?: () => void;
+  logs: string[]
+  onRefresh?: () => void
+}
+
+function getLogTone(log: string) {
+  const upperLog = log.toUpperCase()
+
+  if (upperLog.includes("[ERROR]") || upperLog.includes(" ERROR ")) {
+    return {
+      level: "ERROR",
+      className: "border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-300",
+    }
+  }
+
+  if (upperLog.includes("[WARN]") || upperLog.includes(" WARNING ") || upperLog.includes(" WARN ")) {
+    return {
+      level: "WARN",
+      className: "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+    }
+  }
+
+  if (upperLog.includes("[INFO]") || upperLog.includes(" INFO ")) {
+    return {
+      level: "INFO",
+      className: "border-sky-500/20 bg-sky-500/10 text-sky-700 dark:text-sky-300",
+    }
+  }
+
+  if (upperLog.includes("[DEBUG]") || upperLog.includes(" DEBUG ")) {
+    return {
+      level: "DEBUG",
+      className: "border-violet-500/20 bg-violet-500/10 text-violet-700 dark:text-violet-300",
+    }
+  }
+
+  return {
+    level: "LOG",
+    className: "border-slate-500/20 bg-slate-500/10 text-slate-700 dark:text-slate-300",
+  }
 }
 
 export function TaskLogsTab({ logs, onRefresh }: TaskLogsTabProps) {
-  const logsEndRef = useRef<HTMLDivElement>(null);
+  const logsEndRef = useRef<HTMLDivElement>(null)
+  const [copied, setCopied] = useState(false)
 
-  // 自动滚动到底部
   useEffect(() => {
-    logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [logs]);
+    logsEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [logs])
 
-  // 解析日志级别
-  const parseLogLevel = (log: string): { level: string; color: string } => {
-    const upperLog = log.toUpperCase();
-    if (upperLog.includes('[ERROR]') || upperLog.includes(' ERROR ')) {
-      return { level: 'ERROR', color: '#ef4444' };
+  const handleCopyLogs = async () => {
+    try {
+      await navigator.clipboard.writeText(logs.join("\n"))
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1600)
+    } catch {
+      setCopied(false)
     }
-    if (upperLog.includes('[WARN]') || upperLog.includes(' WARNING ') || upperLog.includes(' WARN ')) {
-      return { level: 'WARN', color: '#f59e0b' };
-    }
-    if (upperLog.includes('[INFO]') || upperLog.includes(' INFO ')) {
-      return { level: 'INFO', color: '#3b82f6' };
-    }
-    if (upperLog.includes('[DEBUG]') || upperLog.includes(' DEBUG ')) {
-      return { level: 'DEBUG', color: '#8b5cf6' };
-    }
-    return { level: 'LOG', color: '#94a3b8' };
-  };
-
-  // 复制日志到剪贴板
-  const handleCopyLogs = () => {
-    const logText = logs.join('\n');
-    navigator.clipboard.writeText(logText).then(() => {
-      alert('日志已复制到剪贴板');
-    }).catch(() => {
-      alert('复制失败，请手动复制');
-    });
-  };
+  }
 
   return (
-    <div className="task-logs-tab">
-      <div className="logs-header">
-        <div className="logs-title">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-            <polyline points="14 2 14 8 20 8" />
-            <line x1="16" y1="13" x2="8" y2="13" />
-            <line x1="16" y1="17" x2="8" y2="17" />
-            <line x1="10" y1="9" x2="8" y2="9" />
-          </svg>
-          任务执行日志
-          <span className="logs-count">({logs.length} 条)</span>
-        </div>
-        <div className="logs-actions">
-          <button className="logs-action-btn" onClick={onRefresh} title="刷新">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-              <path d="M3 3v5h5" />
-              <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
-              <path d="M16 16h5v5" />
-            </svg>
-            刷新
-          </button>
-          <button className="logs-action-btn" onClick={handleCopyLogs} title="复制全部">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
-              <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
-            </svg>
-            复制
-          </button>
-        </div>
-      </div>
+    <Card className="rounded-[1.6rem] border-border/70 bg-background/70">
+      <CardContent className="space-y-4 p-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-[0.72rem] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+              <FileText className="size-3.5" />
+              Execution Logs
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="text-lg font-semibold tracking-tight text-foreground">
+                任务执行日志
+              </div>
+              <Badge variant="outline" className="rounded-full px-3 py-1">
+                {logs.length} 条
+              </Badge>
+            </div>
+          </div>
 
-      <div className="logs-container">
+          <div className="flex flex-wrap items-center gap-2">
+            {onRefresh ? (
+              <Button variant="outline" size="sm" className="rounded-full" onClick={onRefresh}>
+                <RefreshCw className="mr-1.5 size-3.5" />
+                刷新
+              </Button>
+            ) : null}
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-full"
+              onClick={() => void handleCopyLogs()}
+              disabled={logs.length === 0}
+            >
+              <Copy className="mr-1.5 size-3.5" />
+              {copied ? "已复制" : "复制全部"}
+            </Button>
+          </div>
+        </div>
+
         {logs.length === 0 ? (
-          <div className="logs-empty">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-              <polyline points="14 2 14 8 20 8" />
-              <line x1="16" y1="13" x2="8" y2="13" />
-              <line x1="16" y1="17" x2="8" y2="17" />
-              <line x1="10" y1="9" x2="8" y2="9" />
-            </svg>
-            <p>暂无日志</p>
+          <div className="flex min-h-[320px] flex-col items-center justify-center rounded-[1.4rem] border border-dashed border-border/70 bg-card/50 px-4 text-center">
+            <div className="text-base font-semibold tracking-tight text-foreground">暂无日志</div>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              当前任务还没有产生可展示的执行日志。
+            </p>
           </div>
         ) : (
-          <div className="logs-list">
-            {logs.map((log, index) => {
-              const { level, color } = parseLogLevel(log);
-              return (
-                <div key={index} className="log-line">
-                  <span className="log-index">{index + 1}</span>
-                  <span className="log-level" style={{ color }}>{level}</span>
-                  <span className="log-content">{log}</span>
-                </div>
-              );
-            })}
-            <div ref={logsEndRef} />
-          </div>
+          <ScrollArea className="h-[420px] rounded-[1.4rem] border border-border/70 bg-card/60">
+            <div className="space-y-3 p-4">
+              {logs.map((log, index) => {
+                const tone = getLogTone(log)
+
+                return (
+                  <div
+                    key={`${index}-${log}`}
+                    className="grid gap-3 rounded-[1.2rem] border border-border/70 bg-background/70 p-4 md:grid-cols-[56px_80px_minmax(0,1fr)]"
+                  >
+                    <div className="text-xs font-medium text-muted-foreground">#{index + 1}</div>
+                    <Badge variant="outline" className={`w-fit rounded-full ${tone.className}`}>
+                      {tone.level}
+                    </Badge>
+                    <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-[13px] leading-6 text-foreground">
+                      <code>{log}</code>
+                    </pre>
+                  </div>
+                )
+              })}
+              <div ref={logsEndRef} />
+            </div>
+          </ScrollArea>
         )}
-      </div>
-    </div>
-  );
+      </CardContent>
+    </Card>
+  )
 }

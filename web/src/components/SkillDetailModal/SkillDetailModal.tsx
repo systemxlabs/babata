@@ -1,103 +1,127 @@
-import { useCallback, useEffect, useState } from 'react';
-import { getSkillFile, getSkillFiles } from '../../api';
-import { FileExplorer } from '../FileExplorer/FileExplorer';
-import type { FileEntry, Skill } from '../../types';
-import './SkillDetailModal.css';
+import { useCallback, useEffect, useState } from "react"
+import { BookMarked, Sparkles } from "lucide-react"
+
+import { getSkillFile, getSkillFiles } from "@/api"
+import { FileExplorer } from "@/components/FileExplorer/FileExplorer"
+import { Badge } from "@/components/ui/badge"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Separator } from "@/components/ui/separator"
+import { LoadingState } from "@/components/loading-state"
+import { Card, CardContent } from "@/components/ui/card"
+import type { FileEntry, Skill } from "@/types"
 
 interface SkillDetailModalProps {
-  skill: Skill | null;
-  isOpen: boolean;
-  onClose: () => void;
+  skill: Skill | null
+  isOpen: boolean
+  onClose: () => void
 }
 
 export function SkillDetailModal({ skill, isOpen, onClose }: SkillDetailModalProps) {
-  const [files, setFiles] = useState<FileEntry[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [files, setFiles] = useState<FileEntry[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const fetchSkillFiles = useCallback(async () => {
-    if (!skill) {
-      return;
-    }
+    if (!skill) return
 
-    setLoading(true);
-    setError(null);
+    setLoading(true)
+    setError(null)
 
     try {
-      const response = await getSkillFiles(skill.name);
-      setFiles(response);
+      const response = await getSkillFiles(skill.name)
+      setFiles(response)
     } catch (err) {
-      setError(err instanceof Error ? err.message : '加载技能详情失败');
-      setFiles([]);
+      setError(err instanceof Error ? err.message : "加载技能详情失败")
+      setFiles([])
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  }, [skill]);
+  }, [skill])
 
-  const loadSkillFile = useCallback(async (path: string) => {
-    if (!skill) {
-      throw new Error('技能不存在');
-    }
+  const loadSkillFile = useCallback(
+    async (path: string) => {
+      if (!skill) {
+        throw new Error("技能不存在")
+      }
 
-    return getSkillFile(skill.name, path);
-  }, [skill]);
+      return getSkillFile(skill.name, path)
+    },
+    [skill]
+  )
 
   useEffect(() => {
-    if (!isOpen || !skill) {
-      return;
-    }
-
-    void fetchSkillFiles();
-  }, [fetchSkillFiles, isOpen, skill]);
-
-  if (!isOpen || !skill) {
-    return null;
-  }
+    if (!isOpen || !skill) return
+    void fetchSkillFiles()
+  }, [fetchSkillFiles, isOpen, skill])
 
   return (
-    <div className="skill-detail-modal-overlay" onClick={onClose}>
-      <div className="skill-detail-modal" onClick={(event) => event.stopPropagation()}>
-        <div className="skill-detail-header">
-          <div className="skill-detail-title">
-            <h2>{skill.name}</h2>
-            <p className="skill-detail-subtitle">技能详情与目录内容</p>
-          </div>
-          <button className="skill-detail-close" onClick={onClose} aria-label="关闭技能详情">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M18 6 6 18" />
-              <path d="m6 6 12 12" />
-            </svg>
-          </button>
-        </div>
+    <Dialog open={isOpen} onOpenChange={(open) => (!open ? onClose() : undefined)}>
+      <DialogContent className="max-h-[calc(100vh-2rem)] overflow-hidden rounded-[1.9rem] border-border/70 bg-card/95 p-0 sm:max-w-[1180px]">
+        {skill ? (
+          <>
+            <DialogHeader className="space-y-4 px-6 pt-6">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="space-y-3">
+                  <Badge variant="outline" className="rounded-full px-3 py-1">
+                    <BookMarked className="mr-2 size-3.5" />
+                    Skill
+                  </Badge>
+                  <div>
+                    <DialogTitle className="text-2xl tracking-tight">{skill.name}</DialogTitle>
+                    <DialogDescription className="mt-2 max-w-3xl text-sm leading-6">
+                      技能详情、正文与附属文件目录
+                    </DialogDescription>
+                  </div>
+                </div>
+                <Badge variant="secondary" className="rounded-full px-3 py-1.5">
+                  <Sparkles className="mr-2 size-3.5" />
+                  SKILL.md 优先预览
+                </Badge>
+              </div>
+            </DialogHeader>
+            <Separator className="mt-5" />
+            <div className="min-h-0 space-y-5 overflow-y-auto px-6 py-6">
+              <Card className="rounded-[1.6rem] border-border/70 bg-background/70">
+                <CardContent className="p-5">
+                  <div className="text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+                    Description
+                  </div>
+                  <p className="mt-3 text-sm leading-7 text-foreground">
+                    {skill.description || "暂无描述"}
+                  </p>
+                </CardContent>
+              </Card>
 
-        <div className="skill-detail-body">
-          <div className="skill-summary-card">
-            <p className="skill-summary-label">描述</p>
-            <p className="skill-summary-text">{skill.description || '暂无描述'}</p>
-          </div>
-
-          {loading ? (
-            <div className="skill-detail-loading">
-              <div className="loading-spinner"></div>
-              <p>加载中...</p>
+              {loading ? (
+                <LoadingState
+                  title="加载技能目录"
+                  description="正在读取技能文件与正文。"
+                  className="min-h-[420px]"
+                />
+              ) : error ? (
+                <Card className="rounded-[1.6rem] border-destructive/25 bg-destructive/5">
+                  <CardContent className="p-5 text-sm text-destructive">{error}</CardContent>
+                </Card>
+              ) : (
+                <FileExplorer
+                  files={files}
+                  loadFileContent={loadSkillFile}
+                  treeTitle="技能文件"
+                  emptyMessage="暂无技能文件"
+                  placeholderMessage="选择技能文件查看内容"
+                  defaultSelectedPath="SKILL.md"
+                />
+              )}
             </div>
-          ) : error ? (
-            <div className="skill-detail-error">
-              <p>{error}</p>
-              <button className="skill-detail-retry" onClick={fetchSkillFiles}>重试</button>
-            </div>
-          ) : (
-            <FileExplorer
-              files={files}
-              loadFileContent={loadSkillFile}
-              treeTitle="技能文件"
-              emptyMessage="暂无技能文件"
-              placeholderMessage="选择技能文件查看内容"
-              defaultSelectedPath="SKILL.md"
-            />
-          )}
-        </div>
-      </div>
-    </div>
-  );
+          </>
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  )
 }

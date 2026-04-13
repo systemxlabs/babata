@@ -1,102 +1,106 @@
-import './TaskPagination.css';
+import { ChevronLeft, ChevronRight } from "lucide-react"
+
+import { Button } from "@/components/ui/button"
 
 interface TaskPaginationProps {
-  currentPage: number;
-  pageSize: number;
-  total: number;
-  onPageChange: (page: number) => void;
+  currentPage: number
+  pageSize: number
+  total: number
+  onPageChange: (page: number) => void
 }
 
-export function TaskPagination({ currentPage, pageSize, total, onPageChange }: TaskPaginationProps) {
-  const totalPages = Math.ceil(total / pageSize);
-  
-  if (totalPages <= 1) return null;
+export function TaskPagination({
+  currentPage,
+  pageSize,
+  total,
+  onPageChange,
+}: TaskPaginationProps) {
+  const totalPages = Math.ceil(total / pageSize)
+
+  if (totalPages <= 1) return null
 
   const getPageNumbers = () => {
-    const pages: (number | string)[] = [];
-    const maxVisiblePages = 5;
+    const pages: (number | string)[] = []
+    const maxVisiblePages = 5
 
     if (totalPages <= maxVisiblePages) {
-      for (let i = 1; i <= totalPages; i++) {
-        pages.push(i);
+      for (let i = 1; i <= totalPages; i += 1) {
+        pages.push(i)
       }
     } else {
-      // 总是显示第一页
-      pages.push(1);
+      pages.push(1)
 
       if (currentPage > 3) {
-        pages.push('...');
+        pages.push("...")
       }
 
-      // 显示当前页附近的页面
-      const startPage = Math.max(2, currentPage - 1);
-      const endPage = Math.min(totalPages - 1, currentPage + 1);
+      const startPage = Math.max(2, currentPage - 1)
+      const endPage = Math.min(totalPages - 1, currentPage + 1)
 
-      for (let i = startPage; i <= endPage; i++) {
+      for (let i = startPage; i <= endPage; i += 1) {
         if (!pages.includes(i)) {
-          pages.push(i);
+          pages.push(i)
         }
       }
 
       if (currentPage < totalPages - 2) {
-        pages.push('...');
+        pages.push("...")
       }
 
-      // 总是显示最后一页
       if (!pages.includes(totalPages)) {
-        pages.push(totalPages);
+        pages.push(totalPages)
       }
     }
 
-    return pages;
-  };
+    return pages
+  }
 
-  const pages = getPageNumbers();
+  const pages = getPageNumbers()
 
   return (
-    <div className="task-pagination">
-      <div className="pagination-info">
-        共 <span className="total-count">{total}</span> 条记录，
-        每页 <span className="page-size">{pageSize}</span> 条
+    <div className="mt-6 flex flex-col gap-4 rounded-[1.75rem] border border-border/70 bg-card/70 px-5 py-4 shadow-[0_18px_60px_-32px_rgba(15,23,42,0.24)] backdrop-blur-xl md:flex-row md:items-center md:justify-between">
+      <div className="text-sm text-muted-foreground">
+        共 <span className="font-semibold text-foreground">{total}</span> 条记录，
+        每页 <span className="font-semibold text-foreground">{pageSize}</span> 条
       </div>
 
-      <div className="pagination-controls">
-        <button
-          className="pagination-btn"
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          variant="outline"
+          size="icon"
           onClick={() => onPageChange(currentPage - 1)}
           disabled={currentPage <= 1}
-          title="上一页"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="m15 18-6-6 6-6" />
-          </svg>
-        </button>
+          <ChevronLeft className="size-4" />
+        </Button>
 
-        {pages.map((page, index) => (
-          page === '...' ? (
-            <span key={`ellipsis-${index}`} className="pagination-ellipsis">...</span>
+        {pages.map((page, index) =>
+          page === "..." ? (
+            <span key={`ellipsis-${index}`} className="px-2 text-sm text-muted-foreground">
+              ...
+            </span>
           ) : (
-            <button
+            <Button
               key={page}
-              className={`pagination-btn ${currentPage === page ? 'active' : ''}`}
+              variant={currentPage === page ? "default" : "outline"}
+              size="sm"
               onClick={() => onPageChange(page as number)}
+              className="min-w-9"
             >
               {page}
-            </button>
+            </Button>
           )
-        ))}
+        )}
 
-        <button
-          className="pagination-btn"
+        <Button
+          variant="outline"
+          size="icon"
           onClick={() => onPageChange(currentPage + 1)}
           disabled={currentPage >= totalPages}
-          title="下一页"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="m9 18 6-6-6-6" />
-          </svg>
-        </button>
+          <ChevronRight className="size-4" />
+        </Button>
       </div>
     </div>
-  );
+  )
 }

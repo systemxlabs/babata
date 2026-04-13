@@ -1,66 +1,69 @@
-import type { TaskStatus } from '../../../../types';
-import { STATUS_LABELS, STATUS_BG_COLORS, STATUS_TEXT_COLORS } from '../../../../types';
-import './TaskStatusBadge.css';
+import {
+  AlertTriangle,
+  Ban,
+  CheckCircle2,
+  PauseCircle,
+  RefreshCw,
+} from "lucide-react"
+
+import { Badge } from "@/components/ui/badge"
+import type { TaskStatus } from "@/types"
+import { STATUS_LABELS } from "@/types"
+import { cn } from "@/lib/utils"
 
 interface TaskStatusBadgeProps {
-  status: TaskStatus;
-  showLabel?: boolean;
-  size?: 'sm' | 'md' | 'lg';
+  status: TaskStatus
+  showLabel?: boolean
+  size?: "sm" | "md" | "lg"
 }
 
-export function TaskStatusBadge({ status, showLabel = true, size = 'md' }: TaskStatusBadgeProps) {
-  const bgColorClass = STATUS_BG_COLORS[status];
-  const textColorClass = STATUS_TEXT_COLORS[status];
-  const label = STATUS_LABELS[status];
+const statusStyles: Record<TaskStatus, string> = {
+  running: "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  completed: "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  failed: "border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-300",
+  paused: "border-orange-500/20 bg-orange-500/10 text-orange-700 dark:text-orange-300",
+  canceled: "border-slate-500/20 bg-slate-500/10 text-slate-700 dark:text-slate-300",
+}
 
-  // 根据状态获取图标
-  const getStatusIcon = () => {
-    switch (status) {
-      case 'running':
-        return (
-          <svg className="status-icon spinning" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-          </svg>
-        );
-      case 'completed':
-        return (
-          <svg className="status-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-            <path d="m9 11 3 3L22 4" />
-          </svg>
-        );
-      case 'failed':
-        return (
-          <svg className="status-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="12" cy="12" r="10" />
-            <path d="m15 9-6 6" />
-            <path d="m9 9 6 6" />
-          </svg>
-        );
-      case 'paused':
-        return (
-          <svg className="status-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="12" cy="12" r="10" />
-            <path d="M10 15V9" />
-            <path d="M14 15V9" />
-          </svg>
-        );
-      case 'canceled':
-        return (
-          <svg className="status-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="12" cy="12" r="10" />
-            <path d="m8 12 8 0" />
-          </svg>
-        );
-      default:
-        return null;
-    }
-  };
+const sizeStyles = {
+  sm: "gap-1 px-2 py-0.5 text-[11px]",
+  md: "gap-1.5 px-2.5 py-1 text-xs",
+  lg: "gap-2 px-3 py-1.5 text-sm",
+}
 
+function StatusIcon({ status }: { status: TaskStatus }) {
+  switch (status) {
+    case "running":
+      return <RefreshCw className="size-3.5 animate-spin" />
+    case "completed":
+      return <CheckCircle2 className="size-3.5" />
+    case "failed":
+      return <AlertTriangle className="size-3.5" />
+    case "paused":
+      return <PauseCircle className="size-3.5" />
+    case "canceled":
+      return <Ban className="size-3.5" />
+    default:
+      return null
+  }
+}
+
+export function TaskStatusBadge({
+  status,
+  showLabel = true,
+  size = "md",
+}: TaskStatusBadgeProps) {
   return (
-    <span className={`task-status-badge ${bgColorClass} ${textColorClass} size-${size}`}>
-      {getStatusIcon()}
-      {showLabel && <span className="status-label">{label}</span>}
-    </span>
-  );
+    <Badge
+      variant="outline"
+      className={cn(
+        "rounded-full font-medium shadow-none",
+        statusStyles[status],
+        sizeStyles[size]
+      )}
+    >
+      <StatusIcon status={status} />
+      {showLabel ? <span>{STATUS_LABELS[status]}</span> : null}
+    </Badge>
+  )
 }

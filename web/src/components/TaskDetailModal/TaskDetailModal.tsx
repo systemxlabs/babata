@@ -1,241 +1,304 @@
-import { useState, useEffect, useCallback } from 'react';
-import type { Task, FileEntry } from '../../types';
-import { getTask, getTaskFiles, getTaskLogs, controlTask } from '../../api';
-import { TaskStatusBadge } from '../../pages/Tasks/components/TaskStatusBadge';
-import { TaskDirectoryTab } from './components/TaskDirectoryTab/TaskDirectoryTab';
-import { TaskLogsTab } from './components/TaskLogsTab/TaskLogsTab';
-import './TaskDetailModal.css';
+import { useCallback, useEffect, useState, type ReactNode } from "react"
+import {
+  Ban,
+  CalendarClock,
+  FolderOpen,
+  Pause,
+  Play,
+  ScrollText,
+  Sparkles,
+  Workflow,
+} from "lucide-react"
 
-type TabType = 'directory' | 'logs';
+import { controlTask, getTask, getTaskFiles, getTaskLogs } from "@/api"
+import { LoadingState } from "@/components/loading-state"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Separator } from "@/components/ui/separator"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { TaskStatusBadge } from "@/pages/Tasks/components/TaskStatusBadge"
+import type { FileEntry, Task } from "@/types"
+import { TaskDirectoryTab } from "./components/TaskDirectoryTab/TaskDirectoryTab"
+import { TaskLogsTab } from "./components/TaskLogsTab/TaskLogsTab"
+
+type TabType = "directory" | "logs"
 
 interface TaskDetailModalProps {
-  taskId: string | null;
-  isOpen: boolean;
-  onClose: () => void;
+  taskId: string | null
+  isOpen: boolean
+  onClose: () => void
 }
 
 export function TaskDetailModal({ taskId, isOpen, onClose }: TaskDetailModalProps) {
-  const [task, setTask] = useState<Task | null>(null);
-  const [files, setFiles] = useState<FileEntry[]>([]);
-  const [logs, setLogs] = useState<string[]>([]);
-  const [activeTab, setActiveTab] = useState<TabType>('directory');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [task, setTask] = useState<Task | null>(null)
+  const [files, setFiles] = useState<FileEntry[]>([])
+  const [logs, setLogs] = useState<string[]>([])
+  const [activeTab, setActiveTab] = useState<TabType>("directory")
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [actionLoading, setActionLoading] = useState<"pause" | "resume" | "cancel" | null>(null)
 
   const fetchTaskDetail = useCallback(async () => {
-    if (!taskId) return;
-    
-    setLoading(true);
-    setError(null);
-    
+    if (!taskId) return
+
+    setLoading(true)
+    setError(null)
+
     try {
       const [taskData, filesData, logsData] = await Promise.all([
         getTask(taskId),
         getTaskFiles(taskId),
         getTaskLogs(taskId, 1000),
-      ]);
-      
-      setTask(taskData);
-      setFiles(filesData);
-      setLogs(logsData);
+      ])
+
+      setTask(taskData)
+      setFiles(filesData)
+      setLogs(logsData)
     } catch (err) {
-      setError(err instanceof Error ? err.message : '加载任务详情失败');
+      setError(err instanceof Error ? err.message : "加载任务详情失败")
+      setTask(null)
+      setFiles([])
+      setLogs([])
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  }, [taskId]);
+  }, [taskId])
 
   useEffect(() => {
-    if (isOpen && taskId) {
-      fetchTaskDetail();
-    }
-  }, [isOpen, taskId, fetchTaskDetail]);
+    if (!isOpen || !taskId) return
+    void fetchTaskDetail()
+  }, [fetchTaskDetail, isOpen, taskId])
 
-  // 处理任务控制操作
-  const handleControlTask = async (action: 'pause' | 'resume' | 'cancel') => {
-    if (!taskId) return;
-    
+  useEffect(() => {
+    if (!isOpen) {
+      setActiveTab("directory")
+    }
+  }, [isOpen])
+
+  const handleControlTask = useCallback(async (action: "pause" | "resume" | "cancel") => {
+    if (!taskId) return
+
+    setActionLoading(action)
     try {
-      await controlTask(taskId, action);
-      // 刷新任务状态
-      fetchTaskDetail();
+      await controlTask(taskId, action)
+      await fetchTaskDetail()
     } catch (err) {
-      alert(err instanceof Error ? err.message : '操作失败');
+      setError(err instanceof Error ? err.message : "任务操作失败")
+    } finally {
+      setActionLoading(null)
     }
-  };
+  }, [fetchTaskDetail, taskId])
 
-  // 格式化时间戳
-  const formatTime = (timestamp: string | number): string => {
-    const date = new Date(timestamp);
-    return date.toLocaleString('zh-CN', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    });
-  };
+  const formatTime = useCallback((timestamp: string | number): string => {
+    return new Date(timestamp).toLocaleString("zh-CN", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    })
+  }, [])
 
-  // 获取可用的控制按钮
-  const getControlButtons = () => {
-    if (!task) return null;
-    
-    const buttons = [];
-    
-    if (task.status === 'running') {
-      buttons.push(
-        <button
-          key="pause"
-          className="control-btn pause"
-          onClick={() => handleControlTask('pause')}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <rect x="6" y="4" width="4" height="16" />
-            <rect x="14" y="4" width="4" height="16" />
-          </svg>
-          暂停
-        </button>
-      );
-      buttons.push(
-        <button
-          key="cancel"
-          className="control-btn cancel"
-          onClick={() => handleControlTask('cancel')}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="12" cy="12" r="10" />
-            <path d="m15 9-6 6" />
-            <path d="m9 9 6 6" />
-          </svg>
-          取消
-        </button>
-      );
-    } else if (task.status === 'paused') {
-      buttons.push(
-        <button
-          key="resume"
-          className="control-btn resume"
-          onClick={() => handleControlTask('resume')}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <polygon points="5 3 19 12 5 21 5 3" />
-          </svg>
-          恢复
-        </button>
-      );
-    }
-    
-    return buttons;
-  };
+  let controlButtons: ReactNode = null
 
-  if (!isOpen) return null;
+  if (task?.status === "running") {
+    controlButtons = (
+      <>
+        <Button
+          variant="outline"
+          className="rounded-full"
+          onClick={() => void handleControlTask("pause")}
+          disabled={actionLoading !== null}
+        >
+          <Pause className="mr-2 size-4" />
+          {actionLoading === "pause" ? "暂停中..." : "暂停"}
+        </Button>
+        <Button
+          variant="outline"
+          className="rounded-full text-destructive hover:text-destructive"
+          onClick={() => void handleControlTask("cancel")}
+          disabled={actionLoading !== null}
+        >
+          <Ban className="mr-2 size-4" />
+          {actionLoading === "cancel" ? "取消中..." : "取消"}
+        </Button>
+      </>
+    )
+  } else if (task?.status === "paused") {
+    controlButtons = (
+      <Button
+        variant="outline"
+        className="rounded-full"
+        onClick={() => void handleControlTask("resume")}
+        disabled={actionLoading !== null}
+      >
+        <Play className="mr-2 size-4" />
+        {actionLoading === "resume" ? "恢复中..." : "恢复"}
+      </Button>
+    )
+  }
 
   return (
-    <div className="task-detail-modal-overlay" onClick={onClose}>
-      <div className="task-detail-modal" onClick={(e) => e.stopPropagation()}>
-        {/* 头部 */}
-        <div className="modal-header">
-          <h2>任务详情</h2>
-          <button className="close-btn" onClick={onClose}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M18 6 6 18" />
-              <path d="m6 6 12 12" />
-            </svg>
-          </button>
-        </div>
+    <Dialog open={isOpen} onOpenChange={(open) => (!open ? onClose() : undefined)}>
+      <DialogContent className="max-h-[calc(100vh-2rem)] overflow-hidden rounded-[1.9rem] border-border/70 bg-card/95 p-0 sm:max-w-[1320px]">
+        {taskId ? (
+          <>
+            <DialogHeader className="space-y-4 px-6 pt-6">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="space-y-3">
+                  <Badge variant="outline" className="rounded-full px-3 py-1">
+                    <Workflow className="mr-2 size-3.5" />
+                    Task
+                  </Badge>
+                  <div>
+                    <DialogTitle className="text-2xl tracking-tight">
+                      任务详情
+                    </DialogTitle>
+                    <DialogDescription className="mt-2 max-w-3xl text-sm leading-6">
+                      查看任务元信息、工作目录和执行日志，并在允许的情况下控制任务运行状态。
+                    </DialogDescription>
+                  </div>
+                </div>
+                <Badge variant="secondary" className="rounded-full px-3 py-1.5">
+                  <Sparkles className="mr-2 size-3.5" />
+                  实时执行视图
+                </Badge>
+              </div>
+            </DialogHeader>
 
-        {/* 内容 */}
-        <div className="modal-content">
-          {loading ? (
-            <div className="modal-loading">
-              <div className="loading-spinner"></div>
-              <p>加载中...</p>
+            <Separator className="mt-5" />
+
+            <div className="min-h-0 space-y-5 overflow-y-auto px-6 py-6">
+              {loading ? (
+                <LoadingState
+                  title="加载任务详情"
+                  description="正在同步任务元信息、目录和日志。"
+                  className="min-h-[520px]"
+                />
+              ) : error ? (
+                <Card className="rounded-[1.6rem] border-destructive/25 bg-destructive/5">
+                  <CardContent className="p-5 text-sm text-destructive">{error}</CardContent>
+                </Card>
+              ) : task ? (
+                <>
+                  <div className="grid gap-4 xl:grid-cols-4 md:grid-cols-2">
+                    <Card className="rounded-[1.6rem] border-border/70 bg-background/70">
+                      <CardContent className="p-5">
+                        <div className="text-[0.72rem] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                          Status
+                        </div>
+                        <div className="mt-3">
+                          <TaskStatusBadge status={task.status} />
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card className="rounded-[1.6rem] border-border/70 bg-background/70">
+                      <CardContent className="p-5">
+                        <div className="text-[0.72rem] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                          Agent
+                        </div>
+                        <div className="mt-3 text-base font-semibold tracking-tight text-foreground">
+                          {task.agent}
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card className="rounded-[1.6rem] border-border/70 bg-background/70">
+                      <CardContent className="p-5">
+                        <div className="flex items-center gap-2 text-[0.72rem] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                          <CalendarClock className="size-3.5" />
+                          Created At
+                        </div>
+                        <div className="mt-3 text-sm font-medium text-foreground">
+                          {formatTime(task.created_at)}
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card className="rounded-[1.6rem] border-border/70 bg-background/70">
+                      <CardContent className="p-5">
+                        <div className="text-[0.72rem] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                          Flags
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Badge variant="outline" className="rounded-full px-3 py-1">
+                            {task.parent_task_id ? "子任务" : "根任务"}
+                          </Badge>
+                          {task.never_ends ? (
+                            <Badge variant="secondary" className="rounded-full px-3 py-1">
+                              常驻任务
+                            </Badge>
+                          ) : null}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <Card className="rounded-[1.6rem] border-border/70 bg-background/70">
+                    <CardContent className="grid gap-4 p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+                      <div className="space-y-4">
+                        <div>
+                          <div className="text-[0.72rem] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                            Description
+                          </div>
+                          <div className="mt-3 text-base font-semibold leading-7 tracking-tight text-foreground">
+                            {task.description}
+                          </div>
+                        </div>
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <div>
+                            <div className="text-xs text-muted-foreground">Task ID</div>
+                            <div className="mt-1 break-all font-mono text-[13px] text-foreground">
+                              {task.task_id}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-xs text-muted-foreground">Root Task ID</div>
+                            <div className="mt-1 break-all font-mono text-[13px] text-foreground">
+                              {task.root_task_id}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {controlButtons ? (
+                        <div className="flex flex-wrap gap-2">{controlButtons}</div>
+                      ) : null}
+                    </CardContent>
+                  </Card>
+
+                  <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as TabType)}>
+                    <TabsList className="h-auto rounded-[1.3rem] border border-border/70 bg-background/70 p-1.5">
+                      <TabsTrigger value="directory" className="rounded-xl px-4 py-2">
+                        <FolderOpen className="mr-1.5 size-4" />
+                        任务目录
+                      </TabsTrigger>
+                      <TabsTrigger value="logs" className="rounded-xl px-4 py-2">
+                        <ScrollText className="mr-1.5 size-4" />
+                        任务日志
+                      </TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="directory" className="mt-4">
+                      <TaskDirectoryTab taskId={taskId} files={files} />
+                    </TabsContent>
+                    <TabsContent value="logs" className="mt-4">
+                      <TaskLogsTab logs={logs} onRefresh={() => void fetchTaskDetail()} />
+                    </TabsContent>
+                  </Tabs>
+                </>
+              ) : null}
             </div>
-          ) : error ? (
-            <div className="modal-error">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10" />
-                <path d="m15 9-6 6" />
-                <path d="m9 9 6 6" />
-              </svg>
-              <p>{error}</p>
-              <button className="retry-btn" onClick={fetchTaskDetail}>重试</button>
-            </div>
-          ) : task ? (
-            <>
-              {/* 任务信息面板 */}
-              <div className="task-info-panel">
-                <div className="info-row">
-                  <span className="info-label">ID:</span>
-                  <span className="info-value task-id">{task.task_id}</span>
-                </div>
-                <div className="info-row">
-                  <span className="info-label">描述:</span>
-                  <span className="info-value">{task.description}</span>
-                </div>
-                <div className="info-row">
-                  <span className="info-label">状态:</span>
-                  <TaskStatusBadge status={task.status} size="md" />
-                </div>
-                <div className="info-row">
-                  <span className="info-label">Agent:</span>
-                  <span className="info-value">{task.agent}</span>
-                </div>
-                <div className="info-row">
-                  <span className="info-label">创建时间:</span>
-                  <span className="info-value">{formatTime(task.created_at)}</span>
-                </div>
-                <div className="info-row">
-                  <span className="info-label">Never Ends:</span>
-                  <span className="info-value">{task.never_ends ? '是' : '否'}</span>
-                </div>
-              </div>
-
-              {/* 控制按钮 */}
-              <div className="task-controls">
-                {getControlButtons()}
-              </div>
-
-              {/* 标签页 */}
-              <div className="modal-tabs">
-                <button
-                  className={`tab-btn ${activeTab === 'directory' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('directory')}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
-                  </svg>
-                  任务目录
-                </button>
-                <button
-                  className={`tab-btn ${activeTab === 'logs' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('logs')}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                    <polyline points="14 2 14 8 20 8" />
-                    <line x1="16" y1="13" x2="8" y2="13" />
-                    <line x1="16" y1="17" x2="8" y2="17" />
-                    <line x1="10" y1="9" x2="8" y2="9" />
-                  </svg>
-                  任务日志
-                </button>
-              </div>
-
-              {/* 标签页内容 */}
-              <div className="tab-content">
-                {activeTab === 'directory' && taskId && (
-                  <TaskDirectoryTab taskId={taskId} files={files} />
-                )}
-                {activeTab === 'logs' && (
-                  <TaskLogsTab logs={logs} onRefresh={fetchTaskDetail} />
-                )}
-              </div>
-            </>
-          ) : null}
-        </div>
-      </div>
-    </div>
-  );
+          </>
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  )
 }
