@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Task, RootTask, TaskFilter } from '../../types';
 import { getRootTasks, getTaskTree, deleteTask, controlTask } from '../../api';
+import type { TaskTreeResponse } from '../../api';
 import { TaskListHeader } from './components/TaskListHeader';
 import { TaskTreeItem } from './components/TaskTreeItem';
 import { TaskPagination } from './components/TaskPagination';
@@ -8,22 +9,14 @@ import { TaskDetailModal } from '../../components/TaskDetailModal';
 import { DeleteConfirmModal } from '../../components/DeleteConfirmModal';
 import './Tasks.css';
 
-// 扩展的任务类型，包含展开状态和子任务
-interface TaskWithChildren extends RootTask {
-  isExpanded?: boolean;
-  children?: TreeTask[];
-  isLoadingChildren?: boolean;
-}
-
-interface TreeTask extends Task {
-  children?: TreeTask[];
-}
-
 export function Tasks() {
-  const [tasks, setTasks] = useState<TaskWithChildren[]>([]);
+  const [tasks, setTasks] = useState<RootTask[]>([]);
   const [loading, setLoading] = useState(false);
+  const [treeLoading, setTreeLoading] = useState(false);
   const [total, setTotal] = useState(0);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [selectedRootTaskId, setSelectedRootTaskId] = useState<string | null>(null);
+  const [selectedTree, setSelectedTree] = useState<TaskTreeResponse | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
   
@@ -36,12 +29,21 @@ export function Tasks() {
 
   const hasStatusFilter = filter.status !== undefined && filter.status !== 'all';
 
+  const sortTaskTreeByCreatedAt = useCallback((tree: TaskTreeResponse): TaskTreeResponse => {
+    return {
+      ...tree,
+      children: [...tree.children]
+        .sort((a, b) => a.created_at - b.created_at)
+        .map(sortTaskTreeByCreatedAt),
+    };
+  }, []);
+
   // 获取根任务列表
   const fetchTasks = useCallback(async () => {
     setLoading(true);
     try {
       const response = await getRootTasks(filter);
-      setTasks(response.tasks.map(t => ({ ...t, isExpanded: false })));
+      setTasks(response.tasks);
       setTotal(response.total);
     } catch (error) {
       console.error('Failed to fetch tasks:', error);
@@ -54,56 +56,51 @@ export function Tasks() {
     fetchTasks();
   }, [fetchTasks]);
 
-  // 处理任务树展开/折叠
-  const handleToggleExpand = useCallback(async (taskId: string) => {
-    setTasks(prevTasks => {
-      const taskIndex = prevTasks.findIndex(t => t.task_id === taskId);
-      if (taskIndex === -1) return prevTasks;
+  useEffect(() => {
+    if (tasks.length === 0) {
+      setSelectedRootTaskId(null);
+      setSelectedTree(null);
+      return;
+    }
 
-      const task = prevTasks[taskIndex];
-      const newIsExpanded = !task.isExpanded;
+    if (!selectedRootTaskId || !tasks.some((task) => task.task_id === selectedRootTaskId)) {
+      setSelectedRootTaskId(tasks[0].task_id);
+    }
+  }, [selectedRootTaskId, tasks]);
 
-      // 如果展开且没有子任务，先加载子任务
-      if (newIsExpanded && !task.children) {
-        // 设置加载状态
-        const updatedTasks = [...prevTasks];
-        updatedTasks[taskIndex] = { ...task, isLoadingChildren: true };
+  useEffect(() => {
+    if (!selectedRootTaskId) {
+      setSelectedTree(null);
+      return;
+    }
 
-        // 异步加载子任务
-        getTaskTree(taskId)
-          .then((tree) => {
-            setTasks(currentTasks => {
-              const idx = currentTasks.findIndex(t => t.task_id === taskId);
-              if (idx === -1) return currentTasks;
-              const newTasks = [...currentTasks];
-              newTasks[idx] = { 
-                ...newTasks[idx], 
-                isExpanded: true, 
-                children: tree.children, 
-                isLoadingChildren: false 
-              };
-              return newTasks;
-            });
-          })
-          .catch(() => {
-            setTasks(currentTasks => {
-              const idx = currentTasks.findIndex(t => t.task_id === taskId);
-              if (idx === -1) return currentTasks;
-              const newTasks = [...currentTasks];
-              newTasks[idx] = { ...newTasks[idx], isLoadingChildren: false };
-              return newTasks;
-            });
-          });
+    let cancelled = false;
 
-        return updatedTasks;
+    const fetchTree = async () => {
+      setTreeLoading(true);
+      try {
+        const tree = await getTaskTree(selectedRootTaskId);
+        if (!cancelled) {
+          setSelectedTree(sortTaskTreeByCreatedAt(tree));
+        }
+      } catch (error) {
+        console.error('Failed to fetch task tree:', error);
+        if (!cancelled) {
+          setSelectedTree(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setTreeLoading(false);
+        }
       }
+    };
 
-      // 直接切换展开状态
-      const updatedTasks = [...prevTasks];
-      updatedTasks[taskIndex] = { ...task, isExpanded: newIsExpanded };
-      return updatedTasks;
-    });
-  }, []);
+    void fetchTree();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedRootTaskId, sortTaskTreeByCreatedAt]);
 
   // 处理筛选变化
   const handleFilterChange = useCallback((newFilter: Partial<TaskFilter>) => {
@@ -124,12 +121,18 @@ export function Tasks() {
     setSelectedTaskId(taskId);
   }, []);
 
-  // 处理删除点击
-  const handleDeleteClick = useCallback((task: Task, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setTaskToDelete(task);
-    setShowDeleteModal(true);
+  const selectedRootTask = tasks.find((task) => task.task_id === selectedRootTaskId) ?? null;
+
+  const handleRootTaskSelect = useCallback((taskId: string) => {
+    setSelectedRootTaskId(taskId);
   }, []);
+
+  // 处理整棵任务树删除
+  const handleDeleteTreeClick = useCallback(() => {
+    if (!selectedRootTask) return;
+    setTaskToDelete(selectedRootTask);
+    setShowDeleteModal(true);
+  }, [selectedRootTask]);
 
   // 确认删除
   const handleDeleteConfirm = useCallback(async () => {
@@ -174,22 +177,76 @@ export function Tasks() {
             </p>
           </div>
         ) : (
-          <div className="tasks-list">
-            {tasks.map(task => (
-              <TaskTreeItem
-                key={task.task_id}
-                task={task}
-                level={0}
-                isExpanded={task.isExpanded || false}
-                children={task.children}
-                isLoading={task.isLoadingChildren || false}
-                onToggle={() => handleToggleExpand(task.task_id)}
-                onClick={handleTaskClick}
-                onDelete={handleDeleteClick}
-                onControlTask={handleControlTask}
-                formatTime={formatTime}
-              />
-            ))}
+          <div className="tasks-workspace">
+            <aside className="root-task-panel">
+              <div className="panel-title-row">
+                <h2>根任务</h2>
+                <span>{tasks.length} 个</span>
+              </div>
+              <div className="root-task-list">
+                {tasks.map((task) => (
+                  <button
+                    key={task.task_id}
+                    type="button"
+                    className={`root-task-card ${selectedRootTaskId === task.task_id ? 'active' : ''}`}
+                    onClick={() => handleRootTaskSelect(task.task_id)}
+                  >
+                    <div className="root-task-card-header">
+                      <span className="root-task-agent">{task.agent}</span>
+                      <span className={`root-task-status root-task-status-${task.status}`}>
+                        {task.status}
+                      </span>
+                    </div>
+                    <div className="root-task-card-title">{task.description}</div>
+                    <div className="root-task-card-meta">
+                      <span>{formatTime(task.created_at)}</span>
+                      <span>{task.subtask_count} 个子任务</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </aside>
+
+            <section className="task-tree-panel">
+              <div className="panel-title-row">
+                <div>
+                  <h2>任务树</h2>
+                  <p>
+                    {selectedRootTask
+                      ? `${selectedRootTask.description}`
+                      : '选择左侧根任务查看整棵任务树'}
+                  </p>
+                </div>
+                {selectedRootTask && (
+                  <button
+                    type="button"
+                    className="tree-delete-button"
+                    onClick={handleDeleteTreeClick}
+                    title="删除整棵任务树"
+                  >
+                    删除任务树
+                  </button>
+                )}
+              </div>
+
+              {treeLoading ? (
+                <div className="tasks-loading tree-loading">加载任务树中...</div>
+              ) : selectedTree ? (
+                <div className="task-tree-stage">
+                  <TaskTreeItem
+                    task={selectedTree}
+                    onClick={handleTaskClick}
+                    onControlTask={handleControlTask}
+                    formatTime={formatTime}
+                  />
+                </div>
+              ) : (
+                <div className="tasks-empty tree-empty">
+                  <p>未加载到任务树</p>
+                  <p className="empty-hint">请重新选择根任务或刷新列表</p>
+                </div>
+              )}
+            </section>
           </div>
         )}
       </div>

@@ -1,232 +1,274 @@
-/* 任务树节点样式 */
-
-.task-tree-item {
-  border-bottom: 1px solid #334155;
-  transition: background-color 0.15s;
-  cursor: pointer;
+.task-tree-branch {
+  --connector-color: rgba(71, 85, 105, 0.85);
+  --node-width: 340px;
 }
 
-.task-tree-item:last-child {
-  border-bottom: none;
-}
-
-.task-tree-item:hover {
-  background-color: #334155;
-}
-
-.task-tree-item.root-task {
-  background: #1e293b;
-}
-
-.task-tree-item.root-task:hover {
-  background: #252f47;
-}
-
-.task-tree-item.sub-task {
-  background: transparent;
-}
-
-.task-tree-item.sub-task:hover {
-  background: #283548;
-}
-
-.task-item-content {
+.task-tree-node-row {
   display: flex;
-  align-items: center;
-  padding: 16px 0;
-  gap: 12px;
+  align-items: flex-start;
+  min-width: max-content;
 }
 
-/* 展开按钮 */
-.task-expander {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
+.task-tree-card-wrap {
+  position: relative;
   flex-shrink: 0;
 }
 
-.expand-btn {
+.task-tree-card-wrap.has-children::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: -28px;
+  width: 28px;
+  border-top: 1px solid var(--connector-color);
+}
+
+.task-tree-item {
+  width: var(--node-width);
+  min-height: 178px;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  background: transparent;
-  border: none;
-  color: #94a3b8;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px;
+  border-radius: 18px;
+  border: 1px solid #334155;
   cursor: pointer;
-  border-radius: 4px;
-  transition: color 0.15s, background-color 0.15s;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.24);
 }
 
-.expand-btn:hover:not(:disabled) {
-  color: #f8fafc;
-  background: #475569;
+.task-tree-item:hover {
+  transform: translateY(-2px);
+  border-color: #475569;
 }
 
-.expand-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.task-tree-item.root-task {
+  background:
+    radial-gradient(circle at top right, rgba(59, 130, 246, 0.2), transparent 38%),
+    linear-gradient(180deg, #172033 0%, #111827 100%);
 }
 
-.expand-btn.expanded svg {
-  transform: rotate(0deg);
+.task-tree-item.sub-task {
+  background:
+    radial-gradient(circle at top right, rgba(14, 165, 233, 0.12), transparent 36%),
+    linear-gradient(180deg, #141c2d 0%, #0f172a 100%);
 }
 
-.expand-btn svg {
-  transition: transform 0.15s;
+.task-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
 }
 
-.loading-icon {
-  animation: spin 1s linear infinite;
+.task-card-title-group {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
 }
 
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.expand-placeholder {
-  width: 24px;
-  height: 24px;
-}
-
-/* 任务图标 */
 .task-icon {
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #64748b;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.68);
+  color: #94a3b8;
   flex-shrink: 0;
 }
 
 .root-task .task-icon {
-  color: #3b82f6;
+  color: #60a5fa;
 }
 
-/* 任务信息 */
-.task-info {
-  flex: 1;
+.sub-task .task-icon {
+  color: #7dd3fc;
+}
+
+.task-card-heading {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
+}
+
+.task-card-kind {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #64748b;
 }
 
 .task-description {
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 15px;
+  font-weight: 600;
   color: #f8fafc;
-  line-height: 1.5;
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.task-meta {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 12px;
-  color: #64748b;
-}
-
-.task-agent {
-  background: #334155;
-  padding: 2px 8px;
-  border-radius: 4px;
-  color: #94a3b8;
-}
-
-.task-time {
-  color: #64748b;
-}
-
-.task-children-count {
-  color: #3b82f6;
-}
-
-/* 状态标签 */
 .task-status {
   flex-shrink: 0;
 }
 
-/* 操作按钮 */
+.task-info {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.task-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.task-agent,
+.task-time,
+.task-children-count {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(51, 65, 85, 0.8);
+}
+
+.task-children-count {
+  color: #93c5fd;
+}
+
 .task-actions {
+  margin-top: auto;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding-right: 16px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(51, 65, 85, 0.8);
 }
 
 .action-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   padding: 0;
-  background: transparent;
-  border: none;
-  color: #64748b;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(71, 85, 105, 0.85);
+  color: #94a3b8;
   cursor: pointer;
-  border-radius: 6px;
-  transition: color 0.15s, background-color 0.15s;
+  border-radius: 10px;
+  transition: color 0.15s, background-color 0.15s, border-color 0.15s;
 }
 
 .action-btn:hover {
   color: #f8fafc;
-  background: #475569;
-}
-
-.delete-btn:hover {
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.1);
+  background: rgba(30, 41, 59, 0.95);
+  border-color: #64748b;
 }
 
 .pause-btn:hover {
   color: #f59e0b;
-  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.45);
+  background: rgba(120, 53, 15, 0.2);
 }
 
 .resume-btn:hover {
   color: #10b981;
-  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.45);
+  background: rgba(6, 78, 59, 0.2);
 }
 
 .cancel-btn:hover {
-  color: #6b7280;
-  background: rgba(107, 114, 128, 0.1);
+  color: #cbd5e1;
+  border-color: rgba(148, 163, 184, 0.4);
+  background: rgba(51, 65, 85, 0.28);
 }
 
-/* 子任务列表 */
-.subtask-list {
-  background: #0f172a;
+.task-tree-children {
+  position: relative;
+  padding-left: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
 }
 
-/* 响应式设计 */
-@media (max-width: 768px) {
-  .task-item-content {
-    flex-wrap: wrap;
-    padding: 12px 0;
+.task-tree-children::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 32px;
+  bottom: 32px;
+  border-left: 1px solid var(--connector-color);
+}
+
+.task-tree-child {
+  position: relative;
+}
+
+.task-tree-child::before {
+  content: '';
+  position: absolute;
+  left: -28px;
+  top: 88px;
+  width: 28px;
+  border-top: 1px solid var(--connector-color);
+}
+
+@media (max-width: 900px) {
+  .task-tree-node-row {
+    flex-direction: column;
+    min-width: 100%;
   }
 
-  .task-info {
+  .task-tree-card-wrap.has-children::after {
+    display: none;
+  }
+
+  .task-tree-item {
     width: 100%;
-    order: 3;
-    margin-top: 8px;
+    min-height: 0;
+  }
+
+  .task-tree-children {
+    margin-top: 16px;
+    margin-left: 18px;
+    padding-left: 18px;
+  }
+
+  .task-tree-child::before {
+    left: -18px;
+    width: 18px;
+    top: 48px;
+  }
+
+  .task-tree-children::before {
+    top: 18px;
+    bottom: 18px;
+  }
+}
+
+@media (max-width: 768px) {
+  .task-card-header {
+    flex-direction: column;
+  }
+
+  .task-status {
+    align-self: flex-start;
   }
 
   .task-actions {
-    order: 2;
-    margin-left: auto;
-  }
-
-  .task-meta {
     flex-wrap: wrap;
-    gap: 8px;
   }
 }

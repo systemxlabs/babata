@@ -30,6 +30,186 @@
 .tasks-list {
   display: flex;
   flex-direction: column;
+  gap: 20px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.tasks-workspace {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.root-task-panel,
+.task-tree-panel {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.panel-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+  border-bottom: 1px solid #334155;
+  background: rgba(15, 23, 42, 0.35);
+}
+
+.panel-title-row h2 {
+  margin: 0;
+  font-size: 18px;
+  color: #f8fafc;
+}
+
+.panel-title-row p,
+.panel-title-row span {
+  margin: 6px 0 0;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.tree-delete-button {
+  flex-shrink: 0;
+  padding: 10px 14px;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: 10px;
+  background: rgba(127, 29, 29, 0.22);
+  color: #fca5a5;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+
+.tree-delete-button:hover {
+  transform: translateY(-1px);
+  background: rgba(127, 29, 29, 0.32);
+  border-color: rgba(248, 113, 113, 0.5);
+}
+
+.root-task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.root-task-card {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  text-align: left;
+  border: 1px solid #334155;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #172033 0%, #111827 100%);
+  color: inherit;
+  cursor: pointer;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.root-task-card:hover {
+  transform: translateY(-1px);
+  border-color: #475569;
+}
+
+.root-task-card.active {
+  border-color: rgba(59, 130, 246, 0.55);
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.35);
+  background:
+    radial-gradient(circle at top right, rgba(59, 130, 246, 0.18), transparent 40%),
+    linear-gradient(180deg, #172033 0%, #111827 100%);
+}
+
+.root-task-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.root-task-agent {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(51, 65, 85, 0.8);
+  color: #cbd5e1;
+  font-size: 12px;
+}
+
+.root-task-status {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.root-task-status-running {
+  color: #fbbf24;
+}
+
+.root-task-status-completed {
+  color: #34d399;
+}
+
+.root-task-status-failed {
+  color: #f87171;
+}
+
+.root-task-status-paused {
+  color: #fb923c;
+}
+
+.root-task-status-canceled {
+  color: #94a3b8;
+}
+
+.root-task-card-title {
+  color: #f8fafc;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.root-task-card-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.task-tree-panel {
+  min-height: 540px;
+}
+
+.task-tree-stage {
+  overflow: auto;
+  padding: 24px;
+  min-height: 460px;
+  background:
+    radial-gradient(circle at top left, rgba(59, 130, 246, 0.08), transparent 28%),
+    #0f172a;
+}
+
+.tree-loading,
+.tree-empty {
+  min-height: 460px;
 }
 
 /* 加载状态 */
@@ -107,5 +287,32 @@
 
   .tasks-header h1 {
     font-size: 24px;
+  }
+
+  .tasks-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .panel-title-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .tree-delete-button {
+    width: 100%;
+  }
+
+  .root-task-list {
+    max-height: none;
+  }
+
+  .task-tree-panel {
+    min-height: 0;
+  }
+
+  .task-tree-stage,
+  .tree-loading,
+  .tree-empty {
+    min-height: 320px;
   }
 }
