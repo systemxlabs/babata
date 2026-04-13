@@ -5,6 +5,7 @@ mod delete_tasks;
 mod edit_file;
 mod glob;
 mod grep;
+mod query_messages;
 mod query_tasks;
 mod read_file;
 mod shell;
@@ -22,6 +23,7 @@ pub use delete_tasks::*;
 pub use edit_file::*;
 pub use glob::*;
 pub use grep::*;
+pub use query_messages::*;
 pub use query_tasks::*;
 pub use read_file::*;
 pub use shell::*;
@@ -93,6 +95,7 @@ pub fn build_tools(
         Arc::new(ControlTaskTool::new()?),
         Arc::new(CreateTaskTool::new()?),
         Arc::new(DeleteTasksTool::new()?),
+        Arc::new(QueryMessagesTool::new()),
         Arc::new(QueryTasksTool::new()?),
         Arc::new(WaitTaskTool::new()?),
         Arc::new(SleepTool::new()),
