@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
-import { BookMarked, ChevronRight, Trash2 } from "lucide-react"
+import { BookMarked, Trash2 } from "lucide-react"
 
 import { deleteSkill, getSkills } from "@/api"
 import { EmptyState } from "@/components/empty-state"
@@ -114,14 +114,7 @@ export function Skills() {
                   <Trash2 className="size-4 text-destructive" />
                 </Button>
               </CardHeader>
-              <CardContent className="mt-auto flex items-center justify-end gap-3">
-                <Button variant="secondary" className="rounded-full" asChild>
-                  <div>
-                    查看详情
-                    <ChevronRight className="ml-2 size-4 transition-transform group-hover:translate-x-0.5" />
-                  </div>
-                </Button>
-              </CardContent>
+              <CardContent className="mt-auto pt-0" />
             </Card>
           ))}
         </div>

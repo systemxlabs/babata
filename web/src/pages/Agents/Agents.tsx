@@ -370,7 +370,10 @@ function AgentCard({
   onDelete: (agent: AgentFrontmatter) => void
 }) {
   return (
-    <Card className="group rounded-[1.9rem] border-border/70 bg-card/70 shadow-[0_18px_60px_-32px_rgba(15,23,42,0.24)] backdrop-blur-xl">
+    <Card
+      className="group cursor-pointer rounded-[1.9rem] border-border/70 bg-card/70 shadow-[0_18px_60px_-32px_rgba(15,23,42,0.24)] backdrop-blur-xl transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-[0_24px_75px_-42px_rgba(37,99,235,0.28)]"
+      onClick={() => onView(agent)}
+    >
       <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
         <div className="space-y-3">
           <Badge variant="outline" className="rounded-full px-3 py-1 text-[0.72rem] uppercase tracking-[0.2em]">
@@ -384,10 +387,24 @@ function AgentCard({
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="icon" onClick={() => onEdit(agent)}>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={(event) => {
+              event.stopPropagation()
+              onEdit(agent)
+            }}
+          >
             <Pencil className="size-4" />
           </Button>
-          <Button variant="outline" size="icon" onClick={() => onDelete(agent)}>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={(event) => {
+              event.stopPropagation()
+              onDelete(agent)
+            }}
+          >
             <Trash2 className="size-4 text-destructive" />
           </Button>
         </div>
@@ -409,13 +426,7 @@ function AgentCard({
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {agent.default ? (
-            <Badge className="rounded-full px-3 py-1">默认 Agent</Badge>
-          ) : (
-            <Badge variant="outline" className="rounded-full px-3 py-1">
-              普通 Agent
-            </Badge>
-          )}
+          {agent.default ? <Badge className="rounded-full px-3 py-1">默认 Agent</Badge> : null}
           {agent.allowed_tools.length === 0 ? (
             <Badge variant="outline" className="rounded-full px-3 py-1">
               无工具限制配置
@@ -433,14 +444,6 @@ function AgentCard({
             </Badge>
           ) : null}
         </div>
-
-        <Button
-          variant="secondary"
-          className="w-full rounded-full"
-          onClick={() => onView(agent)}
-        >
-          查看详情
-        </Button>
       </CardContent>
     </Card>
   )
@@ -479,6 +482,15 @@ export function Agents() {
   useEffect(() => {
     void fetchAgents()
   }, [fetchAgents])
+
+  const sortedAgents = useMemo(() => {
+    return [...agents].sort((a, b) => {
+      if (a.default !== b.default) {
+        return a.default ? -1 : 1
+      }
+      return a.name.localeCompare(b.name, "zh-CN")
+    })
+  }, [agents])
 
   const handleCreate = async (data: CreateAgentRequest | UpdateAgentRequest) => {
     await createAgent(data as CreateAgentRequest)
@@ -572,7 +584,7 @@ export function Agents() {
         />
       ) : (
         <div className="grid gap-5 xl:grid-cols-2">
-          {agents.map((agent) => (
+          {sortedAgents.map((agent) => (
             <AgentCard
               key={agent.name}
               agent={agent}

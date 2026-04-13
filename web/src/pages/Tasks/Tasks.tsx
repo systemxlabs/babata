@@ -15,10 +15,8 @@ import { TaskDetailModal } from "@/components/TaskDetailModal"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { TaskListHeader } from "@/pages/Tasks/components/TaskListHeader"
 import { TaskPagination } from "@/pages/Tasks/components/TaskPagination"
-import { TaskStatusBadge } from "@/pages/Tasks/components/TaskStatusBadge"
 import { TaskTreeItem } from "@/pages/Tasks/components/TaskTreeItem"
 import { STATUS_LABELS, type RootTask, type Task, type TaskFilter } from "@/types"
 
@@ -134,6 +132,16 @@ export function Tasks() {
   }, [selectedRootTaskId, sortTaskTreeByCreatedAt])
 
   useEffect(() => {
+    if (!selectedRootTaskId) return
+
+    const interval = window.setInterval(() => {
+      void fetchTree(selectedRootTaskId)
+    }, 10000)
+
+    return () => window.clearInterval(interval)
+  }, [fetchTree, selectedRootTaskId])
+
+  useEffect(() => {
     setSelectedTaskId(null)
   }, [selectedRootTaskId])
 
@@ -246,7 +254,7 @@ export function Tasks() {
           }
         />
       ) : (
-        <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
+        <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
           <Card className="rounded-[2rem] border-border/70 bg-card/70 shadow-[0_20px_65px_-36px_rgba(15,23,42,0.25)] backdrop-blur-xl">
             <CardHeader className="space-y-3">
               <div className="flex items-center justify-between gap-3">
@@ -262,9 +270,9 @@ export function Tasks() {
               </div>
             </CardHeader>
             <CardContent className="pt-0">
-              <ScrollArea
+              <div
                 key={`${filter.status ?? "all"}-${filter.page}`}
-                className="h-[720px] pr-3"
+                className="h-[720px] overflow-y-auto pr-2"
               >
                 <div className="space-y-3">
                   {tasks.map((task) => {
@@ -281,18 +289,16 @@ export function Tasks() {
                         }`}
                         onClick={() => handleRootTaskSelect(task.task_id)}
                       >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0 space-y-2">
-                            <div className="text-[0.7rem] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
-                              {task.agent}
-                            </div>
-                            <div className="line-clamp-2 text-base font-semibold leading-6 tracking-tight text-foreground">
-                              {task.description}
-                            </div>
+                        <div className="space-y-3">
+                          <div className="inline-flex max-w-full rounded-full border border-border/70 bg-background/80 px-3 py-1 text-[0.72rem] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                            <span className="truncate">{task.agent}</span>
                           </div>
-                          <TaskStatusBadge status={task.status} size="sm" />
+                          <div className="line-clamp-2 text-base font-semibold leading-6 tracking-tight text-foreground">
+                            {task.description}
+                          </div>
                         </div>
-                        <div className="mt-4 flex flex-wrap gap-2 text-xs text-muted-foreground">
+
+                        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
                           <span>创建于 {formatTime(task.created_at)}</span>
                           <span>{task.subtask_count} 个子任务</span>
                         </div>
@@ -300,7 +306,7 @@ export function Tasks() {
                     )
                   })}
                 </div>
-              </ScrollArea>
+              </div>
             </CardContent>
           </Card>
 
@@ -344,7 +350,7 @@ export function Tasks() {
                   />
                 ) : selectedTree ? (
                   <div className="overflow-x-auto pb-2">
-                    <div className="min-w-max pr-6 pt-2">
+                    <div className="min-w-max px-4 pb-2 pt-3">
                       <TaskTreeItem
                         task={selectedTree}
                         selectedTaskId={selectedTaskId}
