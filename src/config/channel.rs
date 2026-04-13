@@ -69,6 +69,13 @@ impl ChannelConfig {
         }
     }
 
+    pub fn validate(&self) -> BabataResult<()> {
+        match self {
+            ChannelConfig::Telegram(config) => config.validate(),
+            ChannelConfig::Wechat(config) => config.validate(),
+        }
+    }
+
     pub fn matches_name(&self, name: &str) -> bool {
         self.name().eq_ignore_ascii_case(name)
     }

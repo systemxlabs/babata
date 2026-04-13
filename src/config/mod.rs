@@ -93,10 +93,7 @@ impl Config {
         }
 
         for channel in &self.channels {
-            match channel {
-                ChannelConfig::Telegram(telegram) => telegram.validate()?,
-                ChannelConfig::Wechat(wechat) => wechat.validate()?,
-            }
+            channel.validate()?;
         }
 
         Ok(())

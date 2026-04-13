@@ -2,9 +2,11 @@ mod collaborate_task;
 mod control_task;
 mod count_tasks;
 mod create_agent;
+mod create_channel;
 mod create_provider;
 mod create_task;
 mod delete_agent;
+mod delete_channel;
 mod delete_provider;
 mod delete_skill;
 mod delete_task;
@@ -18,6 +20,7 @@ mod get_task_logs;
 mod get_task_tree;
 mod list_agent_files;
 mod list_agents;
+mod list_channels;
 mod list_providers;
 mod list_root_tasks;
 mod list_skill_files;
@@ -26,6 +29,7 @@ mod list_task_files;
 
 mod steer_task;
 mod update_agent;
+mod update_channel;
 mod update_provider;
 
 use std::{env, sync::Arc};
@@ -82,6 +86,14 @@ fn router(task_manager: Arc<TaskManager>) -> Router {
         .route(
             "/api/agents",
             get(list_agents::handle).post(create_agent::handle),
+        )
+        .route(
+            "/api/channels",
+            get(list_channels::handle).post(create_channel::handle),
+        )
+        .route(
+            "/api/channels/{name}",
+            put(update_channel::handle).delete(delete_channel::handle),
         )
         .route(
             "/api/agents/{name}",
