@@ -58,6 +58,7 @@ impl AgentTask {
             content: self.prompt.clone(),
             created_at: Utc::now(),
         }];
+        self.memory.append_messages(self.task_id, &conversation)?;
 
         let mut final_response = None;
         let max_steps = 100;
@@ -70,10 +71,13 @@ impl AgentTask {
                         "Received steer message with {} content part(s)",
                         steer_msg.content.len()
                     );
-                    conversation.push(Message::UserSteering {
+                    let steer_message = Message::UserSteering {
                         content: steer_msg.content,
                         created_at: Utc::now(),
-                    });
+                    };
+                    self.memory
+                        .append_messages(self.task_id, std::slice::from_ref(&steer_message))?;
+                    conversation.push(steer_message);
                 }
             }
             let message = generate_with_retry(
@@ -87,6 +91,8 @@ impl AgentTask {
             )
             .await?;
             crate::task_info!(self.task_id, "Provider returned message: {:?}", message);
+            self.memory
+                .append_messages(self.task_id, std::slice::from_ref(&message))?;
             conversation.push(message.clone());
 
             match message {
@@ -132,6 +138,7 @@ impl AgentTask {
                     });
 
                     let results = join_all(tool_futures).await;
+                    self.memory.append_messages(self.task_id, &results)?;
                     conversation.extend(results);
                 }
                 Message::UserPrompt { .. }
@@ -145,7 +152,6 @@ impl AgentTask {
         }
 
         if let Some(final_response) = final_response {
-            self.memory.append_messages(self.task_id, &conversation)?;
             Ok(final_response)
         } else {
             Err(BabataError::provider(format!(
