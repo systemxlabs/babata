@@ -7,7 +7,7 @@ use crate::{BabataResult, error::BabataError, utils::task_dir};
 
 use super::{
     HttpApp, ensure_task_exists,
-    file_browser::{FileEntry, read_directory_recursive},
+    file_browser::{FileEntry, read_directory},
     parse_task_id,
 };
 
@@ -25,7 +25,7 @@ pub(super) async fn handle(
         return Ok(Json(Vec::new()));
     }
 
-    let files = read_directory_recursive(&task_dir)
+    let files = read_directory(&task_dir, None)
         .await
         .map_err(|err| BabataError::invalid_input(format!("Failed to read directory: {}", err)))?;
 
