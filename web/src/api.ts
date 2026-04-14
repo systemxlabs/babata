@@ -10,6 +10,8 @@ import type {
   FileEntry,
   GetAgentResponse,
   ListAgentsResponse,
+  MessageContentPart,
+  MessageRecord,
   ProviderConfig,
   ProvidersResponse,
   Skill,
@@ -127,6 +129,40 @@ export function getTaskLogs(taskId: string, limit?: number, offset?: number): Pr
 
   const queryString = params.toString();
   return fetchApi<string[]>(`/tasks/${taskId}/logs${queryString ? `?${queryString}` : ''}`);
+}
+
+interface MessageRecordApiResponse extends Omit<MessageRecord, 'content' | 'tool_calls'> {
+  content: string | null;
+  tool_calls: string | null;
+}
+
+function parseJsonStringArray<T>(value: string | null): T[] | null {
+  if (!value) {
+    return null;
+  }
+
+  return JSON.parse(value) as T[];
+}
+
+export async function getTaskMessages(
+  taskId: string,
+  limit: number,
+  offset?: number
+): Promise<MessageRecord[]> {
+  const params = new URLSearchParams();
+  params.append('limit', limit.toString());
+  if (offset !== undefined) params.append('offset', offset.toString());
+
+  const queryString = params.toString();
+  const response = await fetchApi<MessageRecordApiResponse[]>(
+    `/tasks/${taskId}/messages${queryString ? `?${queryString}` : ''}`
+  );
+
+  return response.map((record) => ({
+    ...record,
+    content: parseJsonStringArray<MessageContentPart>(record.content),
+    tool_calls: parseJsonStringArray(record.tool_calls),
+  }));
 }
 
 export function deleteTask(taskId: string): Promise<void> {
