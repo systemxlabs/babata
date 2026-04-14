@@ -74,7 +74,10 @@ impl TelegramChannel {
         Ok(messages)
     }
 
-    async fn route_incoming(&self, incoming: Vec<IncomingPrivateMessage>) -> Vec<Content> {
+    async fn route_incoming(
+        &self,
+        incoming: Vec<IncomingPrivateMessage>,
+    ) -> BabataResult<Vec<Content>> {
         let mut content = Vec::new();
         let now = chrono::Utc::now().timestamp();
         let one_hour_ago = now - 3600;
@@ -92,9 +95,10 @@ impl TelegramChannel {
                 continue;
             }
 
-            let Some(mut message_content) = self.incoming_message_to_content(&message).await else {
+            let mut message_content = self.incoming_message_to_content(&message).await?;
+            if message_content.is_empty() {
                 continue;
-            };
+            }
 
             if let Some(reply_to_message_id) = message.reply_to_message_id
                 && let Some(waiter) = self
@@ -120,7 +124,7 @@ impl TelegramChannel {
             content.extend(message_content);
         }
 
-        content
+        Ok(content)
     }
 
     async fn update_last_update_id(&self, last_update_id: i64) -> BabataResult<()> {
@@ -184,7 +188,7 @@ impl TelegramChannel {
     async fn incoming_message_to_content(
         &self,
         message: &IncomingPrivateMessage,
-    ) -> Option<Vec<Content>> {
+    ) -> BabataResult<Vec<Content>> {
         let mut content = Vec::new();
 
         if let Some(text) = &message.text {
@@ -196,24 +200,16 @@ impl TelegramChannel {
                 .image_media_type
                 .clone()
                 .unwrap_or_else(|| "image/jpeg".to_string());
-            match self
+            let data = self
                 .download_file_as_base64(image_file_id, &media_type)
-                .await
-            {
-                Ok(data) => match MediaType::from_mime(&media_type) {
-                    Some(media_type) => content.push(Content::ImageData { data, media_type }),
-                    None => warn!(
-                        "Unsupported Telegram image media type '{}'; skipping image content.",
-                        media_type
-                    ),
-                },
-                Err(err) => {
-                    warn!(
-                        "Failed to process Telegram image file '{}': {}. Continuing without image.",
-                        image_file_id, err
-                    );
-                }
-            }
+                .await?;
+            let media_type = MediaType::from_mime(&media_type).ok_or_else(|| {
+                BabataError::channel(format!(
+                    "Unsupported Telegram image media type '{}'",
+                    media_type
+                ))
+            })?;
+            content.push(Content::ImageData { data, media_type });
         }
 
         if let Some(audio_file_id) = &message.audio_file_id {
@@ -221,27 +217,19 @@ impl TelegramChannel {
                 .audio_media_type
                 .clone()
                 .unwrap_or_else(|| "audio/ogg".to_string());
-            match self
+            let data = self
                 .download_file_as_base64(audio_file_id, &media_type)
-                .await
-            {
-                Ok(data) => match MediaType::from_mime(&media_type) {
-                    Some(media_type) => content.push(Content::AudioData { data, media_type }),
-                    None => warn!(
-                        "Unsupported Telegram audio media type '{}'; skipping audio content.",
-                        media_type
-                    ),
-                },
-                Err(err) => {
-                    warn!(
-                        "Failed to process Telegram audio file '{}': {}. Continuing without audio.",
-                        audio_file_id, err
-                    );
-                }
-            }
+                .await?;
+            let media_type = MediaType::from_mime(&media_type).ok_or_else(|| {
+                BabataError::channel(format!(
+                    "Unsupported Telegram audio media type '{}'",
+                    media_type
+                ))
+            })?;
+            content.push(Content::AudioData { data, media_type });
         }
 
-        (!content.is_empty()).then_some(content)
+        Ok(content)
     }
 
     async fn download_file_as_base64(
@@ -308,7 +296,7 @@ impl super::Channel for TelegramChannel {
 
     async fn try_receive(&self) -> BabataResult<Vec<Content>> {
         let incoming = self.fetch_updates().await?;
-        Ok(self.route_incoming(incoming).await)
+        self.route_incoming(incoming).await
     }
 
     async fn feedback(&self, content: Vec<Content>) -> BabataResult<Vec<Content>> {
