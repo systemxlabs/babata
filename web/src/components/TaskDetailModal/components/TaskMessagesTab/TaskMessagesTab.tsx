@@ -90,6 +90,32 @@ function renderToolCall(call: ToolCall, index: number) {
   )
 }
 
+function renderToolResult(message: MessageRecord) {
+  const call = message.tool_calls?.[0] ?? null
+
+  return (
+    <div className="space-y-2">
+      <div className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+        Result
+      </div>
+      <div className="space-y-2 rounded-[1rem] bg-card/80 px-4 py-3">
+        {call ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className="rounded-full">
+              <Wrench className="mr-1 size-3" />
+              {call.tool_name}
+            </Badge>
+            <span className="text-xs text-muted-foreground">{call.call_id}</span>
+          </div>
+        ) : null}
+        <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-[13px] leading-6 text-foreground">
+          <code>{message.result}</code>
+        </pre>
+      </div>
+    </div>
+  )
+}
+
 function MessageCard({ message, index }: { message: MessageRecord; index: number }) {
   return (
     <div className="space-y-4 rounded-[1.2rem] border border-border/70 bg-background/70 p-4">
@@ -139,16 +165,7 @@ function MessageCard({ message, index }: { message: MessageRecord; index: number
         </div>
       ) : null}
 
-      {message.result ? (
-        <div className="space-y-2">
-          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-            Result
-          </div>
-          <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-[1rem] bg-card/80 px-4 py-3 font-mono text-[13px] leading-6 text-foreground">
-            <code>{message.result}</code>
-          </pre>
-        </div>
-      ) : null}
+      {message.result ? renderToolResult(message) : null}
     </div>
   )
 }
