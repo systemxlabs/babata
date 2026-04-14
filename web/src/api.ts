@@ -5,6 +5,7 @@ import type {
   ChannelsResponse,
   CountResponse,
   CreateAgentRequest,
+  CreateTaskPromptPart,
   CreateTaskRequest,
   CreateTaskResponse,
   FileEntry,
@@ -23,7 +24,6 @@ import type {
   TaskListResponse,
   TaskStatus,
   TasksResponse,
-  TextContent,
   UpdateAgentRequest,
 } from './types';
 
@@ -74,7 +74,7 @@ export interface TaskTreeResponse {
 interface BackendCreateTaskRequest {
   agent: string;
   description: string;
-  prompt: TextContent[];
+  prompt: CreateTaskPromptPart[];
   never_ends: boolean;
 }
 
@@ -354,10 +354,18 @@ export const api = {
   },
 
   createTask(request: CreateTaskRequest): Promise<CreateTaskResponse> {
+    const prompt: CreateTaskPromptPart[] = [];
+    if (request.prompt.trim()) {
+      prompt.push({ type: 'text', text: request.prompt.trim() });
+    }
+    if (request.images?.length) {
+      prompt.push(...request.images);
+    }
+
     const payload: BackendCreateTaskRequest = {
       agent: request.agent,
       description: request.description.trim(),
-      prompt: [{ type: 'text', text: request.prompt.trim() }],
+      prompt,
       never_ends: request.never_ends ?? false,
     };
 

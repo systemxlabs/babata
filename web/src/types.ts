@@ -192,10 +192,17 @@ export interface SkillsResponse {
   skills: Skill[];
 }
 
+export interface ImageDataContent {
+  type: 'image_data';
+  data: string;
+  media_type: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
+}
+
 export interface CreateTaskRequest {
   agent: string;
   prompt: string;
   description: string;
+  images?: ImageDataContent[];
   never_ends?: boolean;
 }
 
@@ -208,6 +215,8 @@ export interface TextContent {
   type: 'text';
   text: string;
 }
+
+export type CreateTaskPromptPart = TextContent | ImageDataContent;
 
 export interface SteerTaskRequest {
   content: TextContent[];
