@@ -105,10 +105,7 @@ impl WechatChannel {
                 continue;
             }
 
-            if message
-                .timestamp
-                .is_some_and(|ts| ts < one_hour_ago)
-            {
+            if message.timestamp.is_some_and(|ts| ts < one_hour_ago) {
                 warn!(
                     "Ignoring Wechat message from {} older than 1 hour (timestamp: {:?})",
                     message.conversation.user_id, message.timestamp

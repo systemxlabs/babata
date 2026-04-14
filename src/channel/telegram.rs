@@ -84,12 +84,9 @@ impl TelegramChannel {
                 continue;
             }
 
-            if message
-                .timestamp
-                .is_some_and(|ts| ts < one_hour_ago)
-            {
+            if message.timestamp < one_hour_ago {
                 warn!(
-                    "Ignoring Telegram message from {} older than 1 hour (timestamp: {:?})",
+                    "Ignoring Telegram message from {} older than 1 hour (timestamp: {})",
                     message.chat_id, message.timestamp
                 );
                 continue;
@@ -348,7 +345,7 @@ struct IncomingPrivateMessage {
     audio_file_id: Option<String>,
     audio_media_type: Option<String>,
     /// Unix timestamp in seconds
-    timestamp: Option<i64>,
+    timestamp: i64,
 }
 
 fn extract_private_messages(
@@ -416,7 +413,7 @@ fn extract_private_messages(
             image_media_type,
             audio_file_id,
             audio_media_type,
-            timestamp: Some(message.date.timestamp()),
+            timestamp: message.date.timestamp(),
         });
     }
 
