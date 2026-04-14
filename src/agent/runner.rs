@@ -3,7 +3,6 @@ use std::{collections::HashMap, fmt::Debug, sync::Arc, time::Duration};
 use backon::{ExponentialBuilder, Retryable};
 use chrono::Utc;
 use futures::future::join_all;
-use log::warn;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
@@ -18,6 +17,7 @@ use crate::{
     skill::load_skills,
     system_prompt::build_system_prompts,
     task::SteerMessage,
+    task_warn,
     tool::{Tool, ToolContext, ToolSpec},
 };
 
@@ -215,9 +215,11 @@ async fn generate_with_retry(
     .retry(backoff)
     .when(|err| matches!(err, BabataError::Provider(_, _)))
     .notify(|err, wait| {
-        warn!(
+        task_warn!(
+            task_id,
             "Provider generate failed: {:?}. Retrying in {:?}",
-            err, wait
+            err,
+            wait
         )
     })
     .await

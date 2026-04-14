@@ -1,6 +1,5 @@
 use std::{collections::HashMap, path::Path, sync::Arc};
 
-use log::{info, warn};
 use tokio::{fs as tokio_fs, sync::mpsc, task::JoinHandle};
 use uuid::Uuid;
 
@@ -12,6 +11,7 @@ use crate::{
     memory::Memory,
     message::Content,
     task::{RunningTask, SteerMessage, TaskExitEvent, TaskRecord},
+    task_info, task_warn,
     tool::{Tool, build_tools},
     utils::task_dir,
 };
@@ -54,9 +54,11 @@ impl TaskLauncher {
         prompt: Vec<Content>,
         exit_tx: mpsc::Sender<TaskExitEvent>,
     ) -> BabataResult<RunningTask> {
-        info!(
-            "Launching task {} with task record: {:?} and prompt: {:?}",
-            task.task_id, task, prompt
+        task_info!(
+            task.task_id,
+            "Launching task with task record: {:?} and prompt: {:?}",
+            task,
+            prompt
         );
         let agent = self
             .agents
@@ -95,10 +97,7 @@ impl TaskLauncher {
             let event = match result {
                 Ok(content) => {
                     if let Err(error) = write_final_response(task_id, &content).await {
-                        warn!(
-                            "Failed to persist final response for task {}: {}",
-                            task_id, error
-                        );
+                        task_warn!(task_id, "Failed to persist final response: {}", error);
                     }
                     TaskExitEvent::Completed { task_id }
                 }
@@ -121,9 +120,11 @@ impl TaskLauncher {
         exit_tx: mpsc::Sender<TaskExitEvent>,
         reason: &str,
     ) -> BabataResult<RunningTask> {
-        info!(
-            "Relaunching task {} with reason '{}' and task record: {:?}",
-            task.task_id, reason, task
+        task_info!(
+            task.task_id,
+            "Relaunching task with reason '{}' and task record: {:?}",
+            reason,
+            task
         );
         let agent = self
             .agents
@@ -162,10 +163,7 @@ impl TaskLauncher {
             let event = match result {
                 Ok(content) => {
                     if let Err(error) = write_final_response(task_id, &content).await {
-                        warn!(
-                            "Failed to persist final response for task {}: {}",
-                            task_id, error
-                        );
+                        task_warn!(task_id, "Failed to persist final response: {}", error);
                     }
                     TaskExitEvent::Completed { task_id }
                 }
