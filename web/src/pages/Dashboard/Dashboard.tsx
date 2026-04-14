@@ -21,6 +21,7 @@ import { StatCard } from "@/components/stat-card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Textarea } from "@/components/ui/textarea"
 import {
   Select,
@@ -107,6 +108,7 @@ export function Dashboard() {
   const [selectedAgent, setSelectedAgent] = useState("")
   const [taskDescription, setTaskDescription] = useState("")
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([])
+  const [neverEnds, setNeverEnds] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -211,10 +213,12 @@ export function Dashboard() {
         prompt: taskDescription.trim(),
         description: taskDescription.trim(),
         images: uploadedImages.map((image) => image.content),
+        never_ends: neverEnds,
       })
       setTaskDescription("")
       uploadedImages.forEach((image) => URL.revokeObjectURL(image.previewUrl))
       setUploadedImages([])
+      setNeverEnds(false)
       await refreshData()
     } catch (err) {
       setError(err instanceof Error ? err.message : "创建任务失败")
@@ -377,9 +381,29 @@ export function Dashboard() {
               )}
             </div>
 
+            <div className="flex items-center gap-3 rounded-[1.4rem] border border-border/70 bg-background/40 px-4 py-3">
+              <Checkbox
+                id="dashboard-never-ends"
+                checked={neverEnds}
+                onCheckedChange={(checked) => setNeverEnds(checked === true)}
+                disabled={isCreating}
+              />
+              <div className="space-y-1">
+                <label
+                  htmlFor="dashboard-never-ends"
+                  className="text-sm font-medium leading-none text-foreground"
+                >
+                  Never ends
+                </label>
+                <p className="text-sm text-muted-foreground">
+                  勾选后任务会作为常驻任务运行，不会在一次完成后自动结束。
+                </p>
+              </div>
+            </div>
+
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm text-muted-foreground">
-                新任务会以根任务方式创建，并立即进入调度。文本和所有附加图片会一起发送给 Agent。
+                新任务会以根任务方式创建，并立即进入调度。文本、附加图片和常驻设置会一起发送给 Agent。
               </p>
               <Button
                 type="submit"
