@@ -3,6 +3,7 @@ import {
   Ban,
   CalendarClock,
   FolderOpen,
+  MessageSquare,
   Pause,
   Play,
   ScrollText,
@@ -10,7 +11,7 @@ import {
   Workflow,
 } from "lucide-react"
 
-import { controlTask, getTask, getTaskFiles, getTaskLogs } from "@/api"
+import { controlTask, getTask, getTaskFiles } from "@/api"
 import { LoadingState } from "@/components/loading-state"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -28,8 +29,9 @@ import { TaskStatusBadge } from "@/pages/Tasks/components/TaskStatusBadge"
 import type { FileEntry, Task } from "@/types"
 import { TaskDirectoryTab } from "./components/TaskDirectoryTab/TaskDirectoryTab"
 import { TaskLogsTab } from "./components/TaskLogsTab/TaskLogsTab"
+import { TaskMessagesTab } from "./components/TaskMessagesTab/TaskMessagesTab"
 
-type TabType = "directory" | "logs"
+type TabType = "directory" | "logs" | "messages"
 
 interface TaskDetailModalProps {
   taskId: string | null
@@ -40,7 +42,6 @@ interface TaskDetailModalProps {
 export function TaskDetailModal({ taskId, isOpen, onClose }: TaskDetailModalProps) {
   const [task, setTask] = useState<Task | null>(null)
   const [files, setFiles] = useState<FileEntry[]>([])
-  const [logs, setLogs] = useState<string[]>([])
   const [activeTab, setActiveTab] = useState<TabType>("directory")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -53,20 +54,17 @@ export function TaskDetailModal({ taskId, isOpen, onClose }: TaskDetailModalProp
     setError(null)
 
     try {
-      const [taskData, filesData, logsData] = await Promise.all([
+      const [taskData, filesData] = await Promise.all([
         getTask(taskId),
         getTaskFiles(taskId),
-        getTaskLogs(taskId, 1000),
       ])
 
       setTask(taskData)
       setFiles(filesData)
-      setLogs(logsData)
     } catch (err) {
       setError(err instanceof Error ? err.message : "加载任务详情失败")
       setTask(null)
       setFiles([])
-      setLogs([])
     } finally {
       setLoading(false)
     }
@@ -280,17 +278,24 @@ export function TaskDetailModal({ taskId, isOpen, onClose }: TaskDetailModalProp
                         <FolderOpen className="mr-1.5 size-4" />
                         任务目录
                       </TabsTrigger>
-                      <TabsTrigger value="logs" className="rounded-xl px-4 py-2">
-                        <ScrollText className="mr-1.5 size-4" />
-                        任务日志
-                      </TabsTrigger>
-                    </TabsList>
+                    <TabsTrigger value="logs" className="rounded-xl px-4 py-2">
+                      <ScrollText className="mr-1.5 size-4" />
+                      任务日志
+                    </TabsTrigger>
+                    <TabsTrigger value="messages" className="rounded-xl px-4 py-2">
+                      <MessageSquare className="mr-1.5 size-4" />
+                      任务消息
+                    </TabsTrigger>
+                  </TabsList>
 
                     <TabsContent value="directory" className="mt-4">
                       <TaskDirectoryTab taskId={taskId} files={files} />
                     </TabsContent>
                     <TabsContent value="logs" className="mt-4">
-                      <TaskLogsTab logs={logs} onRefresh={() => void fetchTaskDetail()} />
+                      <TaskLogsTab taskId={taskId} />
+                    </TabsContent>
+                    <TabsContent value="messages" className="mt-4">
+                      <TaskMessagesTab taskId={taskId} />
                     </TabsContent>
                   </Tabs>
                 </>

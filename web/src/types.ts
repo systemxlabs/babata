@@ -43,6 +43,35 @@ export interface FileEntry {
   modified: number | null;
 }
 
+export interface ToolCall {
+  call_id: string;
+  tool_name: string;
+  args: string;
+}
+
+export type MessageType =
+  | 'user_prompt'
+  | 'user_steering'
+  | 'assistant_response'
+  | 'assistant_tool_calls'
+  | 'tool_result';
+
+export type MessageContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; url: string }
+  | { type: 'image_data'; data: string; media_type: string }
+  | { type: 'audio_data'; data: string; media_type: string };
+
+export interface MessageRecord {
+  task_id: string;
+  message_type: MessageType;
+  content: MessageContentPart[] | null;
+  reasoning_content: string | null;
+  tool_calls: ToolCall[] | null;
+  result: string | null;
+  created_at: string;
+}
+
 export interface TaskFile {
   name: string;
   path: string;
