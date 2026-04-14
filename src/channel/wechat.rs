@@ -93,6 +93,8 @@ impl WechatChannel {
 
     async fn route_incoming(&self, incoming: Vec<WechatIncomingMessage>) -> Vec<Content> {
         let mut content = Vec::new();
+        let now = chrono::Utc::now().timestamp();
+        let one_hour_ago = now - 3600;
 
         for message in incoming {
             if message.message_type != WechatProtocolMessageType::User {
@@ -100,6 +102,14 @@ impl WechatChannel {
             }
 
             if message.conversation.user_id != self.user_id {
+                continue;
+            }
+
+            if message.timestamp.is_some_and(|ts| ts < one_hour_ago) {
+                warn!(
+                    "Ignoring Wechat message from {} older than 1 hour (timestamp: {:?})",
+                    message.conversation.user_id, message.timestamp
+                );
                 continue;
             }
 
@@ -651,6 +661,8 @@ struct WechatIncomingMessage {
     message_type: WechatProtocolMessageType,
     message_state: WechatProtocolMessageState,
     items: Vec<WechatMessageItem>,
+    /// Unix timestamp in seconds
+    timestamp: Option<i64>,
 }
 
 impl From<WechatProtocolMessage> for WechatIncomingMessage {
@@ -664,11 +676,22 @@ impl From<WechatProtocolMessage> for WechatIncomingMessage {
             context_token: value.context_token,
         };
 
+        let timestamp = value.create_time_ms.map(|ts| {
+            if ts > 1_000_000_000_000 {
+                // Milliseconds
+                (ts / 1000) as i64
+            } else {
+                // Seconds
+                ts as i64
+            }
+        });
+
         Self {
             conversation,
             message_type: value.message_type.into(),
             message_state: value.message_state.into(),
             items: parse_protocol_items(value.item_list),
+            timestamp,
         }
     }
 }
@@ -925,6 +948,8 @@ struct WechatProtocolMessage {
     context_token: String,
     #[serde(default)]
     item_list: Vec<WechatProtocolItem>,
+    #[serde(default, rename = "create_time_ms")]
+    create_time_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
