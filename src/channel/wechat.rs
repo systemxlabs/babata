@@ -92,11 +92,11 @@ impl WechatChannel {
 
             let message_content = self.incoming_message_to_content(&message).await?;
 
-            if let Some(hash) = extract_quote_hash(&message) {
-                if let Some(waiter) = self.feedback_waiters.lock().await.remove(&hash) {
-                    let _ = waiter.send(message_content);
-                    continue;
-                }
+            if let Some(hash) = extract_quote_hash(&message)
+                && let Some(waiter) = self.feedback_waiters.lock().await.remove(&hash)
+            {
+                let _ = waiter.send(message_content);
+                continue;
             }
 
             content.extend(message_content);
