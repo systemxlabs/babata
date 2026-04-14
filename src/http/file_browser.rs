@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use axum::{body::Body, extract::Request, http::Uri};
 use serde::Serialize;
@@ -35,47 +35,48 @@ pub(crate) struct FileEntry {
     pub(crate) modified: Option<u64>,
 }
 
-/// Recursively read a directory and return all nested entries using an iterative approach.
-pub(crate) async fn read_directory_recursive(
+/// Read a single directory and return its entries (non-recursive).
+pub(crate) async fn read_directory(
     base_dir: &Path,
+    relative_path: Option<&str>,
 ) -> Result<Vec<FileEntry>, std::io::Error> {
+    let target_dir = if let Some(rel) = relative_path {
+        base_dir.join(rel)
+    } else {
+        base_dir.to_path_buf()
+    };
+
     let mut entries = Vec::new();
-    let mut dirs_to_process: Vec<PathBuf> = vec![base_dir.to_path_buf()];
+    let mut dir_entries = tokio::fs::read_dir(&target_dir).await?;
 
-    while let Some(current_dir) = dirs_to_process.pop() {
-        let mut dir_entries = tokio::fs::read_dir(&current_dir).await?;
+    while let Some(entry) = dir_entries.next_entry().await? {
+        let metadata = entry.metadata().await?;
+        let name = entry.file_name().to_string_lossy().to_string();
+        let full_path = entry.path();
+        let rel_path = full_path
+            .strip_prefix(base_dir)
+            .unwrap_or(&full_path)
+            .to_string_lossy()
+            .to_string()
+            .replace('\\', "/");
+        let is_dir = metadata.is_dir();
 
-        while let Some(entry) = dir_entries.next_entry().await? {
-            let metadata = entry.metadata().await?;
-            let name = entry.file_name().to_string_lossy().to_string();
-            let full_path = entry.path();
-            let rel_path = full_path
-                .strip_prefix(base_dir)
-                .unwrap_or(&full_path)
-                .to_string_lossy()
-                .to_string()
-                .replace('\\', "/");
-            let is_dir = metadata.is_dir();
-
-            entries.push(FileEntry {
-                name: name.clone(),
-                path: rel_path,
-                is_dir,
-                size: if is_dir { None } else { Some(metadata.len()) },
-                modified: metadata
-                    .modified()
-                    .ok()
-                    .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
-                    .map(|duration| duration.as_secs()),
-            });
-
-            if is_dir {
-                // Skip directories in the skip list
-                if !SKIP_DIRS.contains(&name.as_str()) {
-                    dirs_to_process.push(full_path);
-                }
-            }
+        // Skip directories in the skip list
+        if is_dir && SKIP_DIRS.contains(&name.as_str()) {
+            continue;
         }
+
+        entries.push(FileEntry {
+            name,
+            path: rel_path,
+            is_dir,
+            size: if is_dir { None } else { Some(metadata.len()) },
+            modified: metadata
+                .modified()
+                .ok()
+                .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|duration| duration.as_secs()),
+        });
     }
 
     entries.sort_by(|a, b| match (a.is_dir, b.is_dir) {
@@ -109,7 +110,7 @@ pub(crate) fn build_file_request(request: Request, file_path: &str) -> BabataRes
 
 #[cfg(test)]
 mod tests {
-    use super::{build_file_request, read_directory_recursive};
+    use super::{build_file_request, read_directory};
     use std::path::PathBuf;
 
     use axum::{
@@ -150,14 +151,29 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn reads_directory_entries_with_relative_paths() {
+    async fn reads_single_directory_non_recursively() {
         let base = std::env::current_dir().expect("current dir").join("src");
         if base.exists() {
-            let entries = read_directory_recursive(&base).await.expect("entries");
+            let entries = read_directory(&base, None).await.expect("entries");
             assert!(!entries.is_empty());
             for entry in &entries {
                 assert!(!entry.path.starts_with('/'));
                 assert!(!entry.path.starts_with('\\'));
+                // Should not contain nested paths (no slashes for direct children)
+                assert!(!entry.path.contains('/'));
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn reads_subdirectory_with_relative_path() {
+        let base = std::env::current_dir().expect("current dir");
+        let src = base.join("src");
+        if src.exists() {
+            let entries = read_directory(&base, Some("src")).await.expect("entries");
+            assert!(!entries.is_empty());
+            for entry in &entries {
+                assert!(entry.path.starts_with("src/"));
             }
         }
     }
@@ -165,7 +181,14 @@ mod tests {
     #[tokio::test]
     async fn returns_error_for_missing_directory() {
         let base = PathBuf::from("/nonexistent/path/xyz123");
-        let result = read_directory_recursive(&base).await;
+        let result = read_directory(&base, None).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn returns_error_for_missing_subdirectory() {
+        let base = std::env::current_dir().expect("current dir");
+        let result = read_directory(&base, Some("nonexistent_dir_xyz")).await;
         assert!(result.is_err());
     }
 }
