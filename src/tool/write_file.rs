@@ -6,7 +6,6 @@ use crate::{
     error::BabataError,
     tool::{Tool, ToolContext, ToolSpec, parse_tool_args},
 };
-use log::info;
 use std::path::Path;
 
 #[derive(Debug, Clone)]
@@ -38,11 +37,11 @@ impl Tool for WriteFileTool {
         &self.spec
     }
 
-    async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
+    async fn execute(&self, args: &str, context: &ToolContext<'_>) -> BabataResult<String> {
         let args: WriteFileArgs = parse_tool_args(args)?;
         let path = shellexpand::tilde(&args.path).to_string();
 
-        info!("Writing to file: {}", path);
+        crate::task_info!(context.task_id, "Writing to file: {}", path);
 
         let file_path = Path::new(&path);
 
