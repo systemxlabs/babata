@@ -1,4 +1,3 @@
-use log::info;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use similar::{ChangeTag, TextDiff};
@@ -40,12 +39,12 @@ impl Tool for EditFileTool {
         &self.spec
     }
 
-    async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
+    async fn execute(&self, args: &str, context: &ToolContext<'_>) -> BabataResult<String> {
         let args: EditFileArgs = parse_tool_args(args)?;
 
         let file_path = shellexpand::tilde(&args.file_path).to_string();
 
-        info!("Editing file: {}", file_path);
+        crate::task_info!(context.task_id, "Editing file: {}", file_path);
 
         let content = tokio::fs::read_to_string(&file_path)
             .await

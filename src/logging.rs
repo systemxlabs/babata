@@ -6,6 +6,30 @@ use logforth::{
 
 use crate::{BabataResult, error::BabataError, utils::babata_dir};
 
+/// Log an info message prefixed with `[task_id]`.
+#[macro_export]
+macro_rules! task_info {
+    ($task_id:expr, $($arg:tt)*) => {
+        log::info!("[{}] {}", $task_id, std::format_args!($($arg)*))
+    };
+}
+
+/// Log a warn message prefixed with `[task_id]`.
+#[macro_export]
+macro_rules! task_warn {
+    ($task_id:expr, $($arg:tt)*) => {
+        log::warn!("[{}] {}", $task_id, std::format_args!($($arg)*))
+    };
+}
+
+/// Log an error message prefixed with `[task_id]`.
+#[macro_export]
+macro_rules! task_error {
+    ($task_id:expr, $($arg:tt)*) => {
+        log::error!("[{}] {}", $task_id, std::format_args!($($arg)*))
+    };
+}
+
 pub fn init() -> BabataResult<()> {
     match LogOutput::from_env()? {
         LogOutput::File => init_file_logger(),

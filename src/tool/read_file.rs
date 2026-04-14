@@ -6,7 +6,6 @@ use crate::{
     error::BabataError,
     tool::{Tool, ToolContext, ToolSpec, parse_tool_args},
 };
-use log::info;
 
 const DEFAULT_MAX_LINES: usize = 2000;
 
@@ -39,14 +38,14 @@ impl Tool for ReadFileTool {
         &self.spec
     }
 
-    async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
+    async fn execute(&self, args: &str, context: &ToolContext<'_>) -> BabataResult<String> {
         let args: ReadFileArgs = parse_tool_args(args)?;
         let path = shellexpand::tilde(&args.path).to_string();
 
         let offset = args.offset.unwrap_or(0);
         let limit = args.limit.unwrap_or(DEFAULT_MAX_LINES);
 
-        info!("Reading file: {}", path);
+        crate::task_info!(context.task_id, "Reading file: {}", path);
 
         let content = tokio::fs::read_to_string(&path)
             .await

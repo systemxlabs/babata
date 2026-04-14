@@ -91,9 +91,10 @@ async fn read_task_logs(
                 let lines: Vec<&str> = content.lines().collect();
                 let mut matching_lines_in_file: Vec<String> = Vec::new();
 
-                // Filter lines containing task_id
+                // Filter lines containing [task_id]
+                let task_marker = format!("[{}]", task_id);
                 for line in &lines {
-                    if line.contains(task_id) {
+                    if line.contains(&task_marker) {
                         matching_lines_in_file.push(line.to_string());
                     }
                 }

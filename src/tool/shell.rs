@@ -1,6 +1,5 @@
 use std::{path::PathBuf, process::Output, time::Duration};
 
-use log::info;
 use schemars::JsonSchema;
 use serde::Deserialize;
 
@@ -39,7 +38,7 @@ impl Tool for ShellTool {
     }
 
     async fn execute(&self, args: &str, context: &ToolContext<'_>) -> BabataResult<String> {
-        info!("Executing shell command: {args}",);
+        crate::task_info!(context.task_id, "Executing shell command: {args}");
 
         let args: ShellArgs = parse_tool_args(args)?;
 

@@ -3,7 +3,7 @@ use std::{collections::HashMap, fmt::Debug, sync::Arc, time::Duration};
 use backon::{ExponentialBuilder, Retryable};
 use chrono::Utc;
 use futures::future::join_all;
-use log::{info, warn};
+use log::warn;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
@@ -65,9 +65,9 @@ impl AgentTask {
             // Check for steer messages before calling the model
             if let Some(steer_rx) = self.steer_rx.as_mut() {
                 while let Ok(steer_msg) = steer_rx.try_recv() {
-                    info!(
-                        "Task {} received steer message with {} content part(s)",
+                    crate::task_info!(
                         self.task_id,
+                        "Received steer message with {} content part(s)",
                         steer_msg.content.len()
                     );
                     conversation.push(Message::UserSteering {
@@ -86,7 +86,7 @@ impl AgentTask {
                 &tool_specs,
             )
             .await?;
-            info!("Provider returned message: {:?}", message);
+            crate::task_info!(self.task_id, "Provider returned message: {:?}", message);
             conversation.push(message.clone());
 
             match message {
