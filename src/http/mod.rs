@@ -1,37 +1,22 @@
+mod agents;
+mod channels;
 mod collaborate_task;
 mod control_task;
 mod count_tasks;
-mod create_agent;
-mod create_channel;
-mod create_provider;
 mod create_task;
-mod delete_agent;
-mod delete_channel;
-mod delete_provider;
-mod delete_skill;
 mod delete_task;
 mod file_browser;
-mod get_agent;
-mod get_agent_file;
-mod get_skill_file;
 mod get_task;
 mod get_task_file;
 mod get_task_logs;
 mod get_task_messages;
 mod get_task_tree;
-mod list_agent_files;
-mod list_agents;
-mod list_channels;
-mod list_providers;
 mod list_root_tasks;
-mod list_skill_files;
-mod list_skills;
 mod list_task_files;
+mod providers;
+mod skills;
 
 mod steer_task;
-mod update_agent;
-mod update_channel;
-mod update_provider;
 
 use std::{env, sync::Arc};
 
@@ -84,44 +69,30 @@ impl HttpApp {
 fn router(task_manager: Arc<TaskManager>) -> Router {
     Router::new()
         .route("/api/health", get(health))
-        .route(
-            "/api/agents",
-            get(list_agents::handle).post(create_agent::handle),
-        )
-        .route(
-            "/api/channels",
-            get(list_channels::handle).post(create_channel::handle),
-        )
+        .route("/api/agents", get(agents::list).post(agents::create))
+        .route("/api/channels", get(channels::list).post(channels::create))
         .route(
             "/api/channels/{name}",
-            put(update_channel::handle).delete(delete_channel::handle),
+            put(channels::update).delete(channels::delete),
         )
         .route(
             "/api/agents/{name}",
-            get(get_agent::handle)
-                .put(update_agent::handle)
-                .delete(delete_agent::handle),
+            get(agents::get).put(agents::update).delete(agents::delete),
         )
-        .route("/api/agents/{name}/files", get(list_agent_files::handle))
-        .route(
-            "/api/agents/{name}/files/{*path}",
-            get(get_agent_file::handle),
-        )
+        .route("/api/agents/{name}/files", get(agents::list_files))
+        .route("/api/agents/{name}/files/{*path}", get(agents::get_file))
         .route(
             "/api/providers",
-            get(list_providers::handle).post(create_provider::handle),
+            get(providers::list).post(providers::create),
         )
         .route(
             "/api/providers/{name}",
-            put(update_provider::handle).delete(delete_provider::handle),
+            put(providers::update).delete(providers::delete),
         )
-        .route("/api/skills", get(list_skills::handle))
-        .route("/api/skills/{name}", delete(delete_skill::handle))
-        .route("/api/skills/{name}/files", get(list_skill_files::handle))
-        .route(
-            "/api/skills/{name}/files/{*path}",
-            get(get_skill_file::handle),
-        )
+        .route("/api/skills", get(skills::list))
+        .route("/api/skills/{name}", delete(skills::delete))
+        .route("/api/skills/{name}/files", get(skills::list_files))
+        .route("/api/skills/{name}/files/{*path}", get(skills::get_file))
         .route("/api/tasks/count", get(count_tasks::handle))
         .route(
             "/api/tasks",
