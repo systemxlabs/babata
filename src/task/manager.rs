@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use chrono::Utc;
 use futures::FutureExt;
-use log::{error, info};
+use log::info;
 use parking_lot::Mutex;
 use tokio::{sync::mpsc, task::JoinHandle};
 use uuid::Uuid;
@@ -20,6 +20,7 @@ use crate::{
         CollaborationTaskState, CreateTaskRequest, SteerMessage, TaskExitEvent, TaskRecord,
         TaskStatus, TaskStore, launcher::TaskLauncher,
     },
+    task_error, task_info,
     utils::task_dir,
 };
 
@@ -186,9 +187,9 @@ impl TaskManager {
         info!("Recovering {} running task(s) from task store", tasks.len());
         for task in tasks {
             if self.running_tasks.lock().contains_key(&task.task_id) {
-                info!(
-                    "Skipping recovery for task {} because it is already running",
-                    task.task_id
+                task_info!(
+                    task.task_id,
+                    "Skipping recovery because it is already running"
                 );
                 continue;
             }
@@ -201,7 +202,7 @@ impl TaskManager {
                 .launcher
                 .relaunch(&task, self.exit_tx.clone(), &reason)?;
             self.running_tasks.lock().insert(task.task_id, running_task);
-            info!("Recovered running task {}", task.task_id);
+            task_info!(task.task_id, "Recovered running task");
         }
 
         Ok(())
@@ -209,7 +210,7 @@ impl TaskManager {
 
     pub fn create_task(&self, request: CreateTaskRequest) -> BabataResult<Uuid> {
         let task_id = Uuid::new_v4();
-        info!("Creating task {} with request: {:?}", task_id, request);
+        task_info!(task_id, "Creating task with request: {:?}", request);
 
         let (root_task_id, parent_depth) = if let Some(parent_task_id) = request.parent_task_id {
             let task_record = self.store.get_task(parent_task_id)?;
@@ -251,7 +252,7 @@ impl TaskManager {
     }
 
     pub fn pause_task(&self, task_id: Uuid) -> BabataResult<()> {
-        info!("Pausing task {}", task_id);
+        task_info!(task_id, "Pausing task");
         let task = self.store.get_task(task_id)?;
         if task.status != TaskStatus::Running {
             return Err(BabataError::invalid_input(format!(
@@ -269,7 +270,7 @@ impl TaskManager {
     }
 
     pub fn resume_task(&self, task_id: Uuid) -> BabataResult<()> {
-        info!("Resuming task {}", task_id);
+        task_info!(task_id, "Resuming task");
         let task = self.store.get_task(task_id)?;
         if task.status != TaskStatus::Paused {
             return Err(BabataError::invalid_input(format!(
@@ -296,7 +297,7 @@ impl TaskManager {
     }
 
     pub fn cancel_task(&self, task_id: Uuid) -> BabataResult<()> {
-        info!("Cancelling task {}", task_id);
+        task_info!(task_id, "Cancelling task");
         let task = self.store.get_task(task_id)?;
         if task.status.is_terminal_status() {
             return Err(BabataError::invalid_input(format!(
@@ -372,7 +373,7 @@ impl TaskManager {
     }
 
     pub fn delete_task(&self, task_id: Uuid) -> BabataResult<()> {
-        info!("Deleting task {}", task_id);
+        task_info!(task_id, "Deleting task");
         let task = self.store.get_task(task_id)?;
 
         // Only root tasks can be deleted
@@ -399,7 +400,7 @@ impl TaskManager {
             }
             // Delete from store
             if let Err(err) = self.store.delete_task(subtask.task_id) {
-                error!("Failed to delete subtask {}: {}", subtask.task_id, err);
+                task_error!(subtask.task_id, "Failed to delete subtask: {}", err);
             }
             // Delete task directory
             remove_task_dir(subtask.task_id)?;
@@ -410,7 +411,7 @@ impl TaskManager {
         // Delete root task directory
         remove_task_dir(task_id)?;
 
-        info!("Deleted task {} and {} subtask(s)", task_id, subtasks.len());
+        task_info!(task_id, "Deleted task and {} subtask(s)", subtasks.len());
         Ok(())
     }
 
@@ -448,18 +449,20 @@ impl TaskManager {
         let task = match self.store.get_task(task_id) {
             Ok(task) => task,
             Err(err) => {
-                error!(
-                    "Failed to load task {} after completion notification: {}",
-                    task_id, err
+                task_error!(
+                    task_id,
+                    "Failed to load task after completion notification: {}",
+                    err
                 );
                 return;
             }
         };
 
         if task.status != TaskStatus::Running {
-            info!(
-                "Ignoring completion notification for task {} in status {}",
-                task_id, task.status
+            task_info!(
+                task_id,
+                "Ignoring completion notification in status {}",
+                task.status
             );
             return;
         }
@@ -482,15 +485,12 @@ impl TaskManager {
             return;
         }
 
-        info!("Task {} completed successfully", task_id);
+        task_info!(task_id, "Task completed successfully");
         if let Err(err) = self
             .store
             .update_task_status(task_id, TaskStatus::Completed)
         {
-            error!(
-                "Failed to update status to completed for task {}: {}",
-                task_id, err
-            );
+            task_error!(task_id, "Failed to update status to completed: {}", err);
         }
     }
 
@@ -500,9 +500,11 @@ impl TaskManager {
                 self.running_tasks.lock().insert(task.task_id, running_task);
             }
             Err(err) => {
-                error!(
-                    "Failed to relaunch task {} after {}: {}",
-                    task.task_id, failure_context, err
+                task_error!(
+                    task.task_id,
+                    "Failed to relaunch task after {}: {}",
+                    failure_context,
+                    err
                 );
             }
         }
@@ -516,28 +518,28 @@ impl TaskManager {
         let task = match self.store.get_task(task_id) {
             Ok(task) => task,
             Err(store_error) => {
-                error!(
-                    "Failed to load task {} after failure notification: {}",
-                    task_id, store_error
+                task_error!(
+                    task_id,
+                    "Failed to load task after failure notification: {}",
+                    store_error
                 );
                 return;
             }
         };
 
         if task.status != TaskStatus::Running {
-            info!(
-                "Ignoring failure notification for task {} in status {}: {}",
-                task_id, task.status, error
+            task_info!(
+                task_id,
+                "Ignoring failure notification in status {}: {}",
+                task.status,
+                error
             );
             return;
         }
 
-        error!("Task {task_id} failed: {error}");
+        task_error!(task_id, "Task failed: {error}");
         if let Err(err) = self.store.update_task_status(task_id, TaskStatus::Failed) {
-            error!(
-                "Failed to update status to failed for task {}: {}",
-                task_id, err
-            );
+            task_error!(task_id, "Failed to update status to failed: {}", err);
         }
     }
 
@@ -547,9 +549,10 @@ impl TaskManager {
                 .into_iter()
                 .any(|task| !task.status.is_terminal_status()),
             Err(err) => {
-                error!(
-                    "Failed to load subtasks for task {} while checking completion: {}",
-                    task_id, err
+                task_error!(
+                    task_id,
+                    "Failed to load subtasks while checking completion: {}",
+                    err
                 );
                 false
             }
@@ -568,7 +571,7 @@ impl TaskManager {
             return Ok(());
         }
 
-        info!("Cancelling task {} recursively", task_id);
+        task_info!(task_id, "Cancelling task recursively");
         if let Some(running_task) = self.running_tasks.lock().remove(&task_id) {
             running_task.abort();
         }
