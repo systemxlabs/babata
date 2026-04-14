@@ -374,20 +374,11 @@ impl TaskManager {
 
     pub fn delete_task(&self, task_id: Uuid) -> BabataResult<()> {
         task_info!(task_id, "Deleting task");
-        let task = self.store.get_task(task_id)?;
-
-        // Only root tasks can be deleted
-        if task.parent_task_id.is_some() {
-            return Err(BabataError::invalid_input(format!(
-                "Task '{}' is not a root task; only root tasks can be deleted",
-                task_id
-            )));
-        }
 
         // Get all subtasks recursively
         let subtasks = self.store.list_all_subtasks(task_id)?;
 
-        // Cancel and delete root task if it's running
+        // Cancel and delete the target task if it's running
         if let Some(running_task) = self.running_tasks.lock().remove(&task_id) {
             running_task.abort();
         }
@@ -406,9 +397,9 @@ impl TaskManager {
             remove_task_dir(subtask.task_id)?;
         }
 
-        // Delete root task from store
+        // Delete the target task from store
         self.store.delete_task(task_id)?;
-        // Delete root task directory
+        // Delete the target task directory
         remove_task_dir(task_id)?;
 
         task_info!(task_id, "Deleted task and {} subtask(s)", subtasks.len());
@@ -908,6 +899,51 @@ mod tests {
         assert!(!manager.running_tasks.lock().contains_key(&subtask.task_id));
         assert!(manager.store.get_task(task.task_id).is_err());
         assert!(manager.store.get_task(subtask.task_id).is_err());
+
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[tokio::test]
+    async fn delete_non_root_task_removes_itself_and_descendants() {
+        let temp_root = temp_test_root("manager-delete-non-root-task");
+        fs::create_dir_all(&temp_root).expect("create temp root");
+        let manager = build_test_manager(&temp_root);
+        let root_task = task_record(false);
+        let mid_task = subtask_record(root_task.task_id, root_task.root_task_id);
+        let leaf_task = subtask_record(mid_task.task_id, root_task.root_task_id);
+
+        manager
+            .store
+            .insert_task(root_task.clone())
+            .expect("insert root task");
+        manager
+            .store
+            .insert_task(mid_task.clone())
+            .expect("insert mid task");
+        manager
+            .store
+            .insert_task(leaf_task.clone())
+            .expect("insert leaf task");
+
+        drop(insert_dummy_running_task(&manager, mid_task.task_id));
+        drop(insert_dummy_running_task(&manager, leaf_task.task_id));
+
+        manager
+            .delete_task(mid_task.task_id)
+            .expect("delete non-root task");
+
+        // Root task should remain
+        assert!(manager.store.get_task(root_task.task_id).is_ok());
+        // Mid task and its descendants should be removed
+        assert!(!manager.running_tasks.lock().contains_key(&mid_task.task_id));
+        assert!(
+            !manager
+                .running_tasks
+                .lock()
+                .contains_key(&leaf_task.task_id)
+        );
+        assert!(manager.store.get_task(mid_task.task_id).is_err());
+        assert!(manager.store.get_task(leaf_task.task_id).is_err());
 
         let _ = fs::remove_dir_all(&temp_root);
     }
