@@ -58,8 +58,7 @@ impl AgentTask {
             content: self.prompt.clone(),
             created_at: Utc::now(),
         }];
-        self.memory
-            .append_messages(self.task_id, &conversation)?;
+        self.memory.append_messages(self.task_id, &conversation)?;
 
         let mut final_response = None;
         let max_steps = 100;
@@ -77,7 +76,7 @@ impl AgentTask {
                         created_at: Utc::now(),
                     };
                     self.memory
-                        .append_messages(self.task_id, &[steer_message.clone()])?;
+                        .append_messages(self.task_id, std::slice::from_ref(&steer_message))?;
                     conversation.push(steer_message);
                 }
             }
@@ -93,7 +92,7 @@ impl AgentTask {
             .await?;
             crate::task_info!(self.task_id, "Provider returned message: {:?}", message);
             self.memory
-                .append_messages(self.task_id, &[message.clone()])?;
+                .append_messages(self.task_id, std::slice::from_ref(&message))?;
             conversation.push(message.clone());
 
             match message {
@@ -139,8 +138,7 @@ impl AgentTask {
                     });
 
                     let results = join_all(tool_futures).await;
-                    self.memory
-                        .append_messages(self.task_id, &results)?;
+                    self.memory.append_messages(self.task_id, &results)?;
                     conversation.extend(results);
                 }
                 Message::UserPrompt { .. }
