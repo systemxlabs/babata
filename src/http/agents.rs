@@ -17,7 +17,7 @@ use crate::{
 
 use super::{
     HttpApp,
-    file_browser::{FileEntry, build_file_request, read_directory},
+    file_browser::{BrowsedPath, FileEntry, browse_path, build_file_request},
 };
 
 pub(super) async fn list() -> BabataResult<Json<ListAgentsResponse>> {
@@ -147,11 +147,12 @@ pub(super) async fn list_files(Path(name): Path<String>) -> BabataResult<Json<Ve
         )));
     }
 
-    let files = read_directory(&agent_dir(&name)?, None)
-        .await
-        .map_err(|err| BabataError::invalid_input(format!("Failed to read directory: {}", err)))?;
-
-    Ok(Json(files))
+    match browse_path(&agent_dir(&name)?, None).await? {
+        BrowsedPath::Directory(entries) => Ok(Json(entries)),
+        BrowsedPath::File(_) => {
+            unreachable!("agent root path should always resolve to a directory")
+        }
+    }
 }
 
 pub(super) async fn get_file(
@@ -173,20 +174,10 @@ async fn get_file_inner(name: &str, file_path: &str, request: Request) -> Babata
     }
 
     let base_dir = agent_dir(name)?;
-    let sanitized_path = file_path.trim_start_matches('/').replace('\\', "/");
-    let target_path = base_dir.join(&sanitized_path);
-
-    match tokio::fs::metadata(&target_path).await {
-        Ok(metadata) if metadata.is_dir() => {
-            let entries = read_directory(&base_dir, Some(&sanitized_path))
-                .await
-                .map_err(|err| {
-                    BabataError::invalid_input(format!("Failed to read directory: {}", err))
-                })?;
-            Ok(Json(entries).into_response())
-        }
-        Ok(metadata) if metadata.is_file() => {
-            let forwarded_request = build_file_request(request, file_path)?;
+    match browse_path(&base_dir, Some(file_path)).await? {
+        BrowsedPath::Directory(entries) => Ok(Json(entries).into_response()),
+        BrowsedPath::File(sanitized_path) => {
+            let forwarded_request = build_file_request(request, &sanitized_path)?;
             let mut service = ServeDir::new(base_dir).append_index_html_on_directories(false);
             service
                 .try_call(forwarded_request)
@@ -194,10 +185,6 @@ async fn get_file_inner(name: &str, file_path: &str, request: Request) -> Babata
                 .map(IntoResponse::into_response)
                 .map_err(|err| BabataError::internal(format!("Failed to serve agent file: {err}")))
         }
-        _ => Err(BabataError::not_found(format!(
-            "Path '{}' not found",
-            file_path
-        ))),
     }
 }
 

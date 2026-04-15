@@ -3,6 +3,7 @@ use serde::Serialize;
 
 use crate::{
     BabataResult,
+    channel::channel_dir,
     config::{ChannelConfig, Config},
     error::BabataError,
 };
@@ -79,6 +80,11 @@ pub(super) async fn delete(Path(name): Path<String>) -> BabataResult<()> {
     config.channels.remove(index);
     config.validate()?;
     config.save()?;
+
+    let channel_dir = channel_dir(&name)?;
+    if channel_dir.exists() {
+        std::fs::remove_dir_all(channel_dir)?;
+    }
     Ok(())
 }
 

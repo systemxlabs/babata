@@ -35,6 +35,50 @@ pub(crate) struct FileEntry {
     pub(crate) modified: Option<u64>,
 }
 
+pub(crate) enum BrowsedPath {
+    Directory(Vec<FileEntry>),
+    File(String),
+}
+
+pub(crate) async fn browse_path(
+    base_dir: &Path,
+    relative_path: Option<&str>,
+) -> BabataResult<BrowsedPath> {
+    let sanitized_path = relative_path
+        .unwrap_or_default()
+        .trim_start_matches('/')
+        .replace('\\', "/");
+
+    let target_path = if sanitized_path.is_empty() {
+        base_dir.to_path_buf()
+    } else {
+        base_dir.join(&sanitized_path)
+    };
+
+    match tokio::fs::metadata(&target_path).await {
+        Ok(metadata) if metadata.is_dir() => {
+            let entries = read_directory(
+                base_dir,
+                if sanitized_path.is_empty() {
+                    None
+                } else {
+                    Some(sanitized_path.as_str())
+                },
+            )
+            .await
+            .map_err(|err| {
+                BabataError::invalid_input(format!("Failed to read directory: {}", err))
+            })?;
+            Ok(BrowsedPath::Directory(entries))
+        }
+        Ok(metadata) if metadata.is_file() => Ok(BrowsedPath::File(sanitized_path)),
+        _ => Err(BabataError::not_found(format!(
+            "Path '{}' not found",
+            relative_path.unwrap_or_default()
+        ))),
+    }
+}
+
 /// Read a single directory and return its entries (non-recursive).
 pub(crate) async fn read_directory(
     base_dir: &Path,
@@ -110,7 +154,7 @@ pub(crate) fn build_file_request(request: Request, file_path: &str) -> BabataRes
 
 #[cfg(test)]
 mod tests {
-    use super::{build_file_request, read_directory};
+    use super::{BrowsedPath, browse_path, build_file_request, read_directory};
     use std::path::PathBuf;
 
     use axum::{
@@ -190,5 +234,13 @@ mod tests {
         let base = std::env::current_dir().expect("current dir");
         let result = read_directory(&base, Some("nonexistent_dir_xyz")).await;
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn browse_path_lists_root_directory_when_relative_path_is_empty() {
+        let base = std::env::current_dir().expect("current dir");
+        let browsed = browse_path(&base, None).await.expect("browse root");
+
+        assert!(matches!(browsed, BrowsedPath::Directory(_)));
     }
 }

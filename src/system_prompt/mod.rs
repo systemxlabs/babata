@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use crate::{
     BabataResult,
     agent::Agent,
-    channel::load_wechat_latest_context_token,
+    channel::channel_dir,
     config::{ChannelConfig, Config},
     error::BabataError,
     skill::Skill,
@@ -89,15 +89,19 @@ pub fn build_channels_prompt(config: &Config) -> BabataResult<String> {
     for channel in &config.channels {
         let description = match channel {
             ChannelConfig::Telegram(telegram) => format!(
-                "telegram: receives messages from Telegram user (id: {}) via bot (token: {})",
-                telegram.user_id, telegram.bot_token
+                "{}: receives messages from Telegram user (id: {}) via bot (token: {})",
+                channel.name(),
+                telegram.user_id,
+                telegram.bot_token
             ),
             ChannelConfig::Wechat(wechat) => {
-                let latest_context_token = load_wechat_latest_context_token()?
-                    .unwrap_or_else(|| "unavailable".to_string());
+                let channel_dir = channel_dir(channel.name())?;
                 format!(
-                    "wechat: receives messages from Wechat user (id: {}) via Wechat iLink bot (token: {}). latest context token is `{}`",
-                    wechat.user_id, wechat.bot_token, latest_context_token
+                    "{}: receives messages from Wechat user (id: {}) via Wechat iLink bot (token: {}). Read file `{}/latest_context_token` to get latest context token",
+                    channel.name(),
+                    wechat.user_id,
+                    wechat.bot_token,
+                    channel_dir.display()
                 )
             }
         };

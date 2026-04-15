@@ -7,15 +7,14 @@ mod create_task;
 mod delete_task;
 mod file_browser;
 mod get_task;
-mod get_task_file;
 mod get_task_logs;
 mod get_task_messages;
 mod get_task_tree;
 mod list_root_tasks;
-mod list_task_files;
 mod providers;
 mod relaunch_task;
 mod skills;
+mod task_files;
 
 mod steer_task;
 
@@ -104,11 +103,8 @@ fn router(task_manager: Arc<TaskManager>) -> Router {
             get(get_task::handle).delete(delete_task::handle),
         )
         .route("/api/tasks/{task_id}/tree", get(get_task_tree::handle))
-        .route("/api/tasks/{task_id}/files", get(list_task_files::handle))
-        .route(
-            "/api/tasks/{task_id}/files/{*path}",
-            get(get_task_file::handle),
-        )
+        .route("/api/tasks/{task_id}/files", get(task_files::list))
+        .route("/api/tasks/{task_id}/files/{*path}", get(task_files::get))
         .route("/api/tasks/{task_id}/logs", get(get_task_logs::handle))
         .route(
             "/api/tasks/{task_id}/messages",
