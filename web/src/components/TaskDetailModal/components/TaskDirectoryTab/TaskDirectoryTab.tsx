@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { getTaskFile } from '../../../../api';
+import { getTaskFile, getTaskFiles } from '../../../../api';
 import { FileExplorer } from '../../../FileExplorer/FileExplorer';
 import type { FileEntry } from '../../../../types';
 
@@ -9,6 +9,10 @@ interface TaskDirectoryTabProps {
 }
 
 export function TaskDirectoryTab({ taskId, files }: TaskDirectoryTabProps) {
+  const loadTaskDirectory = useCallback(async (path?: string) => {
+    return getTaskFiles(taskId, path);
+  }, [taskId]);
+
   const loadTaskFile = useCallback(async (path: string) => {
     return getTaskFile(taskId, path);
   }, [taskId]);
@@ -16,6 +20,7 @@ export function TaskDirectoryTab({ taskId, files }: TaskDirectoryTabProps) {
   return (
     <FileExplorer
       files={files}
+      loadDirectory={loadTaskDirectory}
       loadFileContent={loadTaskFile}
       treeTitle="文件列表"
       emptyMessage="暂无文件"

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react"
 import { BookMarked, Sparkles } from "lucide-react"
 
 import { getSkillFile, getSkillFiles } from "@/api"
+import { ErrorAlert } from "@/components/error-alert"
 import { FileExplorer } from "@/components/FileExplorer/FileExplorer"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -51,6 +52,17 @@ export function SkillDetailModal({ skill, isOpen, onClose }: SkillDetailModalPro
       }
 
       return getSkillFile(skill.name, path)
+    },
+    [skill]
+  )
+
+  const loadSkillDirectory = useCallback(
+    async (path?: string) => {
+      if (!skill) {
+        throw new Error("技能不存在")
+      }
+
+      return getSkillFiles(skill.name, path)
     },
     [skill]
   )
@@ -105,12 +117,11 @@ export function SkillDetailModal({ skill, isOpen, onClose }: SkillDetailModalPro
                   className="min-h-[420px]"
                 />
               ) : error ? (
-                <Card className="rounded-[1.6rem] border-destructive/25 bg-destructive/5">
-                  <CardContent className="p-5 text-sm text-destructive">{error}</CardContent>
-                </Card>
+                <ErrorAlert message={error} compact className="rounded-[1.6rem]" />
               ) : (
                 <FileExplorer
                   files={files}
+                  loadDirectory={loadSkillDirectory}
                   loadFileContent={loadSkillFile}
                   treeTitle="技能文件"
                   emptyMessage="暂无技能文件"

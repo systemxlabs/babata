@@ -15,6 +15,7 @@ import {
 
 import { api } from "@/api"
 import { EmptyState } from "@/components/empty-state"
+import { ErrorAlert } from "@/components/error-alert"
 import { LoadingState } from "@/components/loading-state"
 import { PageHeader } from "@/components/page-header"
 import { StatCard } from "@/components/stat-card"
@@ -262,14 +263,11 @@ export function Dashboard() {
       />
 
       {error ? (
-        <Card className="rounded-[1.75rem] border-destructive/25 bg-destructive/5">
-          <CardContent className="flex items-center justify-between gap-4 p-5 text-sm text-destructive">
-            <span>{error}</span>
-            <Button variant="ghost" size="sm" onClick={() => setError(null)}>
-              关闭
-            </Button>
-          </CardContent>
-        </Card>
+        <ErrorAlert
+          message={error}
+          onDismiss={() => setError(null)}
+          className="rounded-[1.75rem]"
+        />
       ) : null}
 
       <section className="grid gap-4 xl:grid-cols-5 md:grid-cols-2">

@@ -72,21 +72,6 @@ export interface MessageRecord {
   created_at: string;
 }
 
-export interface TaskFile {
-  name: string;
-  path: string;
-  isDirectory: boolean;
-  size?: number;
-  modifiedAt?: number;
-}
-
-export interface TaskDetail extends Task {
-  children: Task[];
-  files: TaskFile[];
-  logs: string[];
-  final_response?: string;
-}
-
 export interface AgentFrontmatter {
   name: string;
   description: string;
@@ -114,10 +99,6 @@ export interface UpdateAgentRequest {
 }
 
 export type GetAgentResponse = AgentDetail;
-
-export interface ListAgentsResponse {
-  agents: AgentFrontmatter[];
-}
 
 export type BuiltinProviderName =
   | 'openai'
@@ -222,14 +203,6 @@ export interface SteerTaskRequest {
   content: TextContent[];
 }
 
-export const STATUS_COLORS: Record<TaskStatus, string> = {
-  running: '#F59E0B',
-  completed: '#10B981',
-  failed: '#EF4444',
-  paused: '#F97316',
-  canceled: '#6B7280',
-};
-
 export const STATUS_LABELS: Record<TaskStatus | 'all', string> = {
   all: '全部',
   running: '运行中',
@@ -237,22 +210,6 @@ export const STATUS_LABELS: Record<TaskStatus | 'all', string> = {
   failed: '失败',
   paused: '已暂停',
   canceled: '已取消',
-};
-
-export const STATUS_BG_COLORS: Record<TaskStatus, string> = {
-  running: 'bg-amber-500/10',
-  completed: 'bg-emerald-500/10',
-  failed: 'bg-red-500/10',
-  paused: 'bg-orange-500/10',
-  canceled: 'bg-gray-500/10',
-};
-
-export const STATUS_TEXT_COLORS: Record<TaskStatus, string> = {
-  running: 'text-amber-500',
-  completed: 'text-emerald-500',
-  failed: 'text-red-500',
-  paused: 'text-orange-500',
-  canceled: 'text-gray-500',
 };
 
 export type LogEntry = string;

@@ -4,10 +4,11 @@ import { KeyRound, Pencil, Plus, ShieldAlert, Trash2 } from "lucide-react"
 import {
   createProvider,
   deleteProvider,
-  listProviders,
+  getProviders,
   updateProvider,
 } from "@/api"
 import { EmptyState } from "@/components/empty-state"
+import { ErrorAlert } from "@/components/error-alert"
 import { LoadingState } from "@/components/loading-state"
 import { PageHeader } from "@/components/page-header"
 import {
@@ -397,8 +398,8 @@ export function Providers() {
   const fetchProviders = useCallback(async () => {
     try {
       setLoading(true)
-      const providerList = await listProviders()
-      setProviders(providerList)
+      const response = await getProviders()
+      setProviders(response.providers)
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : "获取 Provider 列表失败")
@@ -463,14 +464,11 @@ export function Providers() {
       />
 
       {error ? (
-        <Card className="rounded-[1.75rem] border-destructive/25 bg-destructive/5">
-          <CardContent className="flex items-center justify-between gap-4 p-5 text-sm text-destructive">
-            <span>{error}</span>
-            <Button variant="ghost" size="sm" onClick={() => setError(null)}>
-              关闭
-            </Button>
-          </CardContent>
-        </Card>
+        <ErrorAlert
+          message={error}
+          onDismiss={() => setError(null)}
+          className="rounded-[1.75rem]"
+        />
       ) : null}
 
       {providers.length === 0 ? (

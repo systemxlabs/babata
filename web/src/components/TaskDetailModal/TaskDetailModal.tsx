@@ -12,6 +12,7 @@ import {
 } from "lucide-react"
 
 import { controlTask, getTask, getTaskFiles } from "@/api"
+import { ErrorAlert } from "@/components/error-alert"
 import { LoadingState } from "@/components/loading-state"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -183,9 +184,7 @@ export function TaskDetailModal({ taskId, isOpen, onClose }: TaskDetailModalProp
                   className="min-h-[520px]"
                 />
               ) : error ? (
-                <Card className="rounded-[1.6rem] border-destructive/25 bg-destructive/5">
-                  <CardContent className="p-5 text-sm text-destructive">{error}</CardContent>
-                </Card>
+                <ErrorAlert message={error} compact className="rounded-[1.6rem]" />
               ) : task ? (
                 <>
                   <div className="grid gap-4 xl:grid-cols-4 md:grid-cols-2">

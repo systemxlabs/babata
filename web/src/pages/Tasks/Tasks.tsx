@@ -9,6 +9,7 @@ import { controlTask, deleteTask, getRootTasks, getTaskTree, steerTask } from "@
 import type { TaskTreeResponse } from "@/api"
 import { DeleteConfirmModal } from "@/components/DeleteConfirmModal"
 import { EmptyState } from "@/components/empty-state"
+import { ErrorAlert } from "@/components/error-alert"
 import { LoadingState } from "@/components/loading-state"
 import { PageHeader } from "@/components/page-header"
 import { TaskDetailModal } from "@/components/TaskDetailModal"
@@ -105,36 +106,8 @@ export function Tasks() {
       return
     }
 
-    let cancelled = false
-
-    const run = async () => {
-      setTreeLoading(true)
-      setTreeError(null)
-
-      try {
-        const tree = await getTaskTree(selectedRootTaskId)
-        if (!cancelled) {
-          setSelectedTree(sortTaskTreeByCreatedAt(tree))
-        }
-      } catch (error) {
-        console.error("Failed to fetch task tree:", error)
-        if (!cancelled) {
-          setSelectedTree(null)
-          setTreeError(error instanceof Error ? error.message : "加载任务树失败")
-        }
-      } finally {
-        if (!cancelled) {
-          setTreeLoading(false)
-        }
-      }
-    }
-
-    void run()
-
-    return () => {
-      cancelled = true
-    }
-  }, [selectedRootTaskId, sortTaskTreeByCreatedAt])
+    void fetchTree(selectedRootTaskId)
+  }, [fetchTree, selectedRootTaskId])
 
   useEffect(() => {
     if (!selectedRootTaskId) return
@@ -351,9 +324,11 @@ export function Tasks() {
                 {selectedTree ? (
                   <div className="space-y-4">
                     {treeError ? (
-                      <div className="rounded-[1.3rem] border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-                        {treeError}
-                      </div>
+                      <ErrorAlert
+                        message={treeError}
+                        compact
+                        className="rounded-[1.3rem] border-destructive/20"
+                      />
                     ) : null}
                     <div className="overflow-x-auto pb-2">
                       <div className="min-w-max px-4 pb-2 pt-3">

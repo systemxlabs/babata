@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react"
 import { Bot, BrainCircuit, ShieldCheck, Sparkles, Wrench } from "lucide-react"
 
 import { getAgent, getAgentFile, getAgentFiles } from "@/api"
+import { ErrorAlert } from "@/components/error-alert"
 import { FileExplorer } from "@/components/FileExplorer/FileExplorer"
 import { LoadingState } from "@/components/loading-state"
 import { Badge } from "@/components/ui/badge"
@@ -63,6 +64,14 @@ export function AgentDetailModal({ agentName, isOpen, onClose }: AgentDetailModa
     return getAgentFile(agentName, path)
   }, [agentName])
 
+  const loadAgentDirectory = useCallback(async (path?: string) => {
+    if (!agentName) {
+      throw new Error("Agent 不存在")
+    }
+
+    return getAgentFiles(agentName, path)
+  }, [agentName])
+
   useEffect(() => {
     if (!isOpen || !agentName) return
     void fetchAgentDetail()
@@ -104,9 +113,7 @@ export function AgentDetailModal({ agentName, isOpen, onClose }: AgentDetailModa
                   className="h-full min-h-[480px]"
                 />
               ) : error ? (
-                <Card className="rounded-[1.6rem] border-destructive/25 bg-destructive/5">
-                  <CardContent className="p-5 text-sm text-destructive">{error}</CardContent>
-                </Card>
+                <ErrorAlert message={error} compact className="rounded-[1.6rem]" />
               ) : agent ? (
                 <div className="flex h-full min-h-0 flex-col gap-5">
                   <div className="grid gap-4 lg:grid-cols-3">
@@ -188,6 +195,7 @@ export function AgentDetailModal({ agentName, isOpen, onClose }: AgentDetailModa
                   <div className="min-h-0 flex-1">
                     <FileExplorer
                       files={files}
+                      loadDirectory={loadAgentDirectory}
                       loadFileContent={loadAgentFile}
                       treeTitle="Agent 文件"
                       emptyMessage="暂无 Agent 文件"

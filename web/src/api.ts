@@ -10,7 +10,6 @@ import type {
   CreateTaskResponse,
   FileEntry,
   GetAgentResponse,
-  ListAgentsResponse,
   MessageContentPart,
   MessageRecord,
   ProviderConfig,
@@ -96,8 +95,11 @@ export function getTaskTree(taskId: string): Promise<TaskTreeResponse> {
   return fetchApi<TaskTreeResponse>(`/tasks/${taskId}/tree`);
 }
 
-export function getTaskFiles(taskId: string): Promise<FileEntry[]> {
-  return fetchApi<FileEntry[]>(`/tasks/${taskId}/files`);
+export function getTaskFiles(taskId: string, path?: string): Promise<FileEntry[]> {
+  const suffix = path ? `/${encodeFilePath(path)}` : '';
+  return fetchApi<FileEntry[]>(`/tasks/${taskId}/files${suffix}`, {
+    cache: 'no-store',
+  });
 }
 
 function encodeFilePath(path: string): string {
@@ -108,8 +110,8 @@ function encodeFilePath(path: string): string {
     .join('/');
 }
 
-async function fetchText(path: string): Promise<string> {
-  const response = await fetch(`${API_BASE_URL}${path}`);
+async function fetchText(path: string, options?: RequestInit): Promise<string> {
+  const response = await fetch(`${API_BASE_URL}${path}`, options);
 
   if (!response.ok) {
     throw new Error(`API Error: ${response.status} ${response.statusText}`);
@@ -119,7 +121,9 @@ async function fetchText(path: string): Promise<string> {
 }
 
 export async function getTaskFile(taskId: string, path: string): Promise<string> {
-  return fetchText(`/tasks/${taskId}/files/${encodeFilePath(path)}`);
+  return fetchText(`/tasks/${taskId}/files/${encodeFilePath(path)}`, {
+    cache: 'no-store',
+  });
 }
 
 export function getTaskLogs(taskId: string, limit?: number, offset?: number): Promise<string[]> {
@@ -220,12 +224,17 @@ export function getSkills(): Promise<SkillsResponse> {
   return fetchApi<SkillsResponse>('/skills');
 }
 
-export function getSkillFiles(name: string): Promise<FileEntry[]> {
-  return fetchApi<FileEntry[]>(`/skills/${encodeURIComponent(name)}/files`);
+export function getSkillFiles(name: string, path?: string): Promise<FileEntry[]> {
+  const suffix = path ? `/${encodeFilePath(path)}` : '';
+  return fetchApi<FileEntry[]>(`/skills/${encodeURIComponent(name)}/files${suffix}`, {
+    cache: 'no-store',
+  });
 }
 
 export function getSkillFile(name: string, path: string): Promise<string> {
-  return fetchText(`/skills/${encodeURIComponent(name)}/files/${encodeFilePath(path)}`);
+  return fetchText(`/skills/${encodeURIComponent(name)}/files/${encodeFilePath(path)}`, {
+    cache: 'no-store',
+  });
 }
 
 export function deleteSkill(name: string): Promise<void> {
@@ -262,12 +271,17 @@ export function deleteChannel(name: string): Promise<void> {
   });
 }
 
-export function getAgentFiles(name: string): Promise<FileEntry[]> {
-  return fetchApi<FileEntry[]>(`/agents/${encodeURIComponent(name)}/files`);
+export function getAgentFiles(name: string, path?: string): Promise<FileEntry[]> {
+  const suffix = path ? `/${encodeFilePath(path)}` : '';
+  return fetchApi<FileEntry[]>(`/agents/${encodeURIComponent(name)}/files${suffix}`, {
+    cache: 'no-store',
+  });
 }
 
 export function getAgentFile(name: string, path: string): Promise<string> {
-  return fetchText(`/agents/${encodeURIComponent(name)}/files/${encodeFilePath(path)}`);
+  return fetchText(`/agents/${encodeURIComponent(name)}/files/${encodeFilePath(path)}`, {
+    cache: 'no-store',
+  });
 }
 
 export async function getAgent(name: string): Promise<AgentDetail | null> {
@@ -301,11 +315,6 @@ export function deleteAgent(name: string): Promise<void> {
   });
 }
 
-export async function listAgents(): Promise<ListAgentsResponse['agents']> {
-  const response = await fetchApi<ListAgentsResponse>('/agents');
-  return response.agents;
-}
-
 export function getProviders(): Promise<ProvidersResponse> {
   return fetchApi<ProvidersResponse>('/providers');
 }
@@ -328,16 +337,6 @@ export function deleteProvider(name: string): Promise<void> {
   return fetchApi<void>(`/providers/${encodeURIComponent(name)}`, {
     method: 'DELETE',
   });
-}
-
-export async function listProviders(): Promise<ProviderConfig[]> {
-  const response = await fetchApi<ProvidersResponse>('/providers');
-  return response.providers;
-}
-
-export async function listChannels(): Promise<ChannelConfig[]> {
-  const response = await fetchApi<ChannelsResponse>('/channels');
-  return response.channels;
 }
 
 export const api = {
