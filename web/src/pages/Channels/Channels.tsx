@@ -41,15 +41,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import type { ChannelConfig, ChannelName } from "@/types"
+import type { ChannelConfig, ChannelKind } from "@/types"
 
 type ChannelFormState = {
-  name: ChannelName
+  name: string
+  kind: ChannelKind
   bot_token: string
   user_id: string
 }
 
-const channelOptions: { value: ChannelName; label: string; hint: string }[] = [
+const channelOptions: { value: ChannelKind; label: string; hint: string }[] = [
   { value: "telegram", label: "Telegram", hint: "通过 Telegram Bot 接收用户消息" },
   { value: "wechat", label: "Wechat", hint: "通过 Wechat 渠道接收用户消息" },
 ]
@@ -57,7 +58,8 @@ const channelOptions: { value: ChannelName; label: string; hint: string }[] = [
 function toFormState(channel?: ChannelConfig | null): ChannelFormState {
   if (!channel) {
     return {
-      name: "telegram",
+      name: "",
+      kind: "telegram",
       bot_token: "",
       user_id: "",
     }
@@ -65,25 +67,32 @@ function toFormState(channel?: ChannelConfig | null): ChannelFormState {
 
   return {
     name: channel.name,
+    kind: channel.kind,
     bot_token: channel.bot_token,
     user_id: String(channel.user_id),
   }
 }
 
 function toChannelConfig(form: ChannelFormState): ChannelConfig {
-  if (form.name === "telegram") {
+  if (form.kind === "telegram") {
     return {
-      name: "telegram",
+      name: form.name.trim(),
+      kind: "telegram",
       bot_token: form.bot_token.trim(),
       user_id: Number(form.user_id),
     }
   }
 
   return {
-    name: "wechat",
+    name: form.name.trim(),
+    kind: "wechat",
     bot_token: form.bot_token.trim(),
     user_id: form.user_id.trim(),
   }
+}
+
+function getChannelKindLabel(kind: ChannelKind): string {
+  return channelOptions.find((option) => option.value === kind)?.label ?? kind
 }
 
 function maskSecret(value: string): string {
@@ -115,10 +124,14 @@ function ChannelModal({
     setError(null)
   }, [channel, isOpen])
 
-  const currentOption = channelOptions.find((option) => option.value === formState.name)
+  const currentOption = channelOptions.find((option) => option.value === formState.kind)
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
+    if (!formState.name.trim()) {
+      setError("Channel 名称不能为空")
+      return
+    }
     if (!formState.bot_token.trim()) {
       setError("Bot Token 不能为空")
       return
@@ -128,7 +141,7 @@ function ChannelModal({
       return
     }
     if (
-      formState.name === "telegram" &&
+      formState.kind === "telegram" &&
       (!/^\d+$/.test(formState.user_id) || Number(formState.user_id) <= 0)
     ) {
       setError("Telegram User ID 必须是正整数")
@@ -166,13 +179,25 @@ function ChannelModal({
 
           <div className="grid gap-5 md:grid-cols-2">
             <div className="space-y-2">
+              <Label>Channel 名称</Label>
+              <Input
+                value={formState.name}
+                onChange={(event) =>
+                  setFormState((current) => ({ ...current, name: event.target.value }))
+                }
+                disabled={loading || mode === "edit"}
+                className="h-11 rounded-2xl"
+                placeholder="例如 telegram-main"
+              />
+            </div>
+            <div className="space-y-2">
               <Label>Channel 类型</Label>
               <Select
-                value={formState.name}
+                value={formState.kind}
                 onValueChange={(value) =>
                   setFormState((current) => ({
                     ...current,
-                    name: value as ChannelName,
+                    kind: value as ChannelKind,
                     user_id: "",
                   }))
                 }
@@ -206,16 +231,16 @@ function ChannelModal({
           </div>
 
           <div className="space-y-2">
-            <Label>{formState.name === "telegram" ? "Telegram User ID" : "Wechat User ID"}</Label>
+            <Label>{formState.kind === "telegram" ? "Telegram User ID" : "Wechat User ID"}</Label>
             <Input
-              type={formState.name === "telegram" ? "number" : "text"}
+              type={formState.kind === "telegram" ? "number" : "text"}
               value={formState.user_id}
               onChange={(event) =>
                 setFormState((current) => ({ ...current, user_id: event.target.value }))
               }
               disabled={loading}
               className="h-11 rounded-2xl"
-              placeholder={formState.name === "telegram" ? "例如 123456789" : "例如 wxid_xxx"}
+              placeholder={formState.kind === "telegram" ? "例如 123456789" : "例如 wxid_xxx"}
             />
           </div>
 
@@ -258,7 +283,8 @@ function ChannelDeleteDialog({
           </AlertDialogDescription>
         </AlertDialogHeader>
         <div className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4 text-sm text-muted-foreground">
-          即将删除 <span className="font-semibold text-foreground">{channel.name}</span>
+          即将删除 <span className="font-semibold text-foreground">{channel.name}</span>（
+          {getChannelKindLabel(channel.kind)}）
         </div>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={loading}>取消</AlertDialogCancel>
@@ -293,12 +319,12 @@ function ChannelCard({
       <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
         <div className="space-y-3">
           <Badge variant="outline" className="rounded-full px-3 py-1 text-[0.72rem] uppercase tracking-[0.2em]">
-            Channel
+            {getChannelKindLabel(channel.kind)}
           </Badge>
           <div>
-            <CardTitle className="text-2xl capitalize tracking-tight">{channel.name}</CardTitle>
+            <CardTitle className="text-2xl tracking-tight">{channel.name}</CardTitle>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              {channel.name === "telegram" ? "Telegram Bot 对话入口" : "Wechat 消息接入入口"}
+              {channel.kind === "telegram" ? "Telegram Bot 对话入口" : "Wechat 消息接入入口"}
             </p>
           </div>
         </div>
@@ -311,7 +337,13 @@ function ChannelCard({
           </Button>
         </div>
       </CardHeader>
-      <CardContent className="grid gap-4 md:grid-cols-2">
+      <CardContent className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4">
+          <div className="mb-1 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            Type
+          </div>
+          <div className="text-sm text-foreground">{getChannelKindLabel(channel.kind)}</div>
+        </div>
         <div className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4">
           <div className="mb-1 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
             Bot Token

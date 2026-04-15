@@ -21,11 +21,6 @@ const CHANNEL_RETRY_DELAY_SECS: u64 = 3;
 
 #[async_trait::async_trait]
 pub trait Channel: Debug + Send + Sync {
-    // Channel name, e.g. "telegram"
-    fn name() -> &'static str
-    where
-        Self: Sized;
-
     // Try to receive messages, returning empty vec if no messages are available
     async fn try_receive(&self) -> BabataResult<Vec<Content>>;
 
@@ -43,18 +38,26 @@ pub fn build_channels(
             ChannelConfig::Telegram(telegram_config) => {
                 telegram_config.validate()?;
                 let channel = TelegramChannel::new(telegram_config.clone())?;
-                channels.insert(
-                    channel_config.name().to_ascii_lowercase(),
-                    Arc::new(channel),
-                );
+                let channel_name = channel_config.name().to_string();
+                if channels.contains_key(&channel_name) {
+                    return Err(crate::error::BabataError::config(format!(
+                        "Duplicate channel name '{}' found in channel configs",
+                        channel_name
+                    )));
+                }
+                channels.insert(channel_name, Arc::new(channel));
             }
             ChannelConfig::Wechat(wechat_config) => {
                 wechat_config.validate()?;
                 let channel = WechatChannel::new(wechat_config.clone())?;
-                channels.insert(
-                    channel_config.name().to_ascii_lowercase(),
-                    Arc::new(channel),
-                );
+                let channel_name = channel_config.name().to_string();
+                if channels.contains_key(&channel_name) {
+                    return Err(crate::error::BabataError::config(format!(
+                        "Duplicate channel name '{}' found in channel configs",
+                        channel_name
+                    )));
+                }
+                channels.insert(channel_name, Arc::new(channel));
             }
         }
     }

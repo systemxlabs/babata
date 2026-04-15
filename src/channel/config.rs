@@ -11,7 +11,7 @@ use crate::{
 const CHANNEL_CONFIG_FILE_NAME: &str = "config.json";
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-#[serde(tag = "name", rename_all = "snake_case")]
+#[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ChannelConfig {
     Telegram(TelegramChannelConfig),
     Wechat(WechatChannelConfig),
@@ -19,12 +19,15 @@ pub enum ChannelConfig {
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct TelegramChannelConfig {
+    pub name: String,
     pub bot_token: String,
     pub user_id: i64,
 }
 
 impl TelegramChannelConfig {
     pub fn validate(&self) -> BabataResult<()> {
+        validate_channel_name(&self.name)?;
+
         if self.bot_token.trim().is_empty() {
             return Err(BabataError::config(
                 "Telegram channel bot_token cannot be empty",
@@ -43,12 +46,15 @@ impl TelegramChannelConfig {
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct WechatChannelConfig {
+    pub name: String,
     pub bot_token: String,
     pub user_id: String,
 }
 
 impl WechatChannelConfig {
     pub fn validate(&self) -> BabataResult<()> {
+        validate_channel_name(&self.name)?;
+
         if self.bot_token.trim().is_empty() {
             return Err(BabataError::config(
                 "Wechat channel bot_token cannot be empty",
@@ -66,10 +72,10 @@ impl WechatChannelConfig {
 }
 
 impl ChannelConfig {
-    pub fn name(&self) -> &'static str {
+    pub fn name(&self) -> &str {
         match self {
-            ChannelConfig::Telegram(_) => "Telegram",
-            ChannelConfig::Wechat(_) => "Wechat",
+            ChannelConfig::Telegram(config) => &config.name,
+            ChannelConfig::Wechat(config) => &config.name,
         }
     }
 
@@ -87,7 +93,15 @@ impl ChannelConfig {
     pub fn load(name: &str) -> BabataResult<Self> {
         validate_channel_name(name)?;
         let config_path = channel_dir(name)?.join(CHANNEL_CONFIG_FILE_NAME);
-        load_from_path(&config_path)
+        let channel_config = load_from_path(&config_path)?;
+        if !channel_config.matches_name(name) {
+            return Err(BabataError::config(format!(
+                "Channel config file '{}' does not match directory name '{}'",
+                config_path.display(),
+                name
+            )));
+        }
+        Ok(channel_config)
     }
 
     pub fn load_all() -> BabataResult<Vec<Self>> {
@@ -213,6 +227,7 @@ mod tests {
     #[test]
     fn telegram_config_rejects_empty_bot_token() {
         let config = TelegramChannelConfig {
+            name: "telegram-main".to_string(),
             bot_token: "   ".to_string(),
             user_id: 12345,
         };
@@ -223,6 +238,7 @@ mod tests {
     #[test]
     fn telegram_config_rejects_non_positive_user_id() {
         let config = TelegramChannelConfig {
+            name: "telegram-main".to_string(),
             bot_token: "token".to_string(),
             user_id: 0,
         };
@@ -233,6 +249,7 @@ mod tests {
     #[test]
     fn wechat_config_rejects_empty_bot_token() {
         let config = WechatChannelConfig {
+            name: "wechat-main".to_string(),
             bot_token: " ".to_string(),
             user_id: "wxid_123".to_string(),
         };
@@ -243,6 +260,7 @@ mod tests {
     #[test]
     fn wechat_config_rejects_empty_user_id() {
         let config = WechatChannelConfig {
+            name: "wechat-main".to_string(),
             bot_token: "token".to_string(),
             user_id: " ".to_string(),
         };
@@ -253,7 +271,8 @@ mod tests {
     #[test]
     fn parse_channel_config_from_json() {
         let payload = r#"{
-            "name": "telegram",
+            "kind": "telegram",
+            "name": "telegram-main",
             "bot_token": "test-token",
             "user_id": 123456
         }"#;
@@ -263,6 +282,7 @@ mod tests {
         assert_eq!(
             parsed,
             ChannelConfig::Telegram(TelegramChannelConfig {
+                name: "telegram-main".to_string(),
                 bot_token: "test-token".to_string(),
                 user_id: 123456,
             })

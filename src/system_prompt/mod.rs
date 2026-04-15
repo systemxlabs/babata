@@ -184,10 +184,12 @@ mod tests {
     fn build_channels_prompt_includes_channel_capabilities() {
         let channel_configs = vec![
             ChannelConfig::Telegram(TelegramChannelConfig {
+                name: "telegram-main".to_string(),
                 bot_token: "token".to_string(),
                 user_id: 123456,
             }),
             ChannelConfig::Wechat(WechatChannelConfig {
+                name: "wechat-main".to_string(),
                 bot_token: "token".to_string(),
                 user_id: "wxid_123".to_string(),
             }),
@@ -196,9 +198,15 @@ mod tests {
         let prompt = build_channels_prompt(&channel_configs).unwrap();
 
         assert!(prompt.contains("# Configured channels"));
-        assert!(prompt.contains("Telegram: receives messages from Telegram user (id: 123456)"));
+        assert!(prompt.contains(
+            "telegram-main (telegram): receives messages from Telegram user (id: 123456)"
+        ));
         assert!(prompt.contains("via bot (token: token)"));
-        assert!(prompt.contains("Wechat: receives messages from Wechat user (id: wxid_123)"));
+        assert!(
+            prompt.contains(
+                "wechat-main (wechat): receives messages from Wechat user (id: wxid_123)"
+            )
+        );
         assert!(prompt.contains("Read file `"));
         assert!(prompt.contains("latest_context_token"));
     }

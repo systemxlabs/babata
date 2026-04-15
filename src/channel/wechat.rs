@@ -25,6 +25,7 @@ use crate::{
 
 #[derive(Debug)]
 pub struct WechatChannel {
+    name: String,
     ilink_client: ILinkClient,
     bot_token: String,
     user_id: String,
@@ -34,11 +35,18 @@ pub struct WechatChannel {
 
 impl WechatChannel {
     pub fn new(config: WechatChannelConfig) -> BabataResult<Self> {
+        let WechatChannelConfig {
+            name,
+            bot_token,
+            user_id,
+        } = config;
+        let get_updates_buf = Self::load_get_updates_buf(&name)?;
         Ok(Self {
+            name,
             ilink_client: ILinkClient::new(),
-            bot_token: config.bot_token,
-            user_id: config.user_id,
-            get_updates_buf: Mutex::new(Self::load_get_updates_buf()?),
+            bot_token,
+            user_id,
+            get_updates_buf: Mutex::new(get_updates_buf),
             feedback_waiters: Mutex::new(HashMap::new()),
         })
     }
@@ -113,19 +121,27 @@ impl WechatChannel {
             }
             *current = Some(get_updates_buf.clone());
         }
-        write_text_file(&Self::get_updates_buf_path()?, &get_updates_buf)
+        write_text_file(&Self::get_updates_buf_path(&self.name)?, &get_updates_buf)
     }
 
     fn persist_latest_context_token(&self, context_token: &str) -> BabataResult<()> {
-        write_text_file(&wechat_latest_context_token_path()?, context_token)
+        write_text_file(&Self::latest_context_token_path(&self.name)?, context_token)
     }
 
-    fn load_get_updates_buf() -> BabataResult<Option<String>> {
-        read_optional_trimmed_text(&Self::get_updates_buf_path()?)
+    fn load_get_updates_buf(channel_name: &str) -> BabataResult<Option<String>> {
+        read_optional_trimmed_text(&Self::get_updates_buf_path(channel_name)?)
     }
 
-    fn get_updates_buf_path() -> BabataResult<PathBuf> {
-        Ok(channel_dir("wechat")?.join("get_updates_buf"))
+    fn get_updates_buf_path(channel_name: &str) -> BabataResult<PathBuf> {
+        Ok(channel_dir(channel_name)?.join("get_updates_buf"))
+    }
+
+    fn load_latest_context_token(&self) -> BabataResult<Option<String>> {
+        read_optional_trimmed_text(&Self::latest_context_token_path(&self.name)?)
+    }
+
+    fn latest_context_token_path(channel_name: &str) -> BabataResult<PathBuf> {
+        Ok(channel_dir(channel_name)?.join("latest_context_token"))
     }
 
     async fn send_text_message(&self, context_token: &str, text: &str) -> BabataResult<()> {
@@ -318,7 +334,7 @@ impl WechatChannel {
         kind_name: &str,
         data: &[u8],
     ) -> BabataResult<PathBuf> {
-        let dir = Self::media_dir()?;
+        let dir = Self::media_dir(&self.name)?;
         std::fs::create_dir_all(&dir)?;
 
         let file_name = sanitize_file_name(file_name.unwrap_or(kind_name));
@@ -327,17 +343,9 @@ impl WechatChannel {
         Ok(path)
     }
 
-    fn media_dir() -> BabataResult<PathBuf> {
-        Ok(channel_dir("wechat")?.join("media"))
+    fn media_dir(channel_name: &str) -> BabataResult<PathBuf> {
+        Ok(channel_dir(channel_name)?.join("media"))
     }
-}
-
-pub(crate) fn load_wechat_latest_context_token() -> BabataResult<Option<String>> {
-    read_optional_trimmed_text(&wechat_latest_context_token_path()?)
-}
-
-pub(crate) fn wechat_latest_context_token_path() -> BabataResult<PathBuf> {
-    Ok(channel_dir("wechat")?.join("latest_context_token"))
 }
 
 fn render_feedback_text(content: &[Content]) -> BabataResult<String> {
@@ -366,10 +374,6 @@ fn render_feedback_text(content: &[Content]) -> BabataResult<String> {
 
 #[async_trait::async_trait]
 impl super::Channel for WechatChannel {
-    fn name() -> &'static str {
-        "Wechat"
-    }
-
     async fn try_receive(&self) -> BabataResult<Vec<Content>> {
         let incoming = self.fetch_updates().await?;
         self.route_incoming(incoming).await
@@ -377,7 +381,7 @@ impl super::Channel for WechatChannel {
 
     async fn feedback(&self, content: Vec<Content>) -> BabataResult<Vec<Content>> {
         let text = render_feedback_text(&content)?;
-        let context_token = load_wechat_latest_context_token()?.ok_or_else(|| {
+        let context_token = self.load_latest_context_token()?.ok_or_else(|| {
             BabataError::channel(
                 "Wechat context_token not found; no messages have been received yet".to_string(),
             )
@@ -527,6 +531,7 @@ mod tests {
     #[tokio::test]
     async fn incoming_message_to_content_renders_text_voice_and_quote() {
         let channel = WechatChannel::new(crate::channel::WechatChannelConfig {
+            name: "wechat-main".to_string(),
             bot_token: "token".to_string(),
             user_id: "wxid_bot".to_string(),
         })

@@ -107,7 +107,7 @@ export type GetAgentResponse = AgentDetail;
 
 export type CompatibleApi = 'openai' | 'anthropic';
 
-export type ChannelName = 'telegram' | 'wechat';
+export type ChannelKind = 'telegram' | 'wechat';
 
 export interface ProviderConfig {
   name: string;
@@ -121,13 +121,15 @@ export interface ProvidersResponse {
 }
 
 export interface TelegramChannelConfig {
-  name: 'telegram';
+  name: string;
+  kind: 'telegram';
   bot_token: string;
   user_id: number;
 }
 
 export interface WechatChannelConfig {
-  name: 'wechat';
+  name: string;
+  kind: 'wechat';
   bot_token: string;
   user_id: string;
 }

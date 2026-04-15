@@ -43,6 +43,12 @@ impl Tool for UserFeedbackTool {
         let channel = self
             .channels
             .get(&args.channel)
+            .or_else(|| {
+                self.channels
+                    .iter()
+                    .find(|(name, _)| name.eq_ignore_ascii_case(&args.channel))
+                    .map(|(_, channel)| channel)
+            })
             .ok_or_else(|| BabataError::tool(format!("Channel '{}' not found", args.channel)))?;
 
         let response = channel

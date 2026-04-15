@@ -22,6 +22,7 @@ const DEFAULT_POLLING_TIMEOUT_SECS: u64 = 15;
 
 #[derive(Debug)]
 pub struct TelegramChannel {
+    name: String,
     bot: Bot,
     http_client: Client,
     // Telegram update cursor to avoid reprocessing already consumed updates.
@@ -34,10 +35,15 @@ pub struct TelegramChannel {
 
 impl TelegramChannel {
     pub fn new(config: TelegramChannelConfig) -> BabataResult<Self> {
-        let TelegramChannelConfig { bot_token, user_id } = config;
-        let last_update_id = Self::load_last_update_id()?;
+        let TelegramChannelConfig {
+            name,
+            bot_token,
+            user_id,
+        } = config;
+        let last_update_id = Self::load_last_update_id(&name)?;
 
         Ok(Self {
+            name,
             bot: Bot::new(bot_token),
             http_client: Client::new(),
             last_update_id: Mutex::new(last_update_id),
@@ -140,7 +146,7 @@ impl TelegramChannel {
     }
 
     fn persist_last_update_id(&self, last_update_id: i64) -> BabataResult<()> {
-        let path = Self::last_update_id_path()?;
+        let path = Self::last_update_id_path(&self.name)?;
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
@@ -149,8 +155,8 @@ impl TelegramChannel {
         Ok(())
     }
 
-    fn load_last_update_id() -> BabataResult<Option<i64>> {
-        let path = Self::last_update_id_path()?;
+    fn load_last_update_id(channel_name: &str) -> BabataResult<Option<i64>> {
+        let path = Self::last_update_id_path(channel_name)?;
         if !path.exists() {
             return Ok(None);
         }
@@ -178,8 +184,8 @@ impl TelegramChannel {
         Ok(Some(last_update_id))
     }
 
-    fn last_update_id_path() -> BabataResult<PathBuf> {
-        Ok(channel_dir("telegram")?.join("last_update_id"))
+    fn last_update_id_path(channel_name: &str) -> BabataResult<PathBuf> {
+        Ok(channel_dir(channel_name)?.join("last_update_id"))
     }
 
     async fn incoming_message_to_content(
@@ -287,10 +293,6 @@ impl TelegramChannel {
 
 #[async_trait::async_trait]
 impl super::Channel for TelegramChannel {
-    fn name() -> &'static str {
-        "Telegram"
-    }
-
     async fn try_receive(&self) -> BabataResult<Vec<Content>> {
         let incoming = self.fetch_updates().await?;
         self.route_incoming(incoming).await
