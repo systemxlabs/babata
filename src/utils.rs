@@ -8,8 +8,12 @@ pub fn babata_dir() -> BabataResult<PathBuf> {
     Ok(user_home_dir()?.join(".babata"))
 }
 
+pub fn providers_dir() -> BabataResult<PathBuf> {
+    Ok(babata_dir()?.join("providers"))
+}
+
 pub fn provider_dir(provider_name: &str) -> BabataResult<PathBuf> {
-    Ok(babata_dir()?.join("providers").join(provider_name))
+    Ok(providers_dir()?.join(provider_name))
 }
 
 pub fn user_home_dir() -> BabataResult<PathBuf> {
