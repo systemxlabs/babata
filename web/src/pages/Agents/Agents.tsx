@@ -546,7 +546,7 @@ export function Agents() {
       <PageHeader
         eyebrow="Roles"
         title="Agent 管理"
-        description="维护 Agent 的职责描述、模型绑定、默认角色设定和系统提示词正文。"
+        description="维护 Agent 的职责描述、模型绑定、默认角色设定，以及对应目录与系统提示词。"
         actions={
           <>
             <Badge variant="outline" className="rounded-full px-3 py-1.5">

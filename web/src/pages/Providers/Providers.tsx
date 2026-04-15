@@ -444,8 +444,8 @@ export function Providers() {
     <div className="space-y-6 pb-6">
       <PageHeader
         eyebrow="Configuration"
-        title="Provider 管理"
-        description="维护模型服务凭据、自定义兼容接口和系统默认供应商接入方式。"
+        title="Provider 配置"
+        description="维护模型服务凭据、自定义兼容接口，以及系统可用的模型供应商配置。"
         actions={
           <>
             <Badge variant="outline" className="rounded-full px-3 py-1.5">

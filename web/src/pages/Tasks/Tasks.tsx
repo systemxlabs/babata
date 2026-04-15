@@ -204,8 +204,8 @@ export function Tasks() {
     <div className="space-y-6 pb-6">
       <PageHeader
         eyebrow="Execution"
-        title="任务管理"
-        description="按状态筛选根任务，在右侧浏览整棵任务树，并针对节点查看执行详情、目录和日志。"
+        title="任务工作台"
+        description="按状态筛选根任务，在右侧浏览完整任务树，并进入节点详情、目录、日志和消息。"
         actions={
           <>
             <Badge variant="outline" className="rounded-full px-3 py-1.5">

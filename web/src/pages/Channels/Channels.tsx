@@ -391,8 +391,8 @@ export function Channels() {
     <div className="space-y-6 pb-6">
       <PageHeader
         eyebrow="Inbound"
-        title="Channel 管理"
-        description="管理消息接入渠道，让系统可以从 Telegram 或 Wechat 等入口接收新的用户任务。"
+        title="Channel 接入"
+        description="管理 Telegram、Wechat 等消息入口，让系统可以持续接收新的用户任务。"
         actions={
           <>
             <Badge variant="outline" className="rounded-full px-3 py-1.5">

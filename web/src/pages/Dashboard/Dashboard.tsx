@@ -247,8 +247,8 @@ export function Dashboard() {
     <div className="space-y-6 pb-6">
       <PageHeader
         eyebrow="Operations"
-        title="Babata Overview"
-        description="集中查看运行中任务、资源配置健康度，并从这里快速发起新的根任务。"
+        title="控制台总览"
+        description="集中查看活跃任务、系统资源概况，并从这里快速创建新的根任务。"
         actions={
           <>
             <Badge variant="outline" className="rounded-full px-3 py-1 text-xs">

@@ -58,8 +58,8 @@ export function Skills() {
     <div className="space-y-6 pb-6">
       <PageHeader
         eyebrow="Knowledge"
-        title="Skills 管理"
-        description="浏览技能清单、技能说明与技能目录文件，确保任务执行时能正确注入可复用知识。"
+        title="Skill 资源库"
+        description="浏览技能清单、技能说明与目录文件，确保任务执行时能正确注入可复用知识。"
         actions={
           <Badge variant="outline" className="rounded-full px-3 py-1.5">
             {skills.length} 个 Skill

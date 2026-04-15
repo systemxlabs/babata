@@ -1,5 +1,5 @@
 import type { ComponentType } from "react"
-import { useMemo } from "react"
+import { useEffect, useMemo } from "react"
 import {
   Blocks,
   BrainCircuit,
@@ -36,6 +36,7 @@ const navItems: {
   key: PageType
   path: string
   label: string
+  browserTitle: string
   description: string
   icon: ComponentType<{ className?: string }>
 }[] = [
@@ -43,27 +44,31 @@ const navItems: {
     key: "dashboard",
     path: "/",
     label: "Overview",
-    description: "运行态总览与快捷操作",
+    browserTitle: "控制台总览",
+    description: "运行状态总览与快捷任务入口",
     icon: LayoutDashboard,
   },
   {
     key: "tasks",
     path: "/tasks",
     label: "Tasks",
-    description: "根任务、任务树与执行详情",
+    browserTitle: "任务工作台",
+    description: "根任务列表、任务树与执行详情",
     icon: Workflow,
   },
   {
     key: "agents",
     path: "/agents",
     label: "Agents",
-    description: "角色定义、模型绑定与文件查看",
+    browserTitle: "Agent 管理",
+    description: "角色定义、模型绑定与目录查看",
     icon: BrainCircuit,
   },
   {
     key: "providers",
     path: "/providers",
     label: "Providers",
+    browserTitle: "Provider 配置",
     description: "模型服务接入与凭据管理",
     icon: PlugZap,
   },
@@ -71,6 +76,7 @@ const navItems: {
     key: "channels",
     path: "/channels",
     label: "Channels",
+    browserTitle: "Channel 接入",
     description: "消息入口与用户触达配置",
     icon: Cable,
   },
@@ -78,6 +84,7 @@ const navItems: {
     key: "skills",
     path: "/skills",
     label: "Skills",
+    browserTitle: "Skill 资源库",
     description: "技能目录、正文与文件浏览",
     icon: Blocks,
   },
@@ -148,6 +155,10 @@ function AppShell() {
       ) ?? navItems[0],
     [location.pathname]
   )
+
+  useEffect(() => {
+    document.title = `${currentItem.browserTitle} | Babata Console`
+  }, [currentItem.browserTitle])
 
   return (
     <div className="relative min-h-screen">
