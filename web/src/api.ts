@@ -193,6 +193,13 @@ export function steerTask(taskId: string, message: string): Promise<void> {
   });
 }
 
+export function relaunchTask(taskId: string, reason: string): Promise<void> {
+  return fetchApi<void>(`/tasks/${taskId}/relaunch`, {
+    method: 'POST',
+    body: JSON.stringify({ reason: reason.trim() }),
+  });
+}
+
 export function getTask(taskId: string): Promise<Task> {
   return fetchApi<Task>(`/tasks/${taskId}`);
 }

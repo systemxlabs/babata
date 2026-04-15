@@ -4,7 +4,7 @@ import {
   Workflow,
 } from "lucide-react"
 
-import { controlTask, deleteTask, getRootTasks, getTaskTree, steerTask } from "@/api"
+import { controlTask, deleteTask, getRootTasks, getTaskTree, relaunchTask, steerTask } from "@/api"
 import type { TaskTreeResponse } from "@/api"
 import { DeleteConfirmModal } from "@/components/DeleteConfirmModal"
 import { EmptyState } from "@/components/empty-state"
@@ -189,6 +189,19 @@ export function Tasks() {
     }
   }, [fetchTasks, fetchTree, selectedRootTaskId])
 
+  const handleRelaunchTask = useCallback(async (taskId: string, reason: string) => {
+    try {
+      await relaunchTask(taskId, reason)
+      await fetchTasks()
+      if (selectedRootTaskId) {
+        await fetchTree(selectedRootTaskId, { preserveOnError: true })
+      }
+    } catch (error) {
+      console.error("Failed to relaunch task:", error)
+      throw error
+    }
+  }, [fetchTasks, fetchTree, selectedRootTaskId])
+
   const formatTime = useCallback((timestamp: string | number) => {
     return new Date(timestamp).toLocaleString("zh-CN")
   }, [])
@@ -321,6 +334,7 @@ export function Tasks() {
                           onClick={handleTaskClick}
                           onControlTask={handleControlTask}
                           onSteerTask={handleSteerTask}
+                          onRelaunchTask={handleRelaunchTask}
                           onDeleteTask={handleDeleteTaskClick}
                           formatTime={formatTime}
                         />

@@ -13,6 +13,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import type { Task } from "@/types"
 import { TaskStatusBadge } from "../TaskStatusBadge/TaskStatusBadge"
+import { TaskRelaunchDialog } from "./TaskRelaunchDialog"
 import { TaskSteerDialog } from "./TaskSteerDialog"
 
 type TreeTask = Task & {
@@ -25,6 +26,7 @@ interface TaskTreeItemProps {
   selectedTaskId?: string | null
   onControlTask?: (taskId: string, action: "pause" | "resume" | "cancel") => void
   onSteerTask?: (taskId: string, message: string) => Promise<void>
+  onRelaunchTask?: (taskId: string, reason: string) => Promise<void>
   onDeleteTask?: (task: Task) => void
   formatTime: (timestamp: string | number) => string
 }
@@ -35,6 +37,7 @@ export function TaskTreeItem({
   selectedTaskId,
   onControlTask,
   onSteerTask,
+  onRelaunchTask,
   onDeleteTask,
   formatTime,
 }: TaskTreeItemProps) {
@@ -128,6 +131,14 @@ export function TaskTreeItem({
                 className="flex flex-wrap items-center gap-2"
                 onClick={(event) => event.stopPropagation()}
               >
+                {onRelaunchTask ? (
+                  <TaskRelaunchDialog
+                    taskId={task.task_id}
+                    taskDescription={task.description}
+                    onSubmit={onRelaunchTask}
+                  />
+                ) : null}
+
                 {onDeleteTask ? (
                   <Button
                     variant="outline"
@@ -208,6 +219,7 @@ export function TaskTreeItem({
                   selectedTaskId={selectedTaskId}
                   onControlTask={onControlTask}
                   onSteerTask={onSteerTask}
+                  onRelaunchTask={onRelaunchTask}
                   onDeleteTask={onDeleteTask}
                   formatTime={formatTime}
                 />
