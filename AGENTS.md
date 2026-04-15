@@ -33,7 +33,7 @@ This document outlines the engineering preferences and cultural principles for a
 
 ## 5. Testing & UI Validation
 
-- Start the local server with `BABATA_SERVER_PORT=<port> cargo run -- server serve`.
+- Start the local server with `BABATA_SERVER_PORT=<port> cargo run`.
 - Open `http://127.0.0.1:<port>/` in a browser to inspect the Web UI.
 - Prefer browser-automation tools (e.g., `browser-use`, Playwright, Puppeteer) to verify rendering and interactions.
 - When adding or changing frontend-related features, confirm the UI behaves correctly through automation or manual inspection.

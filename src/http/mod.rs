@@ -44,7 +44,7 @@ pub const DEFAULT_HTTP_HOST: &str = "127.0.0.1";
 pub const DEFAULT_HTTP_PORT: u16 = 18800;
 
 #[derive(Clone)]
-pub(crate) struct HttpApp {
+pub struct HttpApp {
     pub(crate) task_manager: Arc<TaskManager>,
 }
 

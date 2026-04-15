@@ -1,25 +1,64 @@
-use clap::Parser;
+use std::sync::Arc;
 
-fn main() {
-    if let Err(err) = babata::logging::init() {
-        eprintln!("{err}");
-        std::process::exit(1);
-    }
+use babata::{
+    BabataResult,
+    agent::load_agents,
+    channel::{build_channels, start_channel_loops},
+    config::Config,
+    http::HttpApp,
+    message::Content,
+    task::{CreateTaskRequest, TaskLauncher, TaskManager, TaskStore},
+    utils::babata_dir,
+};
+use log::{error, info};
 
-    match babata::cli::Command::parse() {
-        babata::cli::Command::Server { action } => match action {
-            babata::cli::ServerAction::Serve => babata::cli::server::serve(),
-            babata::cli::ServerAction::Start => babata::cli::server::start(),
-            babata::cli::ServerAction::Stop => babata::cli::server::stop(),
-            babata::cli::ServerAction::Restart => babata::cli::server::restart(),
-        },
-        babata::cli::Command::Channel { action } => match action {
-            babata::cli::ChannelAction::Add {
-                channel_config_json,
-            } => babata::cli::channel::add(&channel_config_json),
-            babata::cli::ChannelAction::Delete { name } => babata::cli::channel::delete(&name),
-            babata::cli::ChannelAction::List => babata::cli::channel::list(),
-        },
-        babata::cli::Command::Onboard => babata::cli::onboard::run(),
+#[tokio::main]
+async fn main() -> BabataResult<()> {
+    babata::logging::init()?;
+
+    info!("Server run babata dir: {}", babata_dir()?.display());
+
+    let config = Config::load()?;
+    let channels = build_channels(&config)?;
+    let task_store = TaskStore::new()?;
+    let task_launcher = TaskLauncher::new(load_agents()?, channels.clone())?;
+    let task_manager = Arc::new(TaskManager::new(task_store, task_launcher)?);
+
+    let http_app = HttpApp::new(task_manager.clone());
+
+    task_manager.start()?;
+    start_channel_loops(channels, task_manager.clone());
+
+    broadcast_service_started(&task_manager).await;
+
+    http_app.serve().await?;
+
+    Ok(())
+}
+
+async fn broadcast_service_started(task_manager: &Arc<TaskManager>) {
+    let babata_home = match babata_dir() {
+        Ok(path) => path.display().to_string(),
+        Err(err) => format!("unavailable ({err})"),
+    };
+    let notification = format!(
+        "Babata server started.\nVersion: {}\nBabata home: {}",
+        env!("CARGO_PKG_VERSION"),
+        babata_home
+    );
+
+    let prompt = Content::Text {
+        text: format!("Send below notification to each channel: \n{notification}"),
+    };
+
+    let task = CreateTaskRequest {
+        description: "broadcast service started notification".to_string(),
+        prompt: vec![prompt],
+        parent_task_id: None,
+        agent: task_manager.default_agent().frontmatter.name.clone(),
+        never_ends: false,
+    };
+    if let Err(e) = task_manager.create_task(task) {
+        error!("Failed to create service started notification task: {}", e);
     }
 }
