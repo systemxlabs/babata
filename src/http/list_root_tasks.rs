@@ -63,11 +63,10 @@ pub(crate) struct RootTaskResponse {
     pub(crate) root_task_id: Uuid,
     pub(crate) created_at: i64,
     pub(crate) never_ends: bool,
-    pub(crate) subtask_count: usize,
 }
 
 impl RootTaskResponse {
-    pub(crate) fn from_record((record, subtask_count): (TaskRecord, usize)) -> Self {
+    pub(crate) fn from_record(record: TaskRecord) -> Self {
         Self {
             task_id: record.task_id,
             description: record.description,
@@ -77,7 +76,6 @@ impl RootTaskResponse {
             root_task_id: record.root_task_id,
             created_at: record.created_at,
             never_ends: record.never_ends,
-            subtask_count,
         }
     }
 }

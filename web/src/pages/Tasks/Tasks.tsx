@@ -275,7 +275,6 @@ export function Tasks() {
 
                         <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
                           <span>创建于 {formatTime(task.created_at)}</span>
-                          <span>{task.subtask_count} 个子任务</span>
                         </div>
                       </button>
                     )

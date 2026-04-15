@@ -16,7 +16,6 @@ export interface Task {
 }
 
 export interface RootTask extends Task {
-  subtask_count: number;
   children?: Task[];
 }
 
