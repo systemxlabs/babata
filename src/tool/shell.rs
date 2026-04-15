@@ -53,15 +53,25 @@ impl Tool for ShellTool {
         let result = format!(
             r#"# STDOUT
 
-{stdout}
+{}
 
 # STDERR
 
-{stderr}
+{}
 
 # Exit Status
 
-{exit_status}"#
+{exit_status}"#,
+            if stdout.is_empty() {
+                "(no output)".to_string()
+            } else {
+                stdout
+            },
+            if stderr.is_empty() {
+                "(no output)".to_string()
+            } else {
+                stderr
+            },
         );
 
         Ok(result)
