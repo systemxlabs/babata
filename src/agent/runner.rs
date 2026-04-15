@@ -49,8 +49,14 @@ impl AgentTask {
 
         let tool_specs = self.collect_tool_specs();
 
-        let system_prompts =
-            build_system_prompts(&config, &agents, &skills, &self.agent.body, &tool_specs)?;
+        let system_prompts = build_system_prompts(
+            &config,
+            &agents,
+            &skills,
+            &self.agent.body,
+            &tool_specs,
+            self.task_id,
+        )?;
 
         let context = self.memory.build_context(&self.prompt).await?;
         let mut conversation = vec![Message::UserPrompt {

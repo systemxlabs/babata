@@ -4,12 +4,12 @@ use crate::{
     BabataResult,
     agent::Agent,
     config::{ChannelConfig, Config},
-    error::BabataError,
     skill::Skill,
     tool::ToolSpec,
-    utils::{babata_dir, channel_dir, resolve_home_dir},
+    utils::{babata_dir, channel_dir, resolve_home_dir, task_dir},
 };
 use chrono::Local;
+use uuid::Uuid;
 
 pub const BABATA_SYSTEM_DESCRIPTION: &str = include_str!("SYSTEM.md");
 
@@ -19,11 +19,12 @@ pub fn build_system_prompts(
     skills: &[Skill],
     agent_body: &str,
     tool_specs: &[ToolSpec],
+    task_id: Uuid,
 ) -> BabataResult<Vec<String>> {
     let mut sections = vec![
         agent_body.to_string(),
         BABATA_SYSTEM_DESCRIPTION.to_string(),
-        build_environment_prompt()?,
+        build_environment_prompt(task_id)?,
         build_agents_prompt(agents),
         build_channels_prompt(config)?,
     ];
@@ -39,26 +40,21 @@ pub fn build_system_prompts(
     Ok(sections)
 }
 
-pub fn build_environment_prompt() -> BabataResult<String> {
+pub fn build_environment_prompt(task_id: Uuid) -> BabataResult<String> {
     let now = Local::now();
     Ok(format!(
         r#"# Environment
 - User home directory(USER_HOME): {}
 - Babata home directory(BABATA_HOME): {}
+- Task home directory(TASK_HOME): {}
 - Current working directory(CWD): {}
-- Current local time: {}
 - User time zone: {}
 - Operating system: {}
 - CPU architecture: {}"#,
         resolve_home_dir()?.display(),
         babata_dir()?.display(),
-        std::env::current_dir()
-            .map_err(|err| BabataError::config(format!(
-                "Failed to resolve current directory: {}",
-                err
-            )))?
-            .display(),
-        now.to_rfc3339(),
+        std::env::current_dir()?.display(),
+        task_dir(task_id)?.display(),
         now.format("%Z (%:z)"),
         std::env::consts::OS,
         std::env::consts::ARCH
@@ -160,6 +156,7 @@ mod tests {
 
     use schemars::JsonSchema;
     use serde::Deserialize;
+    use uuid::Uuid;
 
     use super::{
         build_channels_prompt, build_environment_prompt, build_skills_prompt, build_tools_prompt,
@@ -172,13 +169,12 @@ mod tests {
 
     #[test]
     fn build_environment_prompt_includes_environment_fields() {
-        let prompt = build_environment_prompt().expect("build environment prompt");
+        let prompt = build_environment_prompt(Uuid::new_v4()).expect("build environment prompt");
 
         assert!(prompt.contains("# Environment"));
         assert!(prompt.contains("User home directory(USER_HOME):"));
         assert!(prompt.contains("Babata home directory(BABATA_HOME):"));
         assert!(prompt.contains("Current working directory(CWD):"));
-        assert!(prompt.contains("Current local time:"));
         assert!(prompt.contains("User time zone:"));
         assert!(prompt.contains("Operating system:"));
         assert!(prompt.contains("CPU architecture:"));

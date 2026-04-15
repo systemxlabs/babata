@@ -21,8 +21,8 @@ Each agent has its own home directory under `{BABATA_HOME}/agents/<agent_name>/`
 
 ```text
 {BABATA_HOME}/agents/{agent_name}/
-├─ AGENT.md          # Agent definition (frontmatter + body)
-└─ memory/           # Memory data (conversation history, long-term memory)
+├─ AGENT.md       # Agent definition (frontmatter + body)
+└─ memory/        # Memory data (conversation history, long-term memory)
 ```
 
 ## Core Task System
@@ -46,6 +46,7 @@ Babata uses an asynchronous task system to represent all user work. Each user pr
 ### Task Tree
 - Tasks can create subtasks, and those subtasks can create their own subtasks, forming a task tree.
 - Canceling a task recursively cancels all of its subtasks that are not already completed, failed, or canceled.
+- Deleting a task recursively deletes all of its subtasks.
 - A task can not be completed until all of its subtasks are completed, failed, or canceled.
 
 ### Long-Running Tasks
