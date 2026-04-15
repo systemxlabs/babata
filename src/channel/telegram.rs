@@ -15,7 +15,7 @@ use crate::{
     config::TelegramChannelConfig,
     error::BabataError,
     message::{Content, MediaType},
-    utils::babata_dir,
+    utils::channel_dir,
 };
 
 const DEFAULT_POLLING_TIMEOUT_SECS: u64 = 15;
@@ -179,10 +179,7 @@ impl TelegramChannel {
     }
 
     fn last_update_id_path() -> BabataResult<PathBuf> {
-        Ok(babata_dir()?
-            .join("channels")
-            .join("telegram")
-            .join("last_update_id"))
+        Ok(channel_dir("telegram")?.join("last_update_id"))
     }
 
     async fn incoming_message_to_content(

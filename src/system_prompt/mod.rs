@@ -3,12 +3,11 @@ use std::{collections::HashMap, sync::Arc};
 use crate::{
     BabataResult,
     agent::Agent,
-    channel::channel_dir,
     config::{ChannelConfig, Config},
     error::BabataError,
     skill::Skill,
     tool::ToolSpec,
-    utils::{babata_dir, resolve_home_dir},
+    utils::{babata_dir, channel_dir, resolve_home_dir},
 };
 use chrono::Local;
 
@@ -204,10 +203,11 @@ mod tests {
         let prompt = build_channels_prompt(&config).unwrap();
 
         assert!(prompt.contains("# Configured channels"));
-        assert!(prompt.contains("telegram: receives messages from Telegram user (id: 123456)"));
+        assert!(prompt.contains("Telegram: receives messages from Telegram user (id: 123456)"));
         assert!(prompt.contains("via bot (token: token)"));
-        assert!(prompt.contains("wechat: receives messages from Wechat user (id: wxid_123)"));
-        assert!(prompt.contains("latest context token is `"));
+        assert!(prompt.contains("Wechat: receives messages from Wechat user (id: wxid_123)"));
+        assert!(prompt.contains("Read file `"));
+        assert!(prompt.contains("latest_context_token"));
     }
 
     #[test]

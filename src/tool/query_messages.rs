@@ -5,7 +5,7 @@ use crate::{
     BabataResult,
     memory::MessageStore,
     tool::{Tool, ToolContext, ToolSpec, parse_tool_args},
-    utils::babata_dir,
+    utils::agent_dir,
 };
 
 #[derive(Debug)]
@@ -52,8 +52,7 @@ impl Tool for QueryMessagesTool {
             ));
         }
 
-        let babata_home = babata_dir()?;
-        let agent_home = babata_home.join("agents").join(&agent);
+        let agent_home = agent_dir(&agent)?;
         let store = MessageStore::new(&agent_home)?;
         let results = store.query_sql(&sql)?;
         serde_json::to_string(&results).map_err(Into::into)

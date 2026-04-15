@@ -3,9 +3,9 @@ use serde::Serialize;
 
 use crate::{
     BabataResult,
-    channel::channel_dir,
     config::{ChannelConfig, Config},
     error::BabataError,
+    utils::channel_dir,
 };
 
 pub(super) async fn list() -> BabataResult<Json<ListChannelsResponse>> {

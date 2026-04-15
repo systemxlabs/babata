@@ -6,14 +6,13 @@ pub use wechat::*;
 
 use std::collections::HashMap;
 use std::time::Duration;
-use std::{fmt::Debug, path::PathBuf, sync::Arc};
+use std::{fmt::Debug, sync::Arc};
 
 use crate::{
     BabataResult,
     config::{ChannelConfig, Config},
     message::Content,
     task::{CreateTaskRequest, TaskManager},
-    utils::babata_dir,
 };
 use log::{error, info, warn};
 
@@ -31,13 +30,6 @@ pub trait Channel: Debug + Send + Sync {
 
     async fn feedback(&self, content: Vec<Content>) -> BabataResult<Vec<Content>>;
 }
-
-pub fn channel_dir(channel_name: &str) -> BabataResult<PathBuf> {
-    Ok(babata_dir()?
-        .join("channels")
-        .join(channel_name.to_ascii_lowercase()))
-}
-
 pub fn build_channels(config: &Config) -> BabataResult<HashMap<String, Arc<dyn Channel>>> {
     let mut channels: HashMap<String, Arc<dyn Channel>> =
         HashMap::with_capacity(config.channels.len());

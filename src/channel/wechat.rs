@@ -20,7 +20,7 @@ use crate::{
     config::WechatChannelConfig,
     error::BabataError,
     message::{Content, MediaType},
-    utils::babata_dir,
+    utils::channel_dir,
 };
 
 #[derive(Debug)]
@@ -125,10 +125,7 @@ impl WechatChannel {
     }
 
     fn get_updates_buf_path() -> BabataResult<PathBuf> {
-        Ok(babata_dir()?
-            .join("channels")
-            .join("wechat")
-            .join("get_updates_buf"))
+        Ok(channel_dir("wechat")?.join("get_updates_buf"))
     }
 
     async fn send_text_message(&self, context_token: &str, text: &str) -> BabataResult<()> {
@@ -331,7 +328,7 @@ impl WechatChannel {
     }
 
     fn media_dir() -> BabataResult<PathBuf> {
-        Ok(babata_dir()?.join("channels").join("wechat").join("media"))
+        Ok(channel_dir("wechat")?.join("media"))
     }
 }
 
@@ -340,14 +337,7 @@ pub(crate) fn load_wechat_latest_context_token() -> BabataResult<Option<String>>
 }
 
 pub(crate) fn wechat_latest_context_token_path() -> BabataResult<PathBuf> {
-    Ok(wechat_latest_context_token_path_in(&babata_dir()?))
-}
-
-pub(crate) fn wechat_latest_context_token_path_in(babata_home: &Path) -> PathBuf {
-    babata_home
-        .join("channels")
-        .join("wechat")
-        .join("latest_context_token")
+    Ok(channel_dir("wechat")?.join("latest_context_token"))
 }
 
 fn render_feedback_text(content: &[Content]) -> BabataResult<String> {

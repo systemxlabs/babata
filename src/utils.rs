@@ -20,3 +20,13 @@ pub fn resolve_home_dir() -> BabataResult<PathBuf> {
 pub fn task_dir(task_id: Uuid) -> BabataResult<PathBuf> {
     Ok(babata_dir()?.join("tasks").join(task_id.to_string()))
 }
+
+pub fn channel_dir(channel_name: &str) -> BabataResult<PathBuf> {
+    Ok(babata_dir()?
+        .join("channels")
+        .join(channel_name.to_ascii_lowercase()))
+}
+
+pub fn agent_dir(agent_name: &str) -> BabataResult<PathBuf> {
+    Ok(babata_dir()?.join("agents").join(agent_name))
+}

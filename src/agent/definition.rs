@@ -6,7 +6,11 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use crate::{BabataResult, error::BabataError, utils::babata_dir};
+use crate::{
+    BabataResult,
+    error::BabataError,
+    utils::{agent_dir, babata_dir},
+};
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct AgentFrontmatter {
@@ -39,10 +43,6 @@ impl Agent {
 pub fn load_agents() -> BabataResult<HashMap<String, Arc<Agent>>> {
     let dir = babata_dir()?.join("agents");
     load_agents_from_dir(&dir)
-}
-
-pub(crate) fn agent_dir(name: &str) -> BabataResult<PathBuf> {
-    Ok(babata_dir()?.join("agents").join(name))
 }
 
 fn load_agents_from_dir(dir: &Path) -> BabataResult<HashMap<String, Arc<Agent>>> {
@@ -174,7 +174,7 @@ fn parse_agent_content(content: &str, path: &Path) -> BabataResult<(AgentFrontma
 
 /// Save an agent to AGENT.md file
 pub fn save_agent(frontmatter: &AgentFrontmatter, body: &str) -> BabataResult<()> {
-    let agent_dir = babata_dir()?.join("agents").join(&frontmatter.name);
+    let agent_dir = agent_dir(&frontmatter.name)?;
     std::fs::create_dir_all(&agent_dir).map_err(|err| {
         BabataError::config(format!(
             "Failed to create agent directory '{}': {}",
@@ -226,9 +226,9 @@ pub fn delete_agent(name: &str) -> BabataResult<()> {
 
 /// Check if an agent exists
 pub fn agent_exists(name: &str) -> bool {
-    match babata_dir() {
+    match agent_dir(name) {
         Ok(dir) => {
-            let agent_path = dir.join("agents").join(name).join("AGENT.md");
+            let agent_path = dir.join("AGENT.md");
             agent_path.is_file()
         }
         Err(_) => false,
