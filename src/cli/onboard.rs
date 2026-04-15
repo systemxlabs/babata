@@ -270,7 +270,7 @@ fn configure_background_service() -> BabataResult<bool> {
             EMBEDDED_MACOS_SERVICE_TEMPLATE,
             "babata.server.plist.template",
             "babata.server.plist",
-            crate::utils::resolve_home_dir()?
+            crate::utils::user_home_dir()?
                 .join("Library")
                 .join("LaunchAgents"),
         ),
@@ -318,7 +318,7 @@ fn render_background_service_template(
         )));
     }
 
-    let home_dir = crate::utils::resolve_home_dir()?;
+    let home_dir = crate::utils::user_home_dir()?;
     let rendered = template_content.replace("{{HOME_DIR}}", &home_dir.to_string_lossy());
 
     std::fs::write(output_path, rendered).map_err(|err| {

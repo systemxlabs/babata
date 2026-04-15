@@ -5,10 +5,10 @@ use uuid::Uuid;
 use crate::{BabataResult, error::BabataError};
 
 pub fn babata_dir() -> BabataResult<PathBuf> {
-    Ok(resolve_home_dir()?.join(".babata"))
+    Ok(user_home_dir()?.join(".babata"))
 }
 
-pub fn resolve_home_dir() -> BabataResult<PathBuf> {
+pub fn user_home_dir() -> BabataResult<PathBuf> {
     std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
         .map(PathBuf::from)

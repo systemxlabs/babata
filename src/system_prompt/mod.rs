@@ -6,7 +6,7 @@ use crate::{
     config::{ChannelConfig, Config},
     skill::Skill,
     tool::ToolSpec,
-    utils::{babata_dir, channel_dir, resolve_home_dir, task_dir},
+    utils::{babata_dir, channel_dir, user_home_dir, task_dir},
 };
 use chrono::Local;
 use uuid::Uuid;
@@ -51,7 +51,7 @@ pub fn build_environment_prompt(task_id: Uuid) -> BabataResult<String> {
 - User time zone: {}
 - Operating system: {}
 - CPU architecture: {}"#,
-        resolve_home_dir()?.display(),
+        user_home_dir()?.display(),
         babata_dir()?.display(),
         std::env::current_dir()?.display(),
         task_dir(task_id)?.display(),

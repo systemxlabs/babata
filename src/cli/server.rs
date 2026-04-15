@@ -226,7 +226,7 @@ fn stop_linux() -> BabataResult<()> {
 }
 
 fn macos_plist_path() -> BabataResult<std::path::PathBuf> {
-    Ok(crate::utils::resolve_home_dir()?
+    Ok(crate::utils::user_home_dir()?
         .join("Library")
         .join("LaunchAgents")
         .join("babata.server.plist"))
