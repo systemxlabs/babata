@@ -29,3 +29,16 @@ This document outlines the engineering preferences and cultural principles for a
 - **Tests are guard rails**: Add or update tests alongside code changes.
 - **Consistency matters**: Follow existing patterns unless they violate the principles above.
 - **Security by default**: Validate inputs, sanitize outputs, and never log secrets.
+
+## 5. Testing & UI Validation
+
+- Start the local server with `BABATA_SERVER_PORT=<port> cargo run -- server serve`.
+- Open `http://127.0.0.1:<port>/` in a browser to inspect the Web UI.
+- Prefer browser-automation tools (e.g., `browser-use`, Playwright, Puppeteer) to verify rendering and interactions.
+- When adding or changing frontend-related features, confirm the UI behaves correctly through automation or manual inspection.
+
+## 6. Development Workflow
+
+- **Backend code**: Before every commit, run `cargo fmt`, `cargo clippy`, and `cargo test` to ensure formatting, static analysis, and tests all pass.
+- **Frontend code**: After modifying frontend code, perform the equivalent validation (type checking, build checks, unit tests, etc.) according to the frontend project's configuration.
+- All CI checks must pass before requesting code review or merging.
