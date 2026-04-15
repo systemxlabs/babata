@@ -1,6 +1,8 @@
+mod config;
 mod telegram;
 mod wechat;
 
+pub use config::*;
 pub use telegram::*;
 pub use wechat::*;
 
@@ -10,7 +12,6 @@ use std::{fmt::Debug, sync::Arc};
 
 use crate::{
     BabataResult,
-    config::{ChannelConfig, Config},
     message::Content,
     task::{CreateTaskRequest, TaskManager},
 };
@@ -30,11 +31,14 @@ pub trait Channel: Debug + Send + Sync {
 
     async fn feedback(&self, content: Vec<Content>) -> BabataResult<Vec<Content>>;
 }
-pub fn build_channels(config: &Config) -> BabataResult<HashMap<String, Arc<dyn Channel>>> {
-    let mut channels: HashMap<String, Arc<dyn Channel>> =
-        HashMap::with_capacity(config.channels.len());
 
-    for channel_config in &config.channels {
+pub fn build_channels(
+    channel_configs: &[ChannelConfig],
+) -> BabataResult<HashMap<String, Arc<dyn Channel>>> {
+    let mut channels: HashMap<String, Arc<dyn Channel>> =
+        HashMap::with_capacity(channel_configs.len());
+
+    for channel_config in channel_configs {
         match channel_config {
             ChannelConfig::Telegram(telegram_config) => {
                 telegram_config.validate()?;

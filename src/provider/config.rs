@@ -84,14 +84,14 @@ impl ProviderConfig {
                 continue;
             }
 
-            let Some(provider_dir_name) = path.file_name().and_then(|name| name.to_str()) else {
+            let Some(provider_name) = path.file_name().and_then(|name| name.to_str()) else {
                 return Err(BabataError::config(format!(
                     "Provider directory '{}' is not valid UTF-8",
                     path.display()
                 )));
             };
 
-            let provider = Self::load(provider_dir_name)?;
+            let provider = Self::load(provider_name)?;
             let normalized_name = provider.name.to_ascii_lowercase();
             if !provider_names.insert(normalized_name) {
                 return Err(BabataError::config(format!(

@@ -1,27 +1,19 @@
 use axum::{Json, extract::Path};
 use serde::Serialize;
 
-use crate::{
-    BabataResult,
-    config::{ChannelConfig, Config},
-    error::BabataError,
-    utils::channel_dir,
-};
+use crate::{BabataResult, channel::ChannelConfig, error::BabataError};
 
 pub(super) async fn list() -> BabataResult<Json<ListChannelsResponse>> {
-    let config = Config::load_or_init()?;
     Ok(Json(ListChannelsResponse {
-        channels: config.channels,
+        channels: ChannelConfig::load_all()?,
     }))
 }
 
 pub(super) async fn create(Json(channel_config): Json<ChannelConfig>) -> BabataResult<()> {
     channel_config.validate()?;
 
-    let mut config = Config::load()?;
     let channel_name = channel_config.name().to_string();
-    if config
-        .channels
+    if ChannelConfig::load_all()?
         .iter()
         .any(|channel| channel.matches_name(&channel_name))
     {
@@ -31,9 +23,7 @@ pub(super) async fn create(Json(channel_config): Json<ChannelConfig>) -> BabataR
         )));
     }
 
-    config.channels.push(channel_config);
-    config.validate()?;
-    config.save()?;
+    channel_config.save()?;
     Ok(())
 }
 
@@ -51,9 +41,7 @@ pub(super) async fn update(
         )));
     }
 
-    let mut config = Config::load()?;
-    if !config
-        .channels
+    if !ChannelConfig::load_all()?
         .iter()
         .any(|channel| channel.matches_name(&name))
     {
@@ -63,28 +51,12 @@ pub(super) async fn update(
         )));
     }
 
-    config.upsert_channel(channel_config);
-    config.validate()?;
-    config.save()?;
+    channel_config.save()?;
     Ok(())
 }
 
 pub(super) async fn delete(Path(name): Path<String>) -> BabataResult<()> {
-    let mut config = Config::load()?;
-    let index = config
-        .channels
-        .iter()
-        .position(|channel| channel.matches_name(&name))
-        .ok_or_else(|| BabataError::not_found(format!("Channel '{}' not found", name)))?;
-
-    config.channels.remove(index);
-    config.validate()?;
-    config.save()?;
-
-    let channel_dir = channel_dir(&name)?;
-    if channel_dir.exists() {
-        std::fs::remove_dir_all(channel_dir)?;
-    }
+    ChannelConfig::delete(&name)?;
     Ok(())
 }
 

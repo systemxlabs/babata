@@ -10,9 +10,9 @@ use teloxide::{
 };
 use tokio::sync::{Mutex, oneshot};
 
+use super::TelegramChannelConfig;
 use crate::{
     BabataResult,
-    config::TelegramChannelConfig,
     error::BabataError,
     message::{Content, MediaType},
     utils::channel_dir,

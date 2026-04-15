@@ -15,9 +15,9 @@ use wechatbot::{
     types::CDNMedia as WechatCdnMedia,
 };
 
+use super::WechatChannelConfig;
 use crate::{
     BabataResult,
-    config::WechatChannelConfig,
     error::BabataError,
     message::{Content, MediaType},
     utils::channel_dir,
@@ -526,7 +526,7 @@ mod tests {
 
     #[tokio::test]
     async fn incoming_message_to_content_renders_text_voice_and_quote() {
-        let channel = WechatChannel::new(crate::config::WechatChannelConfig {
+        let channel = WechatChannel::new(crate::channel::WechatChannelConfig {
             bot_token: "token".to_string(),
             user_id: "wxid_bot".to_string(),
         })

@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use crate::{
     BabataResult,
     agent::Agent,
-    config::{ChannelConfig, Config},
+    channel::ChannelConfig,
     skill::Skill,
     tool::ToolSpec,
     utils::{babata_dir, channel_dir, task_dir, user_home_dir},
@@ -14,7 +14,7 @@ use uuid::Uuid;
 pub const BABATA_SYSTEM_DESCRIPTION: &str = include_str!("SYSTEM.md");
 
 pub fn build_system_prompts(
-    config: &Config,
+    channel_configs: &[ChannelConfig],
     agents: &HashMap<String, Arc<Agent>>,
     skills: &[Skill],
     agent_body: &str,
@@ -26,7 +26,7 @@ pub fn build_system_prompts(
         BABATA_SYSTEM_DESCRIPTION.to_string(),
         build_environment_prompt(task_id)?,
         build_agents_prompt(agents),
-        build_channels_prompt(config)?,
+        build_channels_prompt(channel_configs)?,
     ];
 
     if let Some(skills_prompt) = build_skills_prompt(skills) {
@@ -79,9 +79,9 @@ You can chose an agent from the list above to use for tasks."#,
     )
 }
 
-pub fn build_channels_prompt(config: &Config) -> BabataResult<String> {
-    let mut channel_sections = Vec::with_capacity(config.channels.len());
-    for channel in &config.channels {
+pub fn build_channels_prompt(channel_configs: &[ChannelConfig]) -> BabataResult<String> {
+    let mut channel_sections = Vec::with_capacity(channel_configs.len());
+    for channel in channel_configs {
         let description = match channel {
             ChannelConfig::Telegram(telegram) => format!(
                 "{}: receives messages from Telegram user (id: {}) via bot (token: {})",
@@ -162,7 +162,7 @@ mod tests {
         build_channels_prompt, build_environment_prompt, build_skills_prompt, build_tools_prompt,
     };
     use crate::{
-        config::{ChannelConfig, Config, TelegramChannelConfig, WechatChannelConfig},
+        channel::{ChannelConfig, TelegramChannelConfig, WechatChannelConfig},
         skill::{Skill, SkillFrontmatter},
         tool::ToolSpec,
     };
@@ -182,20 +182,18 @@ mod tests {
 
     #[test]
     fn build_channels_prompt_includes_channel_capabilities() {
-        let config = Config {
-            channels: vec![
-                ChannelConfig::Telegram(TelegramChannelConfig {
-                    bot_token: "token".to_string(),
-                    user_id: 123456,
-                }),
-                ChannelConfig::Wechat(WechatChannelConfig {
-                    bot_token: "token".to_string(),
-                    user_id: "wxid_123".to_string(),
-                }),
-            ],
-        };
+        let channel_configs = vec![
+            ChannelConfig::Telegram(TelegramChannelConfig {
+                bot_token: "token".to_string(),
+                user_id: 123456,
+            }),
+            ChannelConfig::Wechat(WechatChannelConfig {
+                bot_token: "token".to_string(),
+                user_id: "wxid_123".to_string(),
+            }),
+        ];
 
-        let prompt = build_channels_prompt(&config).unwrap();
+        let prompt = build_channels_prompt(&channel_configs).unwrap();
 
         assert!(prompt.contains("# Configured channels"));
         assert!(prompt.contains("Telegram: receives messages from Telegram user (id: 123456)"));
@@ -207,9 +205,7 @@ mod tests {
 
     #[test]
     fn build_channels_prompt_returns_header_when_empty() {
-        let config = Config::default();
-
-        let prompt = build_channels_prompt(&config).unwrap();
+        let prompt = build_channels_prompt(&[]).unwrap();
 
         assert_eq!(prompt, "# Configured channels\n");
     }
