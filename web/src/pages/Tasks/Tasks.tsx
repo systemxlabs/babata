@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import {
   RefreshCw,
-  Trash2,
   Workflow,
 } from "lucide-react"
 
@@ -143,29 +142,27 @@ export function Tasks() {
     setSelectedTaskId(taskId)
   }, [])
 
-  const selectedRootTask = useMemo(
-    () => tasks.find((task) => task.task_id === selectedRootTaskId) ?? null,
-    [selectedRootTaskId, tasks]
-  )
-
   const handleRootTaskSelect = useCallback((taskId: string) => {
     setSelectedRootTaskId(taskId)
   }, [])
 
-  const handleDeleteTreeClick = useCallback(() => {
-    if (!selectedRootTask) return
-    setTaskToDelete(selectedRootTask)
+  const handleDeleteTaskClick = useCallback((task: Task) => {
+    setTaskToDelete(task)
     setShowDeleteModal(true)
-  }, [selectedRootTask])
+  }, [])
 
   const handleDeleteConfirm = useCallback(async () => {
     if (!taskToDelete) return
 
     await deleteTask(taskToDelete.task_id)
+    setSelectedTaskId(null)
     await fetchTasks()
+    if (taskToDelete.task_id !== taskToDelete.root_task_id) {
+      await fetchTree(taskToDelete.root_task_id)
+    }
     setShowDeleteModal(false)
     setTaskToDelete(null)
-  }, [fetchTasks, taskToDelete])
+  }, [fetchTasks, fetchTree, taskToDelete])
 
   const handleControlTask = useCallback(async (taskId: string, action: "pause" | "resume" | "cancel") => {
     try {
@@ -300,25 +297,12 @@ export function Tasks() {
                     点击节点查看任务详情、文件目录与执行日志。
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  {treeLoading && selectedTree ? (
-                    <Badge variant="outline" className="rounded-full px-3 py-1.5">
-                      <RefreshCw className="mr-1.5 size-3.5 animate-spin" />
-                      刷新中
-                    </Badge>
-                  ) : null}
-                  {selectedRootTask ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="rounded-full text-destructive hover:text-destructive"
-                      onClick={handleDeleteTreeClick}
-                    >
-                      <Trash2 className="mr-1.5 size-4" />
-                      删除任务树
-                    </Button>
-                  ) : null}
-                </div>
+                {treeLoading && selectedTree ? (
+                  <Badge variant="outline" className="rounded-full px-3 py-1.5">
+                    <RefreshCw className="mr-1.5 size-3.5 animate-spin" />
+                    刷新中
+                  </Badge>
+                ) : null}
               </CardHeader>
               <CardContent className="pt-0">
                 {selectedTree ? (
@@ -338,6 +322,7 @@ export function Tasks() {
                           onClick={handleTaskClick}
                           onControlTask={handleControlTask}
                           onSteerTask={handleSteerTask}
+                          onDeleteTask={handleDeleteTaskClick}
                           formatTime={formatTime}
                         />
                       </div>
@@ -389,6 +374,7 @@ export function Tasks() {
         isOpen={showDeleteModal}
         taskId={taskToDelete?.task_id ?? ""}
         taskDescription={taskToDelete?.description ?? ""}
+        isRootTask={!taskToDelete?.parent_task_id}
         onConfirm={handleDeleteConfirm}
         onCancel={() => {
           setShowDeleteModal(false)

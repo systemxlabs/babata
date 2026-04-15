@@ -16,6 +16,7 @@ interface DeleteConfirmModalProps {
   isOpen: boolean
   taskId: string
   taskDescription?: string
+  isRootTask?: boolean
   onConfirm: () => Promise<void>
   onCancel: () => void
 }
@@ -24,6 +25,7 @@ export function DeleteConfirmModal({
   isOpen,
   taskId,
   taskDescription,
+  isRootTask = true,
   onConfirm,
   onCancel,
 }: DeleteConfirmModalProps) {
@@ -49,10 +51,12 @@ export function DeleteConfirmModal({
             </div>
             <div>
               <AlertDialogTitle className="text-left text-xl tracking-tight">
-                确认删除整棵任务树？
+                {isRootTask ? "确认删除整棵任务树？" : "确认删除当前任务分支？"}
               </AlertDialogTitle>
               <AlertDialogDescription className="text-left">
-                此操作无法撤销，根任务及其关联子任务都会被永久删除。
+                {isRootTask
+                  ? "此操作无法撤销，根任务及其关联子任务都会被永久删除。"
+                  : "此操作无法撤销，当前任务及其所有子任务都会被永久删除。"}
               </AlertDialogDescription>
             </div>
           </div>

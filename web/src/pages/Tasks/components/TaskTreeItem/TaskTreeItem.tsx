@@ -5,6 +5,7 @@ import {
   Play,
   Rows3,
   Sparkles,
+  Trash2,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -24,6 +25,7 @@ interface TaskTreeItemProps {
   selectedTaskId?: string | null
   onControlTask?: (taskId: string, action: "pause" | "resume" | "cancel") => void
   onSteerTask?: (taskId: string, message: string) => Promise<void>
+  onDeleteTask?: (task: Task) => void
   formatTime: (timestamp: string | number) => string
 }
 
@@ -33,6 +35,7 @@ export function TaskTreeItem({
   selectedTaskId,
   onControlTask,
   onSteerTask,
+  onDeleteTask,
   formatTime,
 }: TaskTreeItemProps) {
   const isRootTask = !task.parent_task_id
@@ -84,7 +87,10 @@ export function TaskTreeItem({
                       </span>
                     ) : null}
                   </div>
-                  <div className="line-clamp-3 text-base font-semibold leading-6 tracking-tight text-foreground" title={task.description}>
+                  <div
+                    className="line-clamp-3 text-base font-semibold leading-6 tracking-tight text-foreground"
+                    title={task.description}
+                  >
                     {truncateDescription(task.description, isRootTask ? 96 : 72)}
                   </div>
                 </div>
@@ -110,21 +116,41 @@ export function TaskTreeItem({
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-3">
-              {actualChildren.length > 0 && (
+              {actualChildren.length > 0 ? (
                 <div className="rounded-full border border-border/70 bg-background/70 px-3 py-1.5 text-xs text-muted-foreground">
                   {actualChildren.length} 个子任务
                 </div>
+              ) : (
+                <div />
               )}
-              <div className="flex flex-wrap items-center gap-2" onClick={(event) => event.stopPropagation()}>
-              {task.status === "running" && onSteerTask ? (
-                <TaskSteerDialog
-                  taskId={task.task_id}
-                  taskDescription={task.description}
-                  onSubmit={onSteerTask}
-                />
-              ) : null}
-              {(task.status === 'running' || task.status === 'paused') && onControlTask && (
-                <>
+
+              <div
+                className="flex flex-wrap items-center gap-2"
+                onClick={(event) => event.stopPropagation()}
+              >
+                {onDeleteTask ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-full text-destructive hover:text-destructive"
+                    onClick={() => onDeleteTask(task)}
+                    title={isRootTask ? "删除任务树" : "删除任务分支"}
+                  >
+                    <Trash2 className="mr-1.5 size-3.5" />
+                    删除
+                  </Button>
+                ) : null}
+
+                {task.status === "running" && onSteerTask ? (
+                  <TaskSteerDialog
+                    taskId={task.task_id}
+                    taskDescription={task.description}
+                    onSubmit={onSteerTask}
+                  />
+                ) : null}
+
+                {(task.status === "running" || task.status === "paused") && onControlTask ? (
+                  <>
                     {task.status === "running" ? (
                       <Button
                         variant="outline"
@@ -137,6 +163,7 @@ export function TaskTreeItem({
                         暂停
                       </Button>
                     ) : null}
+
                     {task.status === "paused" ? (
                       <Button
                         variant="outline"
@@ -149,6 +176,7 @@ export function TaskTreeItem({
                         恢复
                       </Button>
                     ) : null}
+
                     <Button
                       variant="outline"
                       size="sm"
@@ -159,30 +187,34 @@ export function TaskTreeItem({
                       <Ban className="mr-1.5 size-3.5" />
                       取消
                     </Button>
-                </>
-              )}
+                  </>
+                ) : null}
+              </div>
             </div>
-          </div>
           </CardContent>
         </Card>
 
-        {hasVisibleChildren && (
+        {hasVisibleChildren ? (
           <div className="relative flex flex-col gap-5 pt-6 before:absolute before:left-[-16px] before:top-[48px] before:h-px before:w-4 before:bg-border/80">
             <div className="absolute bottom-[26px] left-[-16px] top-[48px] w-px bg-border/80" />
             {actualChildren.map((child) => (
-              <div key={child.task_id} className="relative before:absolute before:left-[-16px] before:top-[48px] before:h-px before:w-4 before:bg-border/80">
+              <div
+                key={child.task_id}
+                className="relative before:absolute before:left-[-16px] before:top-[48px] before:h-px before:w-4 before:bg-border/80"
+              >
                 <TaskTreeItem
                   task={child}
                   onClick={onClick}
                   selectedTaskId={selectedTaskId}
                   onControlTask={onControlTask}
                   onSteerTask={onSteerTask}
+                  onDeleteTask={onDeleteTask}
                   formatTime={formatTime}
                 />
               </div>
             ))}
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   )
