@@ -8,16 +8,12 @@ use crate::{
     BabataResult,
     error::BabataError,
     message::{Content, Message, ToolCall},
-    provider::{
-        GenerationRequest, GenerationResponse, InteractionRequest, InteractionResponse, Model,
-        Provider,
-    },
+    provider::{GenerationRequest, GenerationResponse, Provider},
     tool::ToolSpec,
 };
 
 const ANTHROPIC_API_VERSION: &str = "2023-06-01";
 const DEFAULT_MAX_TOKENS: u32 = 8192;
-const ANTHROPIC_COMPATIBLE_SUPPORTED_MODELS: &[Model] = &[];
 
 #[derive(Debug)]
 pub struct AnthropicCompatibleProvider {
@@ -269,13 +265,6 @@ impl AnthropicCompatibleProvider {
             },
         })
     }
-
-    pub async fn interact(
-        &self,
-        _request: InteractionRequest,
-    ) -> BabataResult<InteractionResponse> {
-        todo!()
-    }
 }
 
 #[async_trait::async_trait]
@@ -284,19 +273,11 @@ impl Provider for AnthropicCompatibleProvider {
         "anthropic-compatible"
     }
 
-    fn supported_models() -> &'static [Model] {
-        ANTHROPIC_COMPATIBLE_SUPPORTED_MODELS
-    }
-
     async fn generate<'a>(
         &self,
         request: GenerationRequest<'a>,
     ) -> BabataResult<GenerationResponse> {
         AnthropicCompatibleProvider::generate(self, request).await
-    }
-
-    async fn interact(&self, request: InteractionRequest) -> BabataResult<InteractionResponse> {
-        AnthropicCompatibleProvider::interact(self, request).await
     }
 }
 

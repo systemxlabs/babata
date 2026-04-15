@@ -75,13 +75,7 @@ impl ProviderConfig {
             )));
         }
 
-        std::fs::remove_dir_all(&provider_dir).map_err(|err| {
-            BabataError::config(format!(
-                "Failed to delete provider directory '{}': {}",
-                provider_dir.display(),
-                err
-            ))
-        })?;
+        std::fs::remove_dir_all(&provider_dir)?;
 
         Ok(())
     }
@@ -103,13 +97,7 @@ impl ProviderConfig {
             )));
         }
 
-        let entries = std::fs::read_dir(root).map_err(|err| {
-            BabataError::config(format!(
-                "Failed to read providers directory '{}': {}",
-                root.display(),
-                err
-            ))
-        })?;
+        let entries = std::fs::read_dir(root)?;
 
         let mut providers = Vec::new();
         let mut provider_names = HashSet::new();
@@ -152,24 +140,12 @@ impl ProviderConfig {
         self.validate()?;
 
         let provider_dir = root.join(validate_provider_name(&self.name)?);
-        std::fs::create_dir_all(&provider_dir).map_err(|err| {
-            BabataError::config(format!(
-                "Failed to create provider directory '{}': {}",
-                provider_dir.display(),
-                err
-            ))
-        })?;
+        std::fs::create_dir_all(&provider_dir)?;
 
         let payload = serde_json::to_string_pretty(self)
             .map_err(|err| BabataError::config(format!("Failed to serialize provider: {}", err)))?;
         let config_path = provider_dir.join(PROVIDER_CONFIG_FILE_NAME);
-        std::fs::write(&config_path, payload).map_err(|err| {
-            BabataError::config(format!(
-                "Failed to write provider config file '{}': {}",
-                config_path.display(),
-                err
-            ))
-        })?;
+        std::fs::write(&config_path, payload)?;
 
         Ok(())
     }
@@ -180,13 +156,7 @@ fn providers_root() -> BabataResult<PathBuf> {
 }
 
 fn load_from_path(config_path: &Path, name: &str) -> BabataResult<ProviderConfig> {
-    let raw = std::fs::read_to_string(config_path).map_err(|err| {
-        BabataError::config(format!(
-            "Failed to read provider config file '{}': {}",
-            config_path.display(),
-            err
-        ))
-    })?;
+    let raw = std::fs::read_to_string(config_path)?;
     let provider_config = serde_json::from_str::<ProviderConfig>(&raw).map_err(|err| {
         BabataError::config(format!(
             "Failed to parse provider config file '{}': {}",

@@ -10,7 +10,7 @@ Babata home directory is at `{USER_HOME}/.babata/` (referred to as `{BABATA_HOME
 ├─ agents/        # Agent definitions and their memory storage
 ├─ channels/      # Channel data (e.g., message cursor)
 ├─ logs/          # System logs
-├─ providers/     # Provider configs, one directory per provider
+├─ providers/     # Provider configs
 ├─ skills/        # Installed skills
 ├─ tasks/         # Task home directories
 ├─ config.json    # Core configuration file

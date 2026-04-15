@@ -17,15 +17,10 @@ pub trait Provider: Debug + Send + Sync {
     where
         Self: Sized;
 
-    fn supported_models() -> &'static [Model]
-    where
-        Self: Sized;
-
     async fn generate<'a>(
         &self,
         request: GenerationRequest<'a>,
     ) -> BabataResult<GenerationResponse>;
-    async fn interact(&self, request: InteractionRequest) -> BabataResult<InteractionResponse>;
 }
 
 pub struct GenerationRequest<'a> {
@@ -39,17 +34,6 @@ pub struct GenerationRequest<'a> {
 
 pub struct GenerationResponse {
     pub message: Message,
-}
-
-pub struct InteractionRequest {}
-
-pub struct InteractionResponse {}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Model {
-    pub provider: &'static str,
-    pub name: &'static str,
-    pub context_length: usize,
 }
 
 pub fn create_provider(provider_config: &ProviderConfig) -> BabataResult<Arc<dyn Provider>> {

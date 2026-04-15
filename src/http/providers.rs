@@ -1,21 +1,15 @@
 use axum::{Json, extract::Path};
 use serde::Serialize;
 
-use crate::{
-    BabataResult,
-    config::{Config, ProviderConfig},
-    error::BabataError,
-};
+use crate::{BabataResult, config::ProviderConfig, error::BabataError};
 
 pub(super) async fn list() -> BabataResult<Json<ListProvidersResponse>> {
-    Config::load_or_init()?;
     Ok(Json(ListProvidersResponse {
         providers: ProviderConfig::load_all()?,
     }))
 }
 
 pub(super) async fn create(Json(provider_config): Json<ProviderConfig>) -> BabataResult<()> {
-    Config::load_or_init()?;
     provider_config.validate()?;
 
     if ProviderConfig::load_all()?
@@ -36,7 +30,6 @@ pub(super) async fn update(
     Path(name): Path<String>,
     Json(provider_config): Json<ProviderConfig>,
 ) -> BabataResult<()> {
-    Config::load_or_init()?;
     provider_config.validate()?;
 
     if !provider_config.matches_name(&name) {
@@ -46,13 +39,11 @@ pub(super) async fn update(
         )));
     }
 
-    ProviderConfig::load(&name)?;
     provider_config.save()?;
     Ok(())
 }
 
 pub(super) async fn delete(Path(name): Path<String>) -> BabataResult<()> {
-    Config::load_or_init()?;
     ProviderConfig::delete(&name)?;
     Ok(())
 }

@@ -8,14 +8,9 @@ use crate::{
     BabataResult,
     error::BabataError,
     message::{Content, MediaType, Message, ToolCall},
-    provider::{
-        GenerationRequest, GenerationResponse, InteractionRequest, InteractionResponse, Model,
-        Provider,
-    },
+    provider::{GenerationRequest, GenerationResponse, Provider},
     tool::ToolSpec,
 };
-
-const OPENAI_COMPATIBLE_SUPPORTED_MODELS: &[Model] = &[];
 
 #[derive(Debug)]
 pub struct OpenAICompatibleProvider {
@@ -279,13 +274,6 @@ impl OpenAICompatibleProvider {
             },
         })
     }
-
-    pub async fn interact(
-        &self,
-        _request: InteractionRequest,
-    ) -> BabataResult<InteractionResponse> {
-        todo!()
-    }
 }
 
 #[async_trait::async_trait]
@@ -294,19 +282,11 @@ impl Provider for OpenAICompatibleProvider {
         "openai-compatible"
     }
 
-    fn supported_models() -> &'static [Model] {
-        OPENAI_COMPATIBLE_SUPPORTED_MODELS
-    }
-
     async fn generate<'a>(
         &self,
         request: GenerationRequest<'a>,
     ) -> BabataResult<GenerationResponse> {
         OpenAICompatibleProvider::generate(self, request).await
-    }
-
-    async fn interact(&self, request: InteractionRequest) -> BabataResult<InteractionResponse> {
-        OpenAICompatibleProvider::interact(self, request).await
     }
 }
 
