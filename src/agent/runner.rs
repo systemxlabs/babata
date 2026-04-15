@@ -12,7 +12,7 @@ use crate::{
     error::BabataError,
     memory::Memory,
     message::{Content, Message},
-    provider::{GenerationRequest, Provider, create_provider},
+    provider::{GenerationRequest, Provider, ProviderConfig, create_provider},
     skill::load_skills,
     system_prompt::build_system_prompts,
     task::SteerQueue,
@@ -41,8 +41,8 @@ impl AgentTask {
         let config = Config::load()?;
         let agents = load_agents()?;
 
-        let provider_config = config.get_provider(&self.agent.frontmatter.provider)?;
-        let provider = create_provider(provider_config)?;
+        let provider_config = ProviderConfig::load(&self.agent.frontmatter.provider)?;
+        let provider = create_provider(&provider_config)?;
         let model = self.agent.frontmatter.model.clone();
 
         let skills = load_skills()?;

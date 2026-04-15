@@ -1,4 +1,4 @@
-﻿use chrono::Utc;
+use chrono::Utc;
 use log::{debug, warn};
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
@@ -8,7 +8,7 @@ use crate::{
     BabataResult,
     error::BabataError,
     message::{Content, Message, ToolCall},
-    provider::{GenerationRequest, GenerationResponse, InteractionRequest, InteractionResponse},
+    provider::{GenerationRequest, GenerationResponse, Provider},
     tool::ToolSpec,
 };
 
@@ -265,12 +265,19 @@ impl AnthropicCompatibleProvider {
             },
         })
     }
+}
 
-    pub async fn interact(
+#[async_trait::async_trait]
+impl Provider for AnthropicCompatibleProvider {
+    fn name() -> &'static str {
+        "anthropic-compatible"
+    }
+
+    async fn generate<'a>(
         &self,
-        _request: InteractionRequest,
-    ) -> BabataResult<InteractionResponse> {
-        todo!()
+        request: GenerationRequest<'a>,
+    ) -> BabataResult<GenerationResponse> {
+        AnthropicCompatibleProvider::generate(self, request).await
     }
 }
 

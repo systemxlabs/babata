@@ -105,35 +105,16 @@ export interface UpdateAgentRequest {
 
 export type GetAgentResponse = AgentDetail;
 
-export type BuiltinProviderName =
-  | 'openai'
-  | 'kimi'
-  | 'moonshot'
-  | 'deepseek'
-  | 'minimax'
-  | 'anthropic';
-
-export type ProviderName = BuiltinProviderName | 'custom';
-
 export type CompatibleApi = 'openai' | 'anthropic';
 
 export type ChannelName = 'telegram' | 'wechat';
 
-interface ProviderConfigBase {
+export interface ProviderConfig {
+  name: string;
   api_key: string;
-}
-
-export interface BuiltinProviderConfig extends ProviderConfigBase {
-  name: BuiltinProviderName;
-}
-
-export interface CustomProviderConfig extends ProviderConfigBase {
-  name: 'custom';
   base_url: string;
   compatible_api: CompatibleApi;
 }
-
-export type ProviderConfig = BuiltinProviderConfig | CustomProviderConfig;
 
 export interface ProvidersResponse {
   providers: ProviderConfig[];

@@ -10,6 +10,7 @@ Babata home directory is at `{USER_HOME}/.babata/` (referred to as `{BABATA_HOME
 ├─ agents/        # Agent definitions and their memory storage
 ├─ channels/      # Channel data (e.g., message cursor)
 ├─ logs/          # System logs
+├─ providers/     # Provider configs
 ├─ skills/        # Installed skills
 ├─ tasks/         # Task home directories
 ├─ config.json    # Core configuration file
@@ -65,4 +66,4 @@ Babata uses an asynchronous task system to represent all user work. Each user pr
 
 ## Other Notes
 - Source code repo: https://github.com/systemxlabs/babata
-- Do not edit `{BABATA_HOME}/config.json` directly, use babata CLI instead (see `babata --help`).
+- Do not edit `{BABATA_HOME}/config.json` or `{BABATA_HOME}/providers/*/config.json` directly, use babata CLI or HTTP APIs instead.

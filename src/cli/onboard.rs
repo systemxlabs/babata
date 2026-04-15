@@ -3,16 +3,8 @@ use std::path::Path;
 use crate::{
     BabataResult,
     channel::{Channel, TelegramChannel, WechatChannel},
-    config::{
-        AnthropicProviderConfig, ChannelConfig, CompatibleApi, Config, CustomProviderConfig,
-        DeepSeekProviderConfig, KimiProviderConfig, MiniMaxProviderConfig, MoonshotProviderConfig,
-        OpenAIProviderConfig, ProviderConfig, TelegramChannelConfig, WechatChannelConfig,
-    },
+    config::{ChannelConfig, Config, TelegramChannelConfig, WechatChannelConfig},
     error::BabataError,
-    provider::{
-        AnthropicProvider, CustomProvider, DeepSeekProvider, KimiProvider, MiniMaxProvider,
-        MoonshotProvider, OpenAIProvider, Provider,
-    },
 };
 
 const EMBEDDED_MACOS_SERVICE_TEMPLATE: &str =
@@ -29,10 +21,6 @@ pub fn run() {
 
 fn run_onboard() -> BabataResult<()> {
     let mut config = Config::load_or_init()?;
-
-    if let Some(provider_config) = prompt_provider_setup()? {
-        config.upsert_provider(provider_config);
-    }
 
     if let Some(channel_config) = prompt_channel_setup()? {
         config.upsert_channel(channel_config);
@@ -55,107 +43,6 @@ fn run_onboard() -> BabataResult<()> {
     }
 
     Ok(())
-}
-
-fn prompt_provider_setup() -> BabataResult<Option<ProviderConfig>> {
-    println!("Select provider:");
-    let providers = available_provider_names();
-    for (idx, provider) in providers.iter().enumerate() {
-        println!("{}. {}", idx + 1, provider);
-    }
-    println!("{}. skip", providers.len() + 1);
-
-    let selection = prompt_line(&format!(
-        "Choice (1-{}, or press Enter to skip)",
-        providers.len() + 1
-    ))?;
-    let selection = selection.trim();
-    if selection.is_empty() || selection.eq_ignore_ascii_case("skip") {
-        return Ok(None);
-    }
-    let idx: usize = selection
-        .parse()
-        .map_err(|_| BabataError::config("Invalid provider selection"))?;
-    if idx == providers.len() + 1 {
-        return Ok(None);
-    }
-    let Some(provider_name) = providers.get(idx.saturating_sub(1)) else {
-        return Err(BabataError::config("Invalid provider selection"));
-    };
-
-    if provider_name.eq_ignore_ascii_case(CustomProvider::name()) {
-        let compatible_api = prompt_custom_compatible_api()?;
-        let base_url = prompt_line("Base URL")?;
-        let api_key = prompt_line("API key")?;
-        return Ok(Some(ProviderConfig::Custom(CustomProviderConfig {
-            api_key,
-            base_url,
-            compatible_api,
-        })));
-    }
-
-    let api_key = prompt_line("API key")?;
-    Ok(Some(build_provider_config(provider_name, api_key)?))
-}
-
-fn available_provider_names() -> Vec<String> {
-    vec![
-        OpenAIProvider::name().to_string(),
-        KimiProvider::name().to_string(),
-        MoonshotProvider::name().to_string(),
-        DeepSeekProvider::name().to_string(),
-        MiniMaxProvider::name().to_string(),
-        AnthropicProvider::name().to_string(),
-        CustomProvider::name().to_string(),
-    ]
-}
-
-fn prompt_custom_compatible_api() -> BabataResult<CompatibleApi> {
-    let value = prompt_line("Compatible API (openai/anthropic)")?;
-    if value.eq_ignore_ascii_case("openai") {
-        return Ok(CompatibleApi::Openai);
-    }
-
-    if value.eq_ignore_ascii_case("anthropic") {
-        return Ok(CompatibleApi::Anthropic);
-    }
-
-    Err(BabataError::config(
-        "Invalid compatible API, expected 'openai' or 'anthropic'",
-    ))
-}
-
-fn build_provider_config(provider_name: &str, api_key: String) -> BabataResult<ProviderConfig> {
-    if provider_name.eq_ignore_ascii_case(OpenAIProvider::name()) {
-        return Ok(ProviderConfig::OpenAI(OpenAIProviderConfig { api_key }));
-    }
-
-    if provider_name.eq_ignore_ascii_case(KimiProvider::name()) {
-        return Ok(ProviderConfig::Kimi(KimiProviderConfig { api_key }));
-    }
-
-    if provider_name.eq_ignore_ascii_case(MoonshotProvider::name()) {
-        return Ok(ProviderConfig::Moonshot(MoonshotProviderConfig { api_key }));
-    }
-
-    if provider_name.eq_ignore_ascii_case(DeepSeekProvider::name()) {
-        return Ok(ProviderConfig::DeepSeek(DeepSeekProviderConfig { api_key }));
-    }
-
-    if provider_name.eq_ignore_ascii_case(MiniMaxProvider::name()) {
-        return Ok(ProviderConfig::MiniMax(MiniMaxProviderConfig { api_key }));
-    }
-
-    if provider_name.eq_ignore_ascii_case(AnthropicProvider::name()) {
-        return Ok(ProviderConfig::Anthropic(AnthropicProviderConfig {
-            api_key,
-        }));
-    }
-
-    Err(BabataError::config(format!(
-        "Unsupported provider '{}'",
-        provider_name
-    )))
 }
 
 fn prompt_channel_setup() -> BabataResult<Option<ChannelConfig>> {

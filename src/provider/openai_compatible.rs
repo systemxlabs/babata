@@ -8,7 +8,7 @@ use crate::{
     BabataResult,
     error::BabataError,
     message::{Content, MediaType, Message, ToolCall},
-    provider::{GenerationRequest, GenerationResponse, InteractionRequest, InteractionResponse},
+    provider::{GenerationRequest, GenerationResponse, Provider},
     tool::ToolSpec,
 };
 
@@ -23,23 +23,17 @@ pub struct OpenAICompatibleProvider {
 
 impl OpenAICompatibleProvider {
     pub fn new(api_key: &str, base_url: &str) -> Self {
+        let normalized_base_url = normalize_base_url(base_url);
         Self {
             client: Client::new(),
             api_key: api_key.to_string(),
             base_url: base_url.to_string(),
-            user_agent: None,
-            combine_system_prompt: false,
+            user_agent: normalized_base_url
+                .eq_ignore_ascii_case("https://api.kimi.com/coding/v1")
+                .then(|| "KimiCLI/1.6".to_string()),
+            combine_system_prompt: normalized_base_url
+                .eq_ignore_ascii_case("https://api.minimaxi.com/v1"),
         }
-    }
-
-    pub fn with_user_agent(mut self, user_agent: Option<String>) -> Self {
-        self.user_agent = user_agent;
-        self
-    }
-
-    pub fn with_combined_system_prompt(mut self, combine_system_prompt: bool) -> Self {
-        self.combine_system_prompt = combine_system_prompt;
-        self
     }
 
     fn format_tools(&self, tools: &[ToolSpec]) -> Vec<ChatCompletionTool> {
@@ -280,12 +274,19 @@ impl OpenAICompatibleProvider {
             },
         })
     }
+}
 
-    pub async fn interact(
+#[async_trait::async_trait]
+impl Provider for OpenAICompatibleProvider {
+    fn name() -> &'static str {
+        "openai-compatible"
+    }
+
+    async fn generate<'a>(
         &self,
-        _request: InteractionRequest,
-    ) -> BabataResult<InteractionResponse> {
-        todo!()
+        request: GenerationRequest<'a>,
+    ) -> BabataResult<GenerationResponse> {
+        OpenAICompatibleProvider::generate(self, request).await
     }
 }
 
@@ -294,6 +295,10 @@ fn audio_format_from_media_type(media_type: &MediaType) -> String {
         return format.to_string();
     }
     media_type.as_mime_str()
+}
+
+fn normalize_base_url(base_url: &str) -> &str {
+    base_url.trim_end_matches('/')
 }
 
 fn build_combined_system_prompt(system_prompts: &[String], context: &str) -> Option<String> {
@@ -554,8 +559,7 @@ mod tests {
 
     #[test]
     fn format_messages_can_combine_system_prompts_and_context_into_one_message() {
-        let provider = OpenAICompatibleProvider::new("test-key", "https://example.com/v1")
-            .with_combined_system_prompt(true);
+        let provider = OpenAICompatibleProvider::new("test-key", "https://api.minimaxi.com/v1");
         let system_prompts = vec!["first rules".to_string(), "second rules".to_string()];
         let prompts = vec![Message::UserPrompt {
             content: vec![Content::Text {
@@ -575,5 +579,12 @@ mod tests {
             json!("first rules\n\nsecond rules\n\nContext:\nprevious context")
         );
         assert_eq!(payload[1]["role"], json!("user"));
+    }
+
+    #[test]
+    fn new_infers_kimi_user_agent_from_base_url() {
+        let provider = OpenAICompatibleProvider::new("test-key", "https://api.kimi.com/coding/v1/");
+        assert_eq!(provider.user_agent.as_deref(), Some("KimiCLI/1.6"));
+        assert!(!provider.combine_system_prompt);
     }
 }
