@@ -41,72 +41,29 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import type { CompatibleApi, ProviderConfig, ProviderName } from "@/types"
+import type { CompatibleApi, ProviderConfig } from "@/types"
 
-type ProviderFormState = {
-  name: ProviderName
-  api_key: string
-  base_url: string
-  compatible_api: CompatibleApi
-}
-
-const providerOptions: { value: ProviderName; label: string; hint: string }[] = [
-  { value: "openai", label: "OpenAI", hint: "官方 OpenAI 兼容配置" },
-  { value: "anthropic", label: "Anthropic", hint: "Claude 官方接口" },
-  { value: "deepseek", label: "DeepSeek", hint: "DeepSeek 官方接口" },
-  { value: "kimi", label: "Kimi", hint: "月之暗面 Kimi 接口" },
-  { value: "moonshot", label: "Moonshot", hint: "Moonshot 官方接口" },
-  { value: "minimax", label: "MiniMax", hint: "MiniMax 官方接口" },
-  { value: "custom", label: "Custom", hint: "自定义兼容 OpenAI/Anthropic 接口" },
-]
-
-function toFormState(provider?: ProviderConfig | null): ProviderFormState {
+function toFormState(provider?: ProviderConfig | null): ProviderConfig {
   if (!provider) {
     return {
-      name: "openai",
+      name: "",
       api_key: "",
       base_url: "",
       compatible_api: "openai",
     }
   }
 
-  if (provider.name === "custom") {
-    return {
-      name: provider.name,
-      api_key: provider.api_key,
-      base_url: provider.base_url,
-      compatible_api: provider.compatible_api,
-    }
-  }
-
-  return {
-    name: provider.name,
-    api_key: provider.api_key,
-    base_url: "",
-    compatible_api: "openai",
-  }
-}
-
-function toProviderConfig(form: ProviderFormState): ProviderConfig {
-  if (form.name === "custom") {
-    return {
-      name: "custom",
-      api_key: form.api_key.trim(),
-      base_url: form.base_url.trim(),
-      compatible_api: form.compatible_api,
-    }
-  }
-
-  return {
-    name: form.name,
-    api_key: form.api_key.trim(),
-  }
+  return { ...provider }
 }
 
 function maskApiKey(value: string): string {
   if (!value) return "未配置"
   if (value.length <= 8) return "••••••••"
   return `${value.slice(0, 4)}••••${value.slice(-4)}`
+}
+
+function getCompatibleApiLabel(compatibleApi: CompatibleApi): string {
+  return compatibleApi === "anthropic" ? "Anthropic Compatible" : "OpenAI Compatible"
 }
 
 interface ProviderModalProps {
@@ -124,7 +81,7 @@ function ProviderModal({
   onClose,
   onSubmit,
 }: ProviderModalProps) {
-  const [formState, setFormState] = useState<ProviderFormState>(toFormState())
+  const [formState, setFormState] = useState<ProviderConfig>(toFormState())
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -134,24 +91,34 @@ function ProviderModal({
     setError(null)
   }, [isOpen, provider])
 
-  const isCustom = formState.name === "custom"
-  const currentOption = providerOptions.find((option) => option.value === formState.name)
-
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
+    if (!formState.name.trim()) {
+      setError("Provider 名称不能为空")
+      return
+    }
     if (!formState.api_key.trim()) {
       setError("API Key 不能为空")
       return
     }
-    if (isCustom && !formState.base_url.trim()) {
-      setError("自定义 Provider 需要填写 Base URL")
+    if (!formState.base_url.trim()) {
+      setError("Base URL 不能为空")
+      return
+    }
+    if (formState.name.includes("/") || formState.name.includes("\\")) {
+      setError("Provider 名称不能包含路径分隔符")
       return
     }
 
     setLoading(true)
     setError(null)
     try {
-      await onSubmit(toProviderConfig(formState))
+      await onSubmit({
+        name: formState.name.trim(),
+        api_key: formState.api_key.trim(),
+        base_url: formState.base_url.trim(),
+        compatible_api: formState.compatible_api,
+      })
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : "保存 Provider 失败")
@@ -167,7 +134,9 @@ function ProviderModal({
           <DialogTitle className="text-2xl tracking-tight">
             {mode === "create" ? "创建 Provider" : "编辑 Provider"}
           </DialogTitle>
-          <DialogDescription>{currentOption?.hint}</DialogDescription>
+          <DialogDescription>
+            统一维护 Provider 名称、认证信息、Base URL 和兼容 API。
+          </DialogDescription>
         </DialogHeader>
 
         <form className="space-y-5" onSubmit={handleSubmit}>
@@ -177,87 +146,70 @@ function ProviderModal({
             </div>
           ) : null}
 
+          <div className="space-y-2">
+            <Label>Provider 名称</Label>
+            <Input
+              value={formState.name}
+              onChange={(event) =>
+                setFormState((current) => ({ ...current, name: event.target.value }))
+              }
+              disabled={loading || mode === "edit"}
+              className="h-11 rounded-2xl"
+              placeholder="例如 openai-main"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>API Key</Label>
+            <Input
+              type="password"
+              value={formState.api_key}
+              onChange={(event) =>
+                setFormState((current) => ({ ...current, api_key: event.target.value }))
+              }
+              disabled={loading}
+              className="h-11 rounded-2xl"
+              placeholder="输入 Provider API Key"
+            />
+          </div>
+
           <div className="grid gap-5 md:grid-cols-2">
             <div className="space-y-2">
-              <Label>Provider 类型</Label>
-              <Select
-                value={formState.name}
-                onValueChange={(value) =>
-                  setFormState((current) => ({
-                    ...current,
-                    name: value as ProviderName,
-                    base_url: value === "custom" ? current.base_url : "",
-                  }))
-                }
-                disabled={loading || mode === "edit"}
-              >
-                <SelectTrigger className="h-11 rounded-2xl">
-                  <SelectValue placeholder="选择 Provider 类型" />
-                </SelectTrigger>
-                <SelectContent>
-                  {providerOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>API Key</Label>
+              <Label>Base URL</Label>
               <Input
-                type="password"
-                value={formState.api_key}
+                type="url"
+                value={formState.base_url}
                 onChange={(event) =>
-                  setFormState((current) => ({ ...current, api_key: event.target.value }))
+                  setFormState((current) => ({ ...current, base_url: event.target.value }))
                 }
                 disabled={loading}
                 className="h-11 rounded-2xl"
-                placeholder="输入 Provider API Key"
+                placeholder="https://example.com/v1"
               />
             </div>
-          </div>
 
-          {isCustom ? (
-            <div className="grid gap-5 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Base URL</Label>
-                <Input
-                  type="url"
-                  value={formState.base_url}
-                  onChange={(event) =>
-                    setFormState((current) => ({ ...current, base_url: event.target.value }))
-                  }
-                  disabled={loading}
-                  className="h-11 rounded-2xl"
-                  placeholder="https://example.com/v1"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>兼容 API</Label>
-                <Select
-                  value={formState.compatible_api}
-                  onValueChange={(value) =>
-                    setFormState((current) => ({
-                      ...current,
-                      compatible_api: value as CompatibleApi,
-                    }))
-                  }
-                  disabled={loading}
-                >
-                  <SelectTrigger className="h-11 rounded-2xl">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="openai">OpenAI</SelectItem>
-                    <SelectItem value="anthropic">Anthropic</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="space-y-2">
+              <Label>兼容 API</Label>
+              <Select
+                value={formState.compatible_api}
+                onValueChange={(value) =>
+                  setFormState((current) => ({
+                    ...current,
+                    compatible_api: value as CompatibleApi,
+                  }))
+                }
+                disabled={loading}
+              >
+                <SelectTrigger className="h-11 rounded-2xl">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="openai">OpenAI</SelectItem>
+                  <SelectItem value="anthropic">Anthropic</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-          ) : null}
+          </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
             <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
@@ -339,13 +291,16 @@ function ProviderCard({
     <Card className="rounded-[1.8rem] border-border/70 bg-card/70 shadow-[0_18px_60px_-32px_rgba(15,23,42,0.24)] backdrop-blur-xl">
       <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
         <div className="space-y-3">
-          <Badge variant="outline" className="rounded-full px-3 py-1 text-[0.72rem] uppercase tracking-[0.2em]">
-            Provider
+          <Badge
+            variant="outline"
+            className="rounded-full px-3 py-1 text-[0.72rem] uppercase tracking-[0.2em]"
+          >
+            {getCompatibleApiLabel(provider.compatible_api)}
           </Badge>
           <div>
-            <CardTitle className="text-2xl capitalize tracking-tight">{provider.name}</CardTitle>
+            <CardTitle className="text-2xl tracking-tight">{provider.name}</CardTitle>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              {provider.name === "custom" ? "自定义兼容 Provider" : "内建 Provider 配置"}
+              {provider.base_url}
             </p>
           </div>
         </div>
@@ -365,22 +320,12 @@ function ProviderCard({
           </div>
           <div className="font-mono text-sm text-foreground">{maskApiKey(provider.api_key)}</div>
         </div>
-        {provider.name === "custom" ? (
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4">
-              <div className="mb-1 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                Base URL
-              </div>
-              <div className="text-sm text-foreground">{provider.base_url}</div>
-            </div>
-            <div className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4">
-              <div className="mb-1 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                Compatible API
-              </div>
-              <div className="text-sm text-foreground">{provider.compatible_api}</div>
-            </div>
+        <div className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4">
+          <div className="mb-1 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            Compatible API
           </div>
-        ) : null}
+          <div className="text-sm text-foreground">{provider.compatible_api}</div>
+        </div>
       </CardContent>
     </Card>
   )
@@ -435,7 +380,7 @@ export function Providers() {
     return (
       <LoadingState
         title="加载 Provider"
-        description="正在同步模型供应商配置与兼容接口信息。"
+        description="正在同步 Provider 配置和兼容 API 信息。"
       />
     )
   }
@@ -445,7 +390,7 @@ export function Providers() {
       <PageHeader
         eyebrow="Configuration"
         title="Provider 配置"
-        description="维护模型服务凭据、自定义兼容接口，以及系统可用的模型供应商配置。"
+        description="维护统一的 ProviderConfig，包括名称、认证信息、Base URL 和兼容 API。"
         actions={
           <>
             <Badge variant="outline" className="rounded-full px-3 py-1.5">

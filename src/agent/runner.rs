@@ -8,7 +8,7 @@ use uuid::Uuid;
 use crate::{
     BabataResult,
     agent::{Agent, load_agents},
-    config::Config,
+    config::{Config, ProviderConfig},
     error::BabataError,
     memory::Memory,
     message::{Content, Message},
@@ -41,8 +41,8 @@ impl AgentTask {
         let config = Config::load()?;
         let agents = load_agents()?;
 
-        let provider_config = config.get_provider(&self.agent.frontmatter.provider)?;
-        let provider = create_provider(provider_config)?;
+        let provider_config = ProviderConfig::load(&self.agent.frontmatter.provider)?;
+        let provider = create_provider(&provider_config)?;
         let model = self.agent.frontmatter.model.clone();
 
         let skills = load_skills()?;

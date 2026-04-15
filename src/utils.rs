@@ -8,6 +8,10 @@ pub fn babata_dir() -> BabataResult<PathBuf> {
     Ok(user_home_dir()?.join(".babata"))
 }
 
+pub fn provider_dir(provider_name: &str) -> BabataResult<PathBuf> {
+    Ok(babata_dir()?.join("providers").join(provider_name))
+}
+
 pub fn user_home_dir() -> BabataResult<PathBuf> {
     std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))

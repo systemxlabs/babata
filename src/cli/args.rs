@@ -18,12 +18,7 @@ pub enum Command {
         #[command(subcommand)]
         action: ChannelAction,
     },
-    #[command(about = "Provider config management (add/delete/list)")]
-    Provider {
-        #[command(subcommand)]
-        action: ProviderAction,
-    },
-    #[command(about = "Interactive setup (provider/agent/channel/service)")]
+    #[command(about = "Interactive setup (agent/channel/service)")]
     Onboard,
 }
 
@@ -37,28 +32,6 @@ pub enum ServerAction {
     Stop,
     #[command(about = "Restart background service on current platform")]
     Restart,
-}
-
-#[derive(Subcommand, Debug)]
-pub enum ProviderAction {
-    #[command(about = "Add or update provider config (JSON)")]
-    Add {
-        #[arg(
-            value_name = "PROVIDER_CONFIG_JSON",
-            help = "Provider config JSON, e.g. {\"name\":\"openai\",\"api_key\":\"sk-...\"}"
-        )]
-        provider_config_json: String,
-    },
-    #[command(about = "Delete a provider by name")]
-    Delete {
-        #[arg(
-            value_name = "PROVIDER_NAME",
-            help = "Provider name, e.g. openai, kimi, or moonshot"
-        )]
-        name: String,
-    },
-    #[command(about = "List all provider configs (one JSON per line)")]
-    List,
 }
 
 #[derive(Subcommand, Debug)]

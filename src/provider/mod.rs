@@ -1,33 +1,14 @@
-mod anthropic;
 mod anthropic_compatible;
-mod custom;
-mod deepseek;
-mod kimi;
-mod minimax;
-mod moonshot;
-mod openai;
 mod openai_compatible;
 
-pub use anthropic::*;
 pub(crate) use anthropic_compatible::*;
-pub use custom::*;
-pub use deepseek::*;
-pub use kimi::*;
-pub use minimax::*;
-pub use moonshot::*;
-pub use openai::*;
 pub(crate) use openai_compatible::*;
 
 use std::{collections::HashMap, fmt::Debug, sync::Arc};
 
 use uuid::Uuid;
 
-use crate::{
-    BabataResult,
-    config::{Config, ProviderConfig},
-    message::Message,
-    tool::ToolSpec,
-};
+use crate::{BabataResult, config::ProviderConfig, message::Message, tool::ToolSpec};
 
 #[async_trait::async_trait]
 pub trait Provider: Debug + Send + Sync {
@@ -72,25 +53,28 @@ pub struct Model {
 }
 
 pub fn create_provider(provider_config: &ProviderConfig) -> BabataResult<Arc<dyn Provider>> {
-    match provider_config {
-        ProviderConfig::OpenAI(config) => Ok(Arc::new(OpenAIProvider::new(&config.api_key))),
-        ProviderConfig::Kimi(config) => Ok(Arc::new(KimiProvider::new(&config.api_key))),
-        ProviderConfig::Moonshot(config) => Ok(Arc::new(MoonshotProvider::new(&config.api_key))),
-        ProviderConfig::DeepSeek(config) => Ok(Arc::new(DeepSeekProvider::new(&config.api_key))),
-        ProviderConfig::MiniMax(config) => Ok(Arc::new(MiniMaxProvider::new(&config.api_key))),
-        ProviderConfig::Anthropic(config) => Ok(Arc::new(AnthropicProvider::new(&config.api_key))),
-        ProviderConfig::Custom(config) => Ok(Arc::new(CustomProvider::new(config))),
+    match provider_config.compatible_api {
+        crate::config::CompatibleApi::Openai => Ok(Arc::new(OpenAICompatibleProvider::new(
+            &provider_config.api_key,
+            &provider_config.base_url,
+        ))),
+        crate::config::CompatibleApi::Anthropic => Ok(Arc::new(AnthropicCompatibleProvider::new(
+            &provider_config.api_key,
+            &provider_config.base_url,
+        ))),
     }
 }
 
-pub fn build_providers(config: &Config) -> BabataResult<HashMap<String, Arc<dyn Provider>>> {
+pub fn build_providers(
+    provider_configs: &[ProviderConfig],
+) -> BabataResult<HashMap<String, Arc<dyn Provider>>> {
     let mut providers: HashMap<String, Arc<dyn Provider>> =
-        HashMap::with_capacity(config.providers.len());
+        HashMap::with_capacity(provider_configs.len());
 
-    for provider_config in &config.providers {
-        let provider_name = provider_config.name();
+    for provider_config in provider_configs {
+        let provider_name = provider_config.name.clone();
         let provider = create_provider(provider_config)?;
-        providers.insert(provider_name.to_string(), provider);
+        providers.insert(provider_name, provider);
     }
 
     Ok(providers)

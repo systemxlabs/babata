@@ -4,14 +4,11 @@ mod provider;
 pub use channel::*;
 pub use provider::*;
 
-use std::collections::HashSet;
-
 use crate::{BabataResult, error::BabataError, utils::babata_dir};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
 pub struct Config {
-    pub providers: Vec<ProviderConfig>,
     #[serde(default)]
     pub channels: Vec<ChannelConfig>,
 }
@@ -26,16 +23,17 @@ impl Config {
         if config_path.exists() {
             Self::load()
         } else {
-            Ok(Self {
-                providers: Vec::new(),
-                channels: Vec::new(),
-            })
+            Ok(Self::default())
         }
     }
 
     pub fn load() -> BabataResult<Self> {
         let config_path = Self::path()?;
-        let raw = std::fs::read_to_string(&config_path).map_err(|err| {
+        Self::load_from_path(&config_path)
+    }
+
+    fn load_from_path(config_path: &std::path::Path) -> BabataResult<Self> {
+        let raw = std::fs::read_to_string(config_path).map_err(|err| {
             BabataError::config(format!(
                 "Failed to read config file '{}': {}",
                 config_path.display(),
@@ -55,6 +53,10 @@ impl Config {
 
     pub fn save(&self) -> BabataResult<()> {
         let config_path = Self::path()?;
+        self.save_to_path(&config_path)
+    }
+
+    fn save_to_path(&self, config_path: &std::path::Path) -> BabataResult<()> {
         if let Some(parent) = config_path.parent() {
             std::fs::create_dir_all(parent).map_err(|err| {
                 BabataError::config(format!(
@@ -68,7 +70,7 @@ impl Config {
         let payload = serde_json::to_string_pretty(self)
             .map_err(|err| BabataError::config(format!("Failed to serialize config: {}", err)))?;
 
-        std::fs::write(&config_path, payload).map_err(|err| {
+        std::fs::write(config_path, payload).map_err(|err| {
             BabataError::config(format!(
                 "Failed to write config file '{}': {}",
                 config_path.display(),
@@ -80,36 +82,11 @@ impl Config {
     }
 
     pub fn validate(&self) -> BabataResult<()> {
-        let mut provider_names = HashSet::new();
-        for provider in &self.providers {
-            provider.validate()?;
-            let normalized_name = provider.name().to_string();
-            if !provider_names.insert(normalized_name) {
-                return Err(BabataError::config(format!(
-                    "Duplicate provider type '{}' found in configuration",
-                    provider.name()
-                )));
-            }
-        }
-
         for channel in &self.channels {
             channel.validate()?;
         }
 
         Ok(())
-    }
-
-    pub fn upsert_provider(&mut self, provider_config: ProviderConfig) {
-        if let Some(existing) = self
-            .providers
-            .iter_mut()
-            .find(|existing| existing.matches_name(provider_config.name()))
-        {
-            *existing = provider_config;
-            return;
-        }
-
-        self.providers.push(provider_config);
     }
 
     pub fn upsert_channel(&mut self, channel_config: ChannelConfig) {
@@ -125,14 +102,5 @@ impl Config {
         }
 
         self.channels.push(channel_config);
-    }
-
-    pub fn get_provider(&self, provider_name: &str) -> BabataResult<&ProviderConfig> {
-        self.providers
-            .iter()
-            .find(|provider| provider.matches_name(provider_name))
-            .ok_or_else(|| {
-                BabataError::config(format!("Provider '{}' not found in config", provider_name))
-            })
     }
 }

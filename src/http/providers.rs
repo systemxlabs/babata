@@ -8,31 +8,27 @@ use crate::{
 };
 
 pub(super) async fn list() -> BabataResult<Json<ListProvidersResponse>> {
-    let config = Config::load()?;
+    Config::load_or_init()?;
     Ok(Json(ListProvidersResponse {
-        providers: config.providers,
+        providers: ProviderConfig::load_all()?,
     }))
 }
 
 pub(super) async fn create(Json(provider_config): Json<ProviderConfig>) -> BabataResult<()> {
+    Config::load_or_init()?;
     provider_config.validate()?;
 
-    let mut config = Config::load()?;
-    let provider_name = provider_config.name().to_string();
-    if config
-        .providers
+    if ProviderConfig::load_all()?
         .iter()
-        .any(|provider| provider.matches_name(&provider_name))
+        .any(|provider| provider.matches_name(&provider_config.name))
     {
         return Err(BabataError::invalid_input(format!(
             "Provider '{}' already exists",
-            provider_name
+            provider_config.name
         )));
     }
 
-    config.providers.push(provider_config);
-    config.validate()?;
-    config.save()?;
+    provider_config.save()?;
     Ok(())
 }
 
@@ -40,45 +36,24 @@ pub(super) async fn update(
     Path(name): Path<String>,
     Json(provider_config): Json<ProviderConfig>,
 ) -> BabataResult<()> {
+    Config::load_or_init()?;
     provider_config.validate()?;
 
     if !provider_config.matches_name(&name) {
         return Err(BabataError::invalid_input(format!(
             "Provider path '{}' does not match request body provider '{}'",
-            name,
-            provider_config.name()
+            name, provider_config.name
         )));
     }
 
-    let mut config = Config::load()?;
-    if !config
-        .providers
-        .iter()
-        .any(|provider| provider.matches_name(&name))
-    {
-        return Err(BabataError::not_found(format!(
-            "Provider '{}' not found",
-            name
-        )));
-    }
-
-    config.upsert_provider(provider_config);
-    config.validate()?;
-    config.save()?;
+    ProviderConfig::load(&name)?;
+    provider_config.save()?;
     Ok(())
 }
 
 pub(super) async fn delete(Path(name): Path<String>) -> BabataResult<()> {
-    let mut config = Config::load()?;
-    let index = config
-        .providers
-        .iter()
-        .position(|provider| provider.matches_name(&name))
-        .ok_or_else(|| BabataError::not_found(format!("Provider '{}' not found", name)))?;
-
-    config.providers.remove(index);
-    config.validate()?;
-    config.save()?;
+    Config::load_or_init()?;
+    ProviderConfig::delete(&name)?;
     Ok(())
 }
 

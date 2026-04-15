@@ -183,7 +183,6 @@ mod tests {
     #[test]
     fn build_channels_prompt_includes_channel_capabilities() {
         let config = Config {
-            providers: Vec::new(),
             channels: vec![
                 ChannelConfig::Telegram(TelegramChannelConfig {
                     bot_token: "token".to_string(),
@@ -208,10 +207,7 @@ mod tests {
 
     #[test]
     fn build_channels_prompt_returns_header_when_empty() {
-        let config = Config {
-            providers: Vec::new(),
-            channels: Vec::new(),
-        };
+        let config = Config::default();
 
         let prompt = build_channels_prompt(&config).unwrap();
 
