@@ -9,7 +9,7 @@ use babata::{
     task::{CreateTaskRequest, TaskLauncher, TaskManager, TaskStore},
     utils::babata_dir,
 };
-use log::{error, info};
+use log::info;
 
 #[tokio::main]
 async fn main() -> BabataResult<()> {
@@ -28,22 +28,20 @@ async fn main() -> BabataResult<()> {
     task_manager.start()?;
     start_channel_loops(channels, task_manager.clone());
 
-    broadcast_service_started(&task_manager).await;
+    if !channel_configs.is_empty() {
+        broadcast_service_started(&task_manager).await?;
+    }
 
     http_app.serve().await?;
 
     Ok(())
 }
 
-async fn broadcast_service_started(task_manager: &Arc<TaskManager>) {
-    let babata_home = match babata_dir() {
-        Ok(path) => path.display().to_string(),
-        Err(err) => format!("unavailable ({err})"),
-    };
+async fn broadcast_service_started(task_manager: &Arc<TaskManager>) -> BabataResult<()> {
     let notification = format!(
         "Babata server started.\nVersion: {}\nBabata home: {}",
         env!("CARGO_PKG_VERSION"),
-        babata_home
+        babata_dir()?.display(),
     );
 
     let prompt = Content::Text {
@@ -57,7 +55,6 @@ async fn broadcast_service_started(task_manager: &Arc<TaskManager>) {
         agent: task_manager.default_agent().frontmatter.name.clone(),
         never_ends: false,
     };
-    if let Err(e) = task_manager.create_task(task) {
-        error!("Failed to create service started notification task: {}", e);
-    }
+    task_manager.create_task(task)?;
+    Ok(())
 }

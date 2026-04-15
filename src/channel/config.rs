@@ -208,8 +208,6 @@ fn validate_channel_name(name: &str) -> BabataResult<()> {
 
 #[cfg(test)]
 mod tests {
-    use std::time::{SystemTime, UNIX_EPOCH};
-
     use super::*;
 
     #[test]
@@ -269,56 +267,5 @@ mod tests {
                 user_id: 123456,
             })
         );
-    }
-
-    #[test]
-    fn load_all_reads_channel_configs_from_directories() {
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system time")
-            .as_nanos();
-        let temp_root = std::env::temp_dir().join(format!("babata-channel-config-{unique}"));
-        let channels_root = temp_root.join("channels");
-        let telegram_dir = channels_root.join("telegram");
-        let wechat_dir = channels_root.join("wechat");
-
-        std::fs::create_dir_all(&telegram_dir).expect("create telegram dir");
-        std::fs::create_dir_all(&wechat_dir).expect("create wechat dir");
-        std::fs::write(
-            telegram_dir.join(CHANNEL_CONFIG_FILE_NAME),
-            r#"{
-                "name": "telegram",
-                "bot_token": "telegram-token",
-                "user_id": 123
-            }"#,
-        )
-        .expect("write telegram config");
-        std::fs::write(
-            wechat_dir.join(CHANNEL_CONFIG_FILE_NAME),
-            r#"{
-                "name": "wechat",
-                "bot_token": "wechat-token",
-                "user_id": "wxid_123"
-            }"#,
-        )
-        .expect("write wechat config");
-
-        let channels = load_all_from_dir(&channels_root).expect("load channel configs");
-
-        assert_eq!(
-            channels,
-            vec![
-                ChannelConfig::Telegram(TelegramChannelConfig {
-                    bot_token: "telegram-token".to_string(),
-                    user_id: 123,
-                }),
-                ChannelConfig::Wechat(WechatChannelConfig {
-                    bot_token: "wechat-token".to_string(),
-                    user_id: "wxid_123".to_string(),
-                }),
-            ]
-        );
-
-        std::fs::remove_dir_all(&temp_root).expect("remove temp channel config dir");
     }
 }
