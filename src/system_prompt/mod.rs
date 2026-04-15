@@ -6,7 +6,7 @@ use crate::{
     config::{ChannelConfig, Config},
     skill::Skill,
     tool::ToolSpec,
-    utils::{babata_dir, channel_dir, user_home_dir, task_dir},
+    utils::{babata_dir, channel_dir, task_dir, user_home_dir},
 };
 use chrono::Local;
 use uuid::Uuid;
