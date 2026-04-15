@@ -3,7 +3,6 @@ use std::{collections::HashMap, fmt::Debug, sync::Arc, time::Duration};
 use backon::{ExponentialBuilder, Retryable};
 use chrono::Utc;
 use futures::future::join_all;
-use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use crate::{
@@ -16,7 +15,7 @@ use crate::{
     provider::{GenerationRequest, Provider, create_provider},
     skill::load_skills,
     system_prompt::build_system_prompts,
-    task::SteerMessage,
+    task::SteerQueue,
     task_warn,
     tool::{Tool, ToolContext, ToolSpec},
 };
@@ -34,7 +33,7 @@ pub struct AgentTask {
     pub agent: Arc<Agent>,
     pub memory: Arc<Memory>,
     pub all_tools: HashMap<String, Arc<dyn Tool>>,
-    pub steer_rx: Option<mpsc::Receiver<SteerMessage>>,
+    pub steer_queue: Option<SteerQueue>,
 }
 
 impl AgentTask {
@@ -64,8 +63,8 @@ impl AgentTask {
         let max_steps = 100;
         for _ in 0..max_steps {
             // Check for steer messages before calling the model
-            if let Some(steer_rx) = self.steer_rx.as_mut() {
-                while let Ok(steer_msg) = steer_rx.try_recv() {
+            if let Some(steer_queue) = self.steer_queue.as_ref() {
+                for steer_msg in steer_queue.drain() {
                     crate::task_info!(
                         self.task_id,
                         "Received steer message with {} content part(s)",

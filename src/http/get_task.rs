@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::BabataResult;
-use crate::task::{TaskRecord, TaskStatus};
+use crate::task::{SteerMessage, TaskRecord, TaskStatus};
 
 use super::{HttpApp, parse_task_id};
 
@@ -17,7 +17,8 @@ pub(super) async fn handle(
     let task_id = parse_task_id(&task_id)?;
 
     let task = state.task_manager.get_task(task_id)?;
-    Ok(Json(TaskResponse::from_record(task)))
+    let unread_steer_messages = state.task_manager.get_pending_steer_messages(task_id);
+    Ok(Json(TaskResponse::from_record(task, unread_steer_messages)))
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -30,10 +31,14 @@ pub(crate) struct TaskResponse {
     pub(crate) root_task_id: Uuid,
     pub(crate) created_at: i64,
     pub(crate) never_ends: bool,
+    pub(crate) unread_steer_messages: Vec<SteerMessage>,
 }
 
 impl TaskResponse {
-    pub(crate) fn from_record(record: TaskRecord) -> Self {
+    pub(crate) fn from_record(
+        record: TaskRecord,
+        unread_steer_messages: Vec<SteerMessage>,
+    ) -> Self {
         Self {
             task_id: record.task_id,
             description: record.description,
@@ -43,6 +48,7 @@ impl TaskResponse {
             root_task_id: record.root_task_id,
             created_at: record.created_at,
             never_ends: record.never_ends,
+            unread_steer_messages,
         }
     }
 }
@@ -62,6 +68,7 @@ mod tests {
             "parent_task_id": null,
             "root_task_id": "12345678-1234-1234-1234-123456789abc",
             "created_at": 123,
+            "unread_steer_messages": [],
         }))
         .expect_err("missing never_ends should fail");
 

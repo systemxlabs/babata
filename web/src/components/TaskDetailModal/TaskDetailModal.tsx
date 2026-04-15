@@ -27,7 +27,7 @@ import {
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { TaskStatusBadge } from "@/pages/Tasks/components/TaskStatusBadge"
-import type { FileEntry, Task } from "@/types"
+import type { FileEntry, SteerMessage, Task } from "@/types"
 import { TaskDirectoryTab } from "./components/TaskDirectoryTab/TaskDirectoryTab"
 import { TaskLogsTab } from "./components/TaskLogsTab/TaskLogsTab"
 import { TaskMessagesTab } from "./components/TaskMessagesTab/TaskMessagesTab"
@@ -107,7 +107,25 @@ export function TaskDetailModal({ taskId, isOpen, onClose }: TaskDetailModalProp
     })
   }, [])
 
+  const renderSteerContent = useCallback((taskMessage: SteerMessage) => {
+    return taskMessage.content
+      .map((part) => {
+        if (part.type === "text") {
+          return part.text
+        }
+        if (part.type === "image_url") {
+          return `[image] ${part.url}`
+        }
+        if (part.type === "image_data") {
+          return `[image_data] ${part.media_type}`
+        }
+        return `[audio_data] ${part.media_type}`
+      })
+      .join("\n")
+  }, [])
+
   let controlButtons: ReactNode = null
+  const unreadSteerMessages = task?.unread_steer_messages ?? []
 
   if (task?.status === "running") {
     controlButtons = (
@@ -187,7 +205,7 @@ export function TaskDetailModal({ taskId, isOpen, onClose }: TaskDetailModalProp
                 <ErrorAlert message={error} compact className="rounded-[1.6rem]" />
               ) : task ? (
                 <>
-                  <div className="grid gap-4 xl:grid-cols-4 md:grid-cols-2">
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
                     <Card className="rounded-[1.6rem] border-border/70 bg-background/70">
                       <CardContent className="p-5">
                         <div className="text-[0.72rem] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
@@ -236,6 +254,16 @@ export function TaskDetailModal({ taskId, isOpen, onClose }: TaskDetailModalProp
                         </div>
                       </CardContent>
                     </Card>
+                    <Card className="rounded-[1.6rem] border-border/70 bg-background/70">
+                      <CardContent className="p-5">
+                        <div className="text-[0.72rem] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                          Unread Steer
+                        </div>
+                        <div className="mt-3 text-base font-semibold tracking-tight text-foreground">
+                          {unreadSteerMessages.length}
+                        </div>
+                      </CardContent>
+                    </Card>
                   </div>
 
                   <Card className="rounded-[1.6rem] border-border/70 bg-background/70">
@@ -263,6 +291,29 @@ export function TaskDetailModal({ taskId, isOpen, onClose }: TaskDetailModalProp
                             </div>
                           </div>
                         </div>
+                        {unreadSteerMessages.length > 0 ? (
+                          <div className="rounded-[1.3rem] border border-amber-500/20 bg-amber-500/5 p-4">
+                            <div className="flex items-center gap-2 text-[0.72rem] font-semibold uppercase tracking-[0.22em] text-amber-700 dark:text-amber-300">
+                              <MessageSquare className="size-3.5" />
+                              未消费 Steer 消息
+                            </div>
+                            <div className="mt-3 space-y-3">
+                              {unreadSteerMessages.map((message, index) => (
+                                <div
+                                  key={`${message.created_at}-${index}`}
+                                  className="rounded-2xl border border-border/60 bg-background/80 p-3"
+                                >
+                                  <div className="text-xs text-muted-foreground">
+                                    {formatTime(message.created_at)}
+                                  </div>
+                                  <pre className="mt-2 whitespace-pre-wrap break-words font-sans text-sm leading-6 text-foreground">
+                                    {renderSteerContent(message)}
+                                  </pre>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
                       </div>
 
                       {controlButtons ? (

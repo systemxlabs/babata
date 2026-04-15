@@ -2,24 +2,50 @@ mod launcher;
 mod manager;
 mod store;
 
+use chrono::{DateTime, Utc};
 pub use launcher::*;
 pub use manager::*;
+use parking_lot::Mutex;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use std::{collections::VecDeque, sync::Arc};
 pub use store::*;
 
 use crate::{error::BabataError, message::Content};
 use uuid::Uuid;
 
 /// Steer message sent to a running task to influence its behavior.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SteerMessage {
     pub content: Vec<Content>,
+    pub created_at: DateTime<Utc>,
 }
 
 impl SteerMessage {
     pub fn new(content: Vec<Content>) -> Self {
-        Self { content }
+        Self {
+            content,
+            created_at: Utc::now(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct SteerQueue {
+    inner: Arc<Mutex<VecDeque<SteerMessage>>>,
+}
+
+impl SteerQueue {
+    pub fn push(&self, message: SteerMessage) {
+        self.inner.lock().push_back(message);
+    }
+
+    pub fn drain(&self) -> Vec<SteerMessage> {
+        self.inner.lock().drain(..).collect()
+    }
+
+    pub fn snapshot(&self) -> Vec<SteerMessage> {
+        self.inner.lock().iter().cloned().collect()
     }
 }
 

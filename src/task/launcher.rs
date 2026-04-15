@@ -10,7 +10,7 @@ use crate::{
     error::BabataError,
     memory::Memory,
     message::Content,
-    task::{RunningTask, SteerMessage, TaskExitEvent, TaskRecord},
+    task::{RunningTask, SteerQueue, TaskExitEvent, TaskRecord},
     task_info, task_warn,
     tool::{Tool, build_tools},
     utils::task_dir,
@@ -77,8 +77,7 @@ impl TaskLauncher {
             })?
             .clone();
 
-        // Create steer channel
-        let (steer_tx, steer_rx) = mpsc::channel::<SteerMessage>(128);
+        let steer_queue = SteerQueue::default();
 
         let task_id = task.task_id;
         let prompt = build_launch_prompt(task_id, prompt)?;
@@ -90,7 +89,7 @@ impl TaskLauncher {
             agent,
             memory,
             all_tools: self.all_tools.clone(),
-            steer_rx: Some(steer_rx),
+            steer_queue: Some(steer_queue.clone()),
         };
         let handle = tokio::spawn(async move {
             let result = agent_task.run().await;
@@ -109,7 +108,7 @@ impl TaskLauncher {
         Ok(RunningTask {
             task_id,
             handle,
-            steer_tx,
+            steer_queue,
             collaboration_handle: None,
         })
     }
@@ -143,8 +142,7 @@ impl TaskLauncher {
             })?
             .clone();
 
-        // Create steer channel
-        let (steer_tx, steer_rx) = mpsc::channel::<SteerMessage>(128);
+        let steer_queue = SteerQueue::default();
 
         let task_id = task.task_id;
         let prompt = build_relaunch_prompt(task_id, reason)?;
@@ -156,7 +154,7 @@ impl TaskLauncher {
             agent,
             memory,
             all_tools: self.all_tools.clone(),
-            steer_rx: Some(steer_rx),
+            steer_queue: Some(steer_queue.clone()),
         };
         let handle = tokio::spawn(async move {
             let result = agent_task.run().await;
@@ -175,7 +173,7 @@ impl TaskLauncher {
         Ok(RunningTask {
             task_id,
             handle,
-            steer_tx,
+            steer_queue,
             collaboration_handle: None,
         })
     }
@@ -207,7 +205,7 @@ impl TaskLauncher {
             agent,
             memory,
             all_tools: self.all_tools.clone(),
-            steer_rx: None,
+            steer_queue: None,
         };
 
         Ok(tokio::spawn(async move { agent_task.run().await }))

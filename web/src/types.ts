@@ -13,6 +13,12 @@ export interface Task {
   root_task_id: string;
   created_at: number;
   never_ends: boolean;
+  unread_steer_messages?: SteerMessage[];
+}
+
+export interface SteerMessage {
+  content: MessageContentPart[];
+  created_at: string;
 }
 
 export interface RootTask extends Task {
