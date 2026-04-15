@@ -16,6 +16,10 @@ pub fn provider_dir(provider_name: &str) -> BabataResult<PathBuf> {
     Ok(providers_dir()?.join(provider_name))
 }
 
+pub fn channels_dir() -> BabataResult<PathBuf> {
+    Ok(babata_dir()?.join("channels"))
+}
+
 pub fn user_home_dir() -> BabataResult<PathBuf> {
     std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
@@ -30,9 +34,7 @@ pub fn task_dir(task_id: Uuid) -> BabataResult<PathBuf> {
 }
 
 pub fn channel_dir(channel_name: &str) -> BabataResult<PathBuf> {
-    Ok(babata_dir()?
-        .join("channels")
-        .join(channel_name.to_ascii_lowercase()))
+    Ok(channels_dir()?.join(channel_name.to_ascii_lowercase()))
 }
 
 pub fn agent_dir(agent_name: &str) -> BabataResult<PathBuf> {

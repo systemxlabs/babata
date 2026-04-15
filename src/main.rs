@@ -3,8 +3,7 @@ use std::sync::Arc;
 use babata::{
     BabataResult,
     agent::load_agents,
-    channel::{build_channels, start_channel_loops},
-    config::Config,
+    channel::{ChannelConfig, build_channels, start_channel_loops},
     http::HttpApp,
     message::Content,
     task::{CreateTaskRequest, TaskLauncher, TaskManager, TaskStore},
@@ -18,8 +17,8 @@ async fn main() -> BabataResult<()> {
 
     info!("Server run babata dir: {}", babata_dir()?.display());
 
-    let config = Config::load()?;
-    let channels = build_channels(&config)?;
+    let channel_configs = ChannelConfig::load_all()?;
+    let channels = build_channels(&channel_configs)?;
     let task_store = TaskStore::new()?;
     let task_launcher = TaskLauncher::new(load_agents()?, channels.clone())?;
     let task_manager = Arc::new(TaskManager::new(task_store, task_launcher)?);

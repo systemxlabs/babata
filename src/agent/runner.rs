@@ -8,7 +8,7 @@ use uuid::Uuid;
 use crate::{
     BabataResult,
     agent::{Agent, load_agents},
-    config::Config,
+    channel::ChannelConfig,
     error::BabataError,
     memory::Memory,
     message::{Content, Message},
@@ -38,7 +38,7 @@ pub struct AgentTask {
 
 impl AgentTask {
     pub async fn run(&mut self) -> BabataResult<Vec<Content>> {
-        let config = Config::load()?;
+        let channel_configs = ChannelConfig::load_all()?;
         let agents = load_agents()?;
 
         let provider_config = ProviderConfig::load(&self.agent.frontmatter.provider)?;
@@ -50,7 +50,7 @@ impl AgentTask {
         let tool_specs = self.collect_tool_specs();
 
         let system_prompts = build_system_prompts(
-            &config,
+            &channel_configs,
             &agents,
             &skills,
             &self.agent.body,
