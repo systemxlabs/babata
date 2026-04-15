@@ -296,6 +296,23 @@ impl TaskManager {
         Ok(())
     }
 
+    pub fn relaunch_task(&self, task_id: Uuid, reason: &str) -> BabataResult<()> {
+        let task = self.store.get_task(task_id)?;
+        task_info!(task_id, "Relaunching task from status {}", task.status);
+
+        if let Some(running_task) = self.running_tasks.lock().remove(&task_id) {
+            running_task.abort();
+        }
+
+        let running_task = self
+            .launcher
+            .relaunch(&task, self.exit_tx.clone(), &reason)?;
+        self.running_tasks.lock().insert(task_id, running_task);
+        self.store
+            .update_task_status(task_id, TaskStatus::Running)?;
+        Ok(())
+    }
+
     pub fn cancel_task(&self, task_id: Uuid) -> BabataResult<()> {
         task_info!(task_id, "Cancelling task");
         let task = self.store.get_task(task_id)?;
@@ -703,6 +720,7 @@ mod tests {
             .insert_task(task.clone())
             .expect("insert task record");
 
+        drop(insert_dummy_running_task(&manager, task.task_id));
         manager.handle_task_completed(task.task_id);
 
         let stored_task = manager.store.get_task(task.task_id).expect("load task");
@@ -724,6 +742,7 @@ mod tests {
             .insert_task(task.clone())
             .expect("insert task record");
 
+        drop(insert_dummy_running_task(&manager, task.task_id));
         manager.handle_task_completed(task.task_id);
 
         let stored_task = manager.store.get_task(task.task_id).expect("load task");
@@ -747,6 +766,7 @@ mod tests {
             .insert_task(subtask.clone())
             .expect("insert subtask record");
 
+        drop(insert_dummy_running_task(&manager, task.task_id));
         manager.handle_task_completed(task.task_id);
 
         let stored_task = manager
@@ -771,6 +791,7 @@ mod tests {
             .insert_task(task.clone())
             .expect("insert task record");
 
+        drop(insert_dummy_running_task(&manager, task.task_id));
         manager.handle_task_failed(task.task_id, BabataError::tool("boom"));
 
         let stored_task = manager.store.get_task(task.task_id).expect("load task");
@@ -936,6 +957,59 @@ mod tests {
         assert!(manager.store.get_task(mid_task.task_id).is_err());
         assert!(manager.store.get_task(leaf_task.task_id).is_err());
 
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[tokio::test]
+    async fn relaunch_task_from_completed_sets_status_running() {
+        let temp_root = temp_test_root("manager-relaunch-completed");
+        fs::create_dir_all(&temp_root).expect("create temp root");
+        let manager = build_test_manager(&temp_root);
+        let mut task = task_record(false);
+        task.status = TaskStatus::Completed;
+        manager
+            .store
+            .insert_task(task.clone())
+            .expect("insert task record");
+
+        manager
+            .relaunch_task(task.task_id, "retry completed task")
+            .expect("relaunch completed task");
+
+        let stored_task = manager.store.get_task(task.task_id).expect("load task");
+        assert_eq!(stored_task.status, TaskStatus::Running);
+        assert!(manager.running_tasks.lock().contains_key(&task.task_id));
+
+        cleanup_task_artifacts(&manager, task.task_id);
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[tokio::test]
+    async fn relaunch_task_from_running_replaces_existing_running_task() {
+        let temp_root = temp_test_root("manager-relaunch-running");
+        fs::create_dir_all(&temp_root).expect("create temp root");
+        let manager = build_test_manager(&temp_root);
+        let task = task_record(false);
+        manager
+            .store
+            .insert_task(task.clone())
+            .expect("insert task record");
+
+        let mut old_steer_rx = insert_dummy_running_task(&manager, task.task_id);
+
+        manager
+            .relaunch_task(task.task_id, "replace current run")
+            .expect("relaunch running task");
+
+        let stored_task = manager.store.get_task(task.task_id).expect("load task");
+        assert_eq!(stored_task.status, TaskStatus::Running);
+        assert!(manager.running_tasks.lock().contains_key(&task.task_id));
+        assert!(matches!(
+            old_steer_rx.try_recv(),
+            Err(tokio::sync::mpsc::error::TryRecvError::Disconnected)
+        ));
+
+        cleanup_task_artifacts(&manager, task.task_id);
         let _ = fs::remove_dir_all(&temp_root);
     }
 }

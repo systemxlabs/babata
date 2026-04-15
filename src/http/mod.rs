@@ -14,6 +14,7 @@ mod get_task_tree;
 mod list_root_tasks;
 mod list_task_files;
 mod providers;
+mod relaunch_task;
 mod skills;
 
 mod steer_task;
@@ -118,6 +119,7 @@ fn router(task_manager: Arc<TaskManager>) -> Router {
             get(collaborate_task::get).post(collaborate_task::create),
         )
         .route("/api/tasks/{task_id}/control", post(control_task::handle))
+        .route("/api/tasks/{task_id}/relaunch", post(relaunch_task::handle))
         .route("/api/tasks/{task_id}/steer", post(steer_task::handle))
         .fallback(serve_web_ui)
         .with_state(HttpApp { task_manager })
