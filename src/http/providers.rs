@@ -1,7 +1,7 @@
 use axum::{Json, extract::Path};
 use serde::Serialize;
 
-use crate::{BabataResult, config::ProviderConfig, error::BabataError};
+use crate::{BabataResult, error::BabataError, provider::ProviderConfig};
 
 pub(super) async fn list() -> BabataResult<Json<ListProvidersResponse>> {
     Ok(Json(ListProvidersResponse {

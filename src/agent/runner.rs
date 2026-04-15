@@ -8,11 +8,11 @@ use uuid::Uuid;
 use crate::{
     BabataResult,
     agent::{Agent, load_agents},
-    config::{Config, ProviderConfig},
+    config::Config,
     error::BabataError,
     memory::Memory,
     message::{Content, Message},
-    provider::{GenerationRequest, Provider, create_provider},
+    provider::{GenerationRequest, Provider, ProviderConfig, create_provider},
     skill::load_skills,
     system_prompt::build_system_prompts,
     task::SteerQueue,
