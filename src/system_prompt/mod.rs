@@ -53,8 +53,8 @@ pub fn build_environment_prompt(task_id: Uuid) -> BabataResult<String> {
 - CPU architecture: {}"#,
         user_home_dir()?.display(),
         babata_dir()?.display(),
-        std::env::current_dir()?.display(),
         task_dir(task_id)?.display(),
+        std::env::current_dir()?.display(),
         now.format("%Z (%:z)"),
         std::env::consts::OS,
         std::env::consts::ARCH
