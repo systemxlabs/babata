@@ -48,13 +48,15 @@ async fn broadcast_service_started(task_manager: &Arc<TaskManager>) -> BabataRes
         text: format!("Send below notification to each channel: \n{notification}"),
     };
 
-    let task = CreateTaskRequest {
-        description: "broadcast service started notification".to_string(),
-        prompt: vec![prompt],
-        parent_task_id: None,
-        agent: task_manager.default_agent().frontmatter.name.clone(),
-        never_ends: false,
-    };
-    task_manager.create_task(task)?;
+    if let Some(default_agent) = task_manager.default_agent() {
+        let task = CreateTaskRequest {
+            description: "broadcast service started notification".to_string(),
+            prompt: vec![prompt],
+            parent_task_id: None,
+            agent: default_agent.frontmatter.name.clone(),
+            never_ends: false,
+        };
+        task_manager.create_task(task)?;
+    }
     Ok(())
 }

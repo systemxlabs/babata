@@ -581,8 +581,8 @@ impl TaskManager {
         Ok(())
     }
 
-    pub fn default_agent(&self) -> &Arc<Agent> {
-        &self.launcher.default_agent
+    pub fn default_agent(&self) -> Option<&Arc<Agent>> {
+        self.launcher.default_agent.as_ref()
     }
 }
 

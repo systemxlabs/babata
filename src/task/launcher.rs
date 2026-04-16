@@ -18,7 +18,7 @@ use crate::{
 
 #[derive(Debug)]
 pub struct TaskLauncher {
-    pub default_agent: Arc<Agent>,
+    pub default_agent: Option<Arc<Agent>>,
     pub agents: HashMap<String, Arc<Agent>>,
     pub memories: HashMap<String, Arc<Memory>>,
     pub all_tools: HashMap<String, Arc<dyn Tool>>,
@@ -32,8 +32,7 @@ impl TaskLauncher {
         let default_agent = agents
             .values()
             .find(|agent| matches!(agent.frontmatter.default, Some(true)))
-            .ok_or(BabataError::internal("No default agent"))?
-            .clone();
+            .cloned();
         let mut memories = HashMap::with_capacity(agents.len());
         for (name, agent) in &agents {
             let memory = Memory::new(agent.home()?)?;

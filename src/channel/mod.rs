@@ -87,11 +87,17 @@ pub fn start_channel_loops(
                             }];
                             prompt.extend(content);
 
+                            let Some(default_agent) = task_manager.default_agent() else {
+                                error!(
+                                    "Failed to create task for channel message due to no default agent"
+                                );
+                                continue;
+                            };
                             let task = CreateTaskRequest {
                                 description,
                                 prompt,
                                 parent_task_id: None,
-                                agent: task_manager.default_agent().frontmatter.name.clone(),
+                                agent: default_agent.frontmatter.name.clone(),
                                 never_ends: false,
                             };
 
