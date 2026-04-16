@@ -1,0 +1,8 @@
+.git
+.github
+target
+web/.git
+web/node_modules
+web/dist
+**/.DS_Store
+**/Thumbs.db

@@ -1,0 +1,14 @@
+services:
+  babata:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: babata:latest
+    ports:
+      - "18800:18800"
+    environment:
+      BABATA_SERVER_ADDR: 0.0.0.0:18800
+    volumes:
+      - type: bind
+        source: ${HOME}/.babata
+        target: /home/babata/.babata
