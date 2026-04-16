@@ -22,6 +22,7 @@ import type {
   TaskFilter,
   TaskListResponse,
   TaskStatus,
+  TestProviderConnectionResponse,
   TasksResponse,
   UpdateAgentRequest,
 } from './types';
@@ -346,6 +347,19 @@ export function deleteProvider(name: string): Promise<void> {
   });
 }
 
+export function testSavedProviderConnection(
+  name: string,
+  model: string
+): Promise<TestProviderConnectionResponse> {
+  return fetchApi<TestProviderConnectionResponse>(
+    `/providers/${encodeURIComponent(name)}/test`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ model }),
+    }
+  );
+}
+
 export const api = {
   getRunningTasksCount(): Promise<CountResponse> {
     return getTaskCount('running');
@@ -396,6 +410,7 @@ export const api = {
   createProvider,
   updateProvider,
   deleteProvider,
+  testSavedProviderConnection,
   getSkills,
   getSkillFiles,
   getSkillFile,

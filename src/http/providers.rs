@@ -1,7 +1,11 @@
 use axum::{Json, extract::Path};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-use crate::{BabataResult, error::BabataError, provider::ProviderConfig};
+use crate::{
+    BabataResult,
+    error::BabataError,
+    provider::{ProviderConfig, test_provider_connection},
+};
 
 pub(super) async fn list() -> BabataResult<Json<ListProvidersResponse>> {
     Ok(Json(ListProvidersResponse {
@@ -48,7 +52,28 @@ pub(super) async fn delete(Path(name): Path<String>) -> BabataResult<()> {
     Ok(())
 }
 
+pub(super) async fn test(
+    Path(name): Path<String>,
+    Json(request): Json<TestProviderConnectionRequest>,
+) -> BabataResult<Json<TestProviderConnectionResponse>> {
+    let provider_config = ProviderConfig::load(&name)?;
+    let result = test_provider_connection(&provider_config, &request.model).await?;
+    Ok(Json(TestProviderConnectionResponse {
+        latency_ms: result.latency_ms,
+    }))
+}
+
 #[derive(Debug, Serialize)]
 pub(crate) struct ListProvidersResponse {
     pub providers: Vec<ProviderConfig>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct TestProviderConnectionResponse {
+    pub latency_ms: u64,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct TestProviderConnectionRequest {
+    pub model: String,
 }

@@ -93,6 +93,7 @@ fn router(task_manager: Arc<TaskManager>) -> Router {
             "/api/providers/{name}",
             put(providers::update).delete(providers::delete),
         )
+        .route("/api/providers/{name}/test", post(providers::test))
         .route("/api/skills", get(skills::list))
         .route("/api/skills/{name}", delete(skills::delete))
         .route("/api/skills/{name}/files", get(skills::list_files))

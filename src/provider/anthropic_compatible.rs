@@ -377,7 +377,10 @@ struct AnthropicResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::provider::Provider;
+    use axum::{Router, routing::post};
     use serde_json::json;
+    use tokio::net::TcpListener;
 
     #[test]
     fn build_system_blocks_keeps_system_prompts_and_context_separate() {
@@ -402,5 +405,42 @@ mod tests {
                 }
             ])
         );
+    }
+
+    #[tokio::test]
+    async fn test_connection_uses_generate_endpoint() {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind test listener");
+        let addr = listener.local_addr().expect("listener addr");
+        tokio::spawn(async move {
+            axum::serve(
+                listener,
+                Router::new().route(
+                    "/v1/messages",
+                    post(|| async {
+                        axum::Json(json!({
+                            "id": "msg-test",
+                            "type": "message",
+                            "role": "assistant",
+                            "content": [{
+                                "type": "text",
+                                "text": "ok"
+                            }],
+                            "model": "test-model",
+                            "stop_reason": "end_turn"
+                        }))
+                    }),
+                ),
+            )
+            .await
+            .expect("serve test app");
+        });
+
+        let provider = AnthropicCompatibleProvider::new("test-key", &format!("http://{addr}"));
+        provider
+            .test_connection("test-model")
+            .await
+            .expect("test connection should succeed");
     }
 }

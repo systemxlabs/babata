@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react"
-import { KeyRound, Pencil, Plus, ShieldAlert, Trash2 } from "lucide-react"
+import { CheckCircle2, KeyRound, Pencil, Plus, ShieldAlert, Trash2, Wifi } from "lucide-react"
 
 import {
   createProvider,
   deleteProvider,
   getProviders,
+  testSavedProviderConnection,
   updateProvider,
 } from "@/api"
 import { EmptyState } from "@/components/empty-state"
@@ -91,34 +92,43 @@ function ProviderModal({
     setError(null)
   }, [isOpen, provider])
 
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault()
+  const validateForm = (): ProviderConfig | null => {
     if (!formState.name.trim()) {
       setError("Provider 名称不能为空")
-      return
+      return null
     }
     if (!formState.api_key.trim()) {
       setError("API Key 不能为空")
-      return
+      return null
     }
     if (!formState.base_url.trim()) {
       setError("Base URL 不能为空")
-      return
+      return null
     }
     if (formState.name.includes("/") || formState.name.includes("\\")) {
       setError("Provider 名称不能包含路径分隔符")
+      return null
+    }
+
+    return {
+      name: formState.name.trim(),
+      api_key: formState.api_key.trim(),
+      base_url: formState.base_url.trim(),
+      compatible_api: formState.compatible_api,
+    }
+  }
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault()
+    const validatedProvider = validateForm()
+    if (!validatedProvider) {
       return
     }
 
     setLoading(true)
     setError(null)
     try {
-      await onSubmit({
-        name: formState.name.trim(),
-        api_key: formState.api_key.trim(),
-        base_url: formState.base_url.trim(),
-        compatible_api: formState.compatible_api,
-      })
+      await onSubmit(validatedProvider)
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : "保存 Provider 失败")
@@ -282,11 +292,18 @@ function ProviderCard({
   provider,
   onEdit,
   onDelete,
+  onTest,
 }: {
   provider: ProviderConfig
   onEdit: (provider: ProviderConfig) => void
   onDelete: (provider: ProviderConfig) => void
+  onTest: (provider: ProviderConfig, model: string) => Promise<{ latencyMs: number }>
 }) {
+  const [testLoading, setTestLoading] = useState(false)
+  const [testModel, setTestModel] = useState("")
+  const [testResult, setTestResult] = useState<string | null>(null)
+  const [testError, setTestError] = useState<string | null>(null)
+
   return (
     <Card className="rounded-[1.8rem] border-border/70 bg-card/70 shadow-[0_18px_60px_-32px_rgba(15,23,42,0.24)] backdrop-blur-xl">
       <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
@@ -314,6 +331,49 @@ function ProviderCard({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Input
+            value={testModel}
+            onChange={(event) => setTestModel(event.target.value)}
+            disabled={testLoading}
+            className="h-10 rounded-2xl"
+            placeholder="测试模型"
+          />
+          <Button
+            variant="outline"
+            onClick={() => {
+              if (!testModel.trim()) {
+                setTestError("测试模型不能为空")
+                setTestResult(null)
+                return
+              }
+              setTestLoading(true)
+              setTestResult(null)
+              setTestError(null)
+              void onTest(provider, testModel.trim())
+                .then((result) => setTestResult(`测试成功 (${result.latencyMs} ms)`))
+                .catch((err) =>
+                  setTestError(err instanceof Error ? err.message : "测试 Provider 连接失败")
+                )
+                .finally(() => setTestLoading(false))
+            }}
+            disabled={testLoading}
+          >
+            <Wifi className="mr-2 size-4" />
+            {testLoading ? "测试中..." : "测试连接"}
+          </Button>
+        </div>
+        {testResult ? (
+          <div className="flex items-start gap-2 rounded-[1.4rem] border border-emerald-500/25 bg-emerald-500/5 p-4 text-sm text-emerald-700">
+            <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
+            <span>{testResult}</span>
+          </div>
+        ) : null}
+        {testError ? (
+          <div className="rounded-[1.4rem] border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive">
+            {testError}
+          </div>
+        ) : null}
         <div className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4">
           <div className="mb-1 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
             API Key
@@ -374,6 +434,11 @@ export function Providers() {
     await fetchProviders()
     setSelectedProvider(null)
     setDeleteModalOpen(false)
+  }
+
+  const handleTestSavedConnection = async (provider: ProviderConfig, model: string) => {
+    const response = await testSavedProviderConnection(provider.name, model)
+    return { latencyMs: response.latency_ms }
   }
 
   if (loading && providers.length === 0) {
@@ -438,6 +503,7 @@ export function Providers() {
             <ProviderCard
               key={provider.name}
               provider={provider}
+              onTest={handleTestSavedConnection}
               onEdit={(nextProvider) => {
                 setModalMode("edit")
                 setSelectedProvider(nextProvider)

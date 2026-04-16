@@ -448,13 +448,16 @@ pub struct ChatCompletionsMessageToolCallFunction {
 
 #[cfg(test)]
 mod tests {
+    use axum::{Router, routing::post};
     use chrono::Utc;
     use schemars::JsonSchema;
     use serde::Deserialize;
     use serde_json::json;
+    use tokio::net::TcpListener;
 
     use crate::{
         message::{Content, MediaType, Message},
+        provider::Provider,
         tool::ToolSpec,
     };
 
@@ -586,5 +589,48 @@ mod tests {
         let provider = OpenAICompatibleProvider::new("test-key", "https://api.kimi.com/coding/v1/");
         assert_eq!(provider.user_agent.as_deref(), Some("KimiCLI/1.6"));
         assert!(!provider.combine_system_prompt);
+    }
+
+    #[tokio::test]
+    async fn test_connection_uses_generate_endpoint() {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind test listener");
+        let addr = listener.local_addr().expect("listener addr");
+        tokio::spawn(async move {
+            axum::serve(
+                listener,
+                Router::new().route(
+                    "/v1/chat/completions",
+                    post(|| async {
+                        axum::Json(json!({
+                            "id": "chatcmpl-test",
+                            "object": "chat.completion",
+                            "created": 0,
+                            "model": "test-model",
+                            "choices": [{
+                                "index": 0,
+                                "message": {
+                                    "role": "assistant",
+                                    "content": "ok",
+                                    "reasoning_content": null,
+                                    "refusal": null,
+                                    "tool_calls": null
+                                },
+                                "finish_reason": "stop"
+                            }]
+                        }))
+                    }),
+                ),
+            )
+            .await
+            .expect("serve test app");
+        });
+
+        let provider = OpenAICompatibleProvider::new("test-key", &format!("http://{addr}/v1"));
+        provider
+            .test_connection("test-model")
+            .await
+            .expect("test connection should succeed");
     }
 }

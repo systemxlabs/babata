@@ -120,6 +120,10 @@ export interface ProvidersResponse {
   providers: ProviderConfig[];
 }
 
+export interface TestProviderConnectionResponse {
+  latency_ms: number;
+}
+
 export interface TelegramChannelConfig {
   name: string;
   kind: 'telegram';
