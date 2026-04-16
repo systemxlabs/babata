@@ -1,5 +1,6 @@
 services:
   babata:
+    container_name: babata
     build:
       context: ..
       dockerfile: docker/Dockerfile
