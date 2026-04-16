@@ -3,8 +3,6 @@
 FROM node:24-bookworm-slim AS web-builder
 WORKDIR /app/web
 
-RUN npm install -g npm@11.6.2
-
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
 
