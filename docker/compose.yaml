@@ -13,4 +13,4 @@ services:
     volumes:
       - type: bind
         source: ${HOME}/.babata
-        target: /home/babata/.babata
+        target: /root/.babata

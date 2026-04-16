@@ -19,7 +19,7 @@ docker compose -f docker/compose.yaml up -d
 docker compose -f docker/compose.yaml down
 ```
 
-The Compose setup bind-mounts `${HOME}/.babata` to `/home/babata/.babata` and publishes the Web UI on `http://127.0.0.1:18800`.
+The Compose setup bind-mounts `${HOME}/.babata` to `/root/.babata` and publishes the Web UI on `http://127.0.0.1:18800`.
 
 This setup assumes a Unix-like host with `HOME` available. Windows-specific path handling is intentionally not covered here.
 

@@ -25,10 +25,9 @@ FROM debian:bookworm-slim AS runtime
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends bash ca-certificates git libssl3 ripgrep \
-    && rm -rf /var/lib/apt/lists/* \
-    && useradd --create-home --home-dir /home/babata --shell /bin/bash babata
+    && rm -rf /var/lib/apt/lists/*
 
-ENV HOME=/home/babata
+ENV HOME=/root
 ENV BABATA_SERVER_ADDR=0.0.0.0:18800
 
 WORKDIR /app
@@ -36,11 +35,7 @@ WORKDIR /app
 COPY --from=rust-builder /app/target/release/babata /usr/local/bin/babata
 COPY --from=web-builder /app/web/dist ./web/dist
 
-RUN chown -R babata:babata /app /home/babata
-
-USER babata
-
-VOLUME ["/home/babata/.babata"]
+VOLUME ["/root/.babata"]
 EXPOSE 18800
 
 CMD ["babata"]
