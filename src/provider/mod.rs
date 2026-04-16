@@ -97,8 +97,9 @@ pub async fn test_provider_connection(
     provider_config: &ProviderConfig,
     model: &str,
 ) -> BabataResult<ProviderConnectionTestResult> {
+    let model_config = provider_config.find_model(model)?;
     let provider = create_provider(provider_config)?;
-    provider.test_connection(model).await
+    provider.test_connection(&model_config.id).await
 }
 
 pub fn build_providers(

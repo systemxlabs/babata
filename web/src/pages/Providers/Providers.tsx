@@ -42,19 +42,49 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import type { CompatibleApi, ProviderConfig } from "@/types"
+import type { CompatibleApi, ProviderConfig, ProviderModelConfig } from "@/types"
 
-function toFormState(provider?: ProviderConfig | null): ProviderConfig {
+interface ProviderModelFormState {
+  id: string
+  context_window: string
+}
+
+interface ProviderFormState {
+  name: string
+  api_key: string
+  base_url: string
+  compatible_api: CompatibleApi
+  models: ProviderModelFormState[]
+}
+
+function createEmptyModelFormState(): ProviderModelFormState {
+  return {
+    id: "",
+    context_window: "",
+  }
+}
+
+function toFormState(provider?: ProviderConfig | null): ProviderFormState {
   if (!provider) {
     return {
       name: "",
       api_key: "",
       base_url: "",
       compatible_api: "openai",
+      models: [createEmptyModelFormState()],
     }
   }
 
-  return { ...provider }
+  return {
+    name: provider.name,
+    api_key: provider.api_key,
+    base_url: provider.base_url,
+    compatible_api: provider.compatible_api,
+    models: provider.models.map((model) => ({
+      id: model.id,
+      context_window: model.context_window.toString(),
+    })),
+  }
 }
 
 function maskApiKey(value: string): string {
@@ -65,6 +95,10 @@ function maskApiKey(value: string): string {
 
 function getCompatibleApiLabel(compatibleApi: CompatibleApi): string {
   return compatibleApi === "anthropic" ? "Anthropic Compatible" : "OpenAI Compatible"
+}
+
+function formatContextWindowTokens(value: number): string {
+  return `${value.toLocaleString("en-US")} tokens`
 }
 
 interface ProviderModalProps {
@@ -82,7 +116,7 @@ function ProviderModal({
   onClose,
   onSubmit,
 }: ProviderModalProps) {
-  const [formState, setFormState] = useState<ProviderConfig>(toFormState())
+  const [formState, setFormState] = useState<ProviderFormState>(toFormState())
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -109,12 +143,42 @@ function ProviderModal({
       setError("Provider 名称不能包含路径分隔符")
       return null
     }
+    if (formState.models.length === 0) {
+      setError("至少需要配置一个模型")
+      return null
+    }
+
+    const models: ProviderModelConfig[] = []
+    for (const [index, model] of formState.models.entries()) {
+      const modelId = model.id.trim()
+      if (!modelId) {
+        setError(`模型 #${index + 1} 的 ID 不能为空`)
+        return null
+      }
+
+      const contextWindowTokens = Number.parseInt(model.context_window.trim(), 10)
+      if (!Number.isInteger(contextWindowTokens) || contextWindowTokens <= 0) {
+        setError(`模型 ${modelId} 的上下文长度必须是正整数`)
+        return null
+      }
+
+      if (models.some((existingModel) => existingModel.id === modelId)) {
+        setError(`模型 ${modelId} 重复了`)
+        return null
+      }
+
+      models.push({
+        id: modelId,
+        context_window: contextWindowTokens,
+      })
+    }
 
     return {
       name: formState.name.trim(),
       api_key: formState.api_key.trim(),
       base_url: formState.base_url.trim(),
       compatible_api: formState.compatible_api,
+      models,
     }
   }
 
@@ -139,89 +203,188 @@ function ProviderModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => (!open ? onClose() : undefined)}>
-      <DialogContent className="rounded-[1.75rem] border-border/70 bg-card/95 sm:max-w-[640px]">
+      <DialogContent className="grid max-h-[calc(100vh-2rem)] grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-[1.75rem] border-border/70 bg-card/95 sm:max-w-[760px]">
         <DialogHeader>
           <DialogTitle className="text-2xl tracking-tight">
             {mode === "create" ? "创建 Provider" : "编辑 Provider"}
           </DialogTitle>
           <DialogDescription>
-            统一维护 Provider 名称、认证信息、Base URL 和兼容 API。
+            统一维护 Provider 名称、认证信息、Base URL、兼容 API 和模型列表。
           </DialogDescription>
         </DialogHeader>
 
-        <form className="space-y-5" onSubmit={handleSubmit}>
-          {error ? (
-            <div className="rounded-2xl border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-              {error}
-            </div>
-          ) : null}
+        <form className="grid min-h-0 grid-rows-[minmax(0,1fr)_auto]" onSubmit={handleSubmit}>
+          <div className="min-h-0 space-y-5 overflow-y-auto pr-1">
+            {error ? (
+              <div className="rounded-2xl border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+                {error}
+              </div>
+            ) : null}
 
-          <div className="space-y-2">
-            <Label>Provider 名称</Label>
-            <Input
-              value={formState.name}
-              onChange={(event) =>
-                setFormState((current) => ({ ...current, name: event.target.value }))
-              }
-              disabled={loading || mode === "edit"}
-              className="h-11 rounded-2xl"
-              placeholder="例如 openai-main"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label>API Key</Label>
-            <Input
-              type="password"
-              value={formState.api_key}
-              onChange={(event) =>
-                setFormState((current) => ({ ...current, api_key: event.target.value }))
-              }
-              disabled={loading}
-              className="h-11 rounded-2xl"
-              placeholder="输入 Provider API Key"
-            />
-          </div>
-
-          <div className="grid gap-5 md:grid-cols-2">
             <div className="space-y-2">
-              <Label>Base URL</Label>
+              <Label>Provider 名称</Label>
               <Input
-                type="url"
-                value={formState.base_url}
+                value={formState.name}
                 onChange={(event) =>
-                  setFormState((current) => ({ ...current, base_url: event.target.value }))
+                  setFormState((current) => ({ ...current, name: event.target.value }))
                 }
-                disabled={loading}
+                disabled={loading || mode === "edit"}
                 className="h-11 rounded-2xl"
-                placeholder="https://example.com/v1"
+                placeholder="例如 openai-main"
               />
             </div>
 
             <div className="space-y-2">
-              <Label>兼容 API</Label>
-              <Select
-                value={formState.compatible_api}
-                onValueChange={(value) =>
-                  setFormState((current) => ({
-                    ...current,
-                    compatible_api: value as CompatibleApi,
-                  }))
+              <Label>API Key</Label>
+              <Input
+                type="password"
+                value={formState.api_key}
+                onChange={(event) =>
+                  setFormState((current) => ({ ...current, api_key: event.target.value }))
                 }
                 disabled={loading}
-              >
-                <SelectTrigger className="h-11 rounded-2xl">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="openai">OpenAI</SelectItem>
-                  <SelectItem value="anthropic">Anthropic</SelectItem>
-                </SelectContent>
-              </Select>
+                className="h-11 rounded-2xl"
+                placeholder="输入 Provider API Key"
+              />
+            </div>
+
+            <div className="grid gap-5 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Base URL</Label>
+                <Input
+                  type="url"
+                  value={formState.base_url}
+                  onChange={(event) =>
+                    setFormState((current) => ({ ...current, base_url: event.target.value }))
+                  }
+                  disabled={loading}
+                  className="h-11 rounded-2xl"
+                  placeholder="https://example.com/v1"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>兼容 API</Label>
+                <Select
+                  value={formState.compatible_api}
+                  onValueChange={(value) =>
+                    setFormState((current) => ({
+                      ...current,
+                      compatible_api: value as CompatibleApi,
+                    }))
+                  }
+                  disabled={loading}
+                >
+                  <SelectTrigger className="h-11 rounded-2xl">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="openai">OpenAI</SelectItem>
+                    <SelectItem value="anthropic">Anthropic</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-3 rounded-[1.5rem] border border-border/70 bg-background/60 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-foreground">模型列表</div>
+                  <div className="text-sm text-muted-foreground">
+                    每个模型都需要模型 ID 和上下文长度。
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    setFormState((current) => ({
+                      ...current,
+                      models: [...current.models, createEmptyModelFormState()],
+                    }))
+                  }
+                  disabled={loading}
+                >
+                  <Plus className="mr-2 size-4" />
+                  添加模型
+                </Button>
+              </div>
+
+              <div className="space-y-3">
+                {formState.models.map((model, index) => (
+                  <div
+                    key={`${index}-${model.id}`}
+                    className="grid gap-3 rounded-[1.25rem] border border-border/70 bg-card/70 p-4 md:grid-cols-[minmax(0,1fr)_220px_auto]"
+                  >
+                    <div className="space-y-2">
+                      <Label>模型 ID</Label>
+                      <Input
+                        value={model.id}
+                        onChange={(event) =>
+                          setFormState((current) => ({
+                            ...current,
+                            models: current.models.map((currentModel, currentIndex) =>
+                              currentIndex === index
+                                ? { ...currentModel, id: event.target.value }
+                                : currentModel
+                            ),
+                          }))
+                        }
+                        disabled={loading}
+                        className="h-11 rounded-2xl"
+                        placeholder="例如 gpt-4.1-mini"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>上下文长度</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={model.context_window}
+                        onChange={(event) =>
+                          setFormState((current) => ({
+                            ...current,
+                            models: current.models.map((currentModel, currentIndex) =>
+                              currentIndex === index
+                                ? {
+                                    ...currentModel,
+                                    context_window: event.target.value,
+                                  }
+                                : currentModel
+                            ),
+                          }))
+                        }
+                        disabled={loading}
+                        className="h-11 rounded-2xl"
+                        placeholder="例如 128000"
+                      />
+                    </div>
+
+                    <div className="flex items-end">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() =>
+                          setFormState((current) => ({
+                            ...current,
+                            models: current.models.filter((_, currentIndex) => currentIndex !== index),
+                          }))
+                        }
+                        disabled={loading}
+                      >
+                        <Trash2 className="size-4 text-destructive" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="pt-4">
             <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
               取消
             </Button>
@@ -288,15 +451,15 @@ function ProviderDeleteDialog({
   )
 }
 
-function ProviderCard({
+function ProviderConnectionTestDialog({
   provider,
-  onEdit,
-  onDelete,
+  open,
+  onOpenChange,
   onTest,
 }: {
-  provider: ProviderConfig
-  onEdit: (provider: ProviderConfig) => void
-  onDelete: (provider: ProviderConfig) => void
+  provider: ProviderConfig | null
+  open: boolean
+  onOpenChange: (open: boolean) => void
   onTest: (provider: ProviderConfig, model: string) => Promise<{ latencyMs: number }>
 }) {
   const [testLoading, setTestLoading] = useState(false)
@@ -304,6 +467,113 @@ function ProviderCard({
   const [testResult, setTestResult] = useState<string | null>(null)
   const [testError, setTestError] = useState<string | null>(null)
 
+  useEffect(() => {
+    if (!open || !provider) return
+    setTestModel(provider.models[0]?.id ?? "")
+    setTestResult(null)
+    setTestError(null)
+  }, [open, provider])
+
+  if (!provider) return null
+
+  const selectedModel = provider.models.find((model) => model.id === testModel) ?? null
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="rounded-[1.75rem] border-border/70 bg-card/95 sm:max-w-[560px]">
+        <DialogHeader>
+          <DialogTitle className="text-2xl tracking-tight">测试 Provider 连接</DialogTitle>
+          <DialogDescription>
+            使用 Provider 中已配置的模型发起一次真实请求，验证连接与延迟。
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-5">
+          <div className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4">
+            <div className="mb-1 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              Provider
+            </div>
+            <div className="text-sm font-medium text-foreground">{provider.name}</div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>测试模型</Label>
+            <Select value={testModel} onValueChange={setTestModel} disabled={testLoading}>
+              <SelectTrigger className="h-11 rounded-2xl">
+                <SelectValue placeholder="选择测试模型" />
+              </SelectTrigger>
+              <SelectContent>
+                {provider.models.map((model) => (
+                  <SelectItem key={model.id} value={model.id}>
+                    {model.id}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {selectedModel ? (
+              <div className="text-sm text-muted-foreground">
+                当前模型上下文长度: {formatContextWindowTokens(selectedModel.context_window)}
+              </div>
+            ) : null}
+          </div>
+
+          {testResult ? (
+            <div className="flex items-start gap-2 rounded-[1.4rem] border border-emerald-500/25 bg-emerald-500/5 p-4 text-sm text-emerald-700">
+              <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
+              <span>{testResult}</span>
+            </div>
+          ) : null}
+          {testError ? (
+            <div className="rounded-[1.4rem] border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive">
+              {testError}
+            </div>
+          ) : null}
+        </div>
+
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={testLoading}>
+            关闭
+          </Button>
+          <Button
+            type="button"
+            onClick={() => {
+              if (!testModel) {
+                setTestError("请选择测试模型")
+                setTestResult(null)
+                return
+              }
+              setTestLoading(true)
+              setTestResult(null)
+              setTestError(null)
+              void onTest(provider, testModel)
+                .then((result) => setTestResult(`测试成功 (${result.latencyMs} ms)`))
+                .catch((err) =>
+                  setTestError(err instanceof Error ? err.message : "测试 Provider 连接失败")
+                )
+                .finally(() => setTestLoading(false))
+            }}
+            disabled={testLoading}
+          >
+            <Wifi className="mr-2 size-4" />
+            {testLoading ? "测试中..." : "开始测试"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function ProviderCard({
+  provider,
+  onEdit,
+  onDelete,
+  onOpenTest,
+}: {
+  provider: ProviderConfig
+  onEdit: (provider: ProviderConfig) => void
+  onDelete: (provider: ProviderConfig) => void
+  onOpenTest: (provider: ProviderConfig) => void
+}) {
   return (
     <Card className="rounded-[1.8rem] border-border/70 bg-card/70 shadow-[0_18px_60px_-32px_rgba(15,23,42,0.24)] backdrop-blur-xl">
       <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
@@ -322,6 +592,9 @@ function ProviderCard({
           </div>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" size="icon" onClick={() => onOpenTest(provider)}>
+            <Wifi className="size-4" />
+          </Button>
           <Button variant="outline" size="icon" onClick={() => onEdit(provider)}>
             <Pencil className="size-4" />
           </Button>
@@ -331,54 +604,29 @@ function ProviderCard({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex items-center gap-2">
-          <Input
-            value={testModel}
-            onChange={(event) => setTestModel(event.target.value)}
-            disabled={testLoading}
-            className="h-10 rounded-2xl"
-            placeholder="测试模型"
-          />
-          <Button
-            variant="outline"
-            onClick={() => {
-              if (!testModel.trim()) {
-                setTestError("测试模型不能为空")
-                setTestResult(null)
-                return
-              }
-              setTestLoading(true)
-              setTestResult(null)
-              setTestError(null)
-              void onTest(provider, testModel.trim())
-                .then((result) => setTestResult(`测试成功 (${result.latencyMs} ms)`))
-                .catch((err) =>
-                  setTestError(err instanceof Error ? err.message : "测试 Provider 连接失败")
-                )
-                .finally(() => setTestLoading(false))
-            }}
-            disabled={testLoading}
-          >
-            <Wifi className="mr-2 size-4" />
-            {testLoading ? "测试中..." : "测试连接"}
-          </Button>
-        </div>
-        {testResult ? (
-          <div className="flex items-start gap-2 rounded-[1.4rem] border border-emerald-500/25 bg-emerald-500/5 p-4 text-sm text-emerald-700">
-            <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
-            <span>{testResult}</span>
-          </div>
-        ) : null}
-        {testError ? (
-          <div className="rounded-[1.4rem] border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive">
-            {testError}
-          </div>
-        ) : null}
         <div className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4">
           <div className="mb-1 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
             API Key
           </div>
           <div className="font-mono text-sm text-foreground">{maskApiKey(provider.api_key)}</div>
+        </div>
+        <div className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4">
+          <div className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            Models
+          </div>
+          <div className="space-y-2">
+            {provider.models.map((model) => (
+              <div
+                key={model.id}
+                className="flex items-center justify-between gap-3 rounded-2xl border border-border/70 bg-card/70 px-3 py-2 text-sm"
+              >
+                <span className="font-medium text-foreground">{model.id}</span>
+                <span className="text-muted-foreground">
+                  {formatContextWindowTokens(model.context_window)}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
         <div className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4">
           <div className="mb-1 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
@@ -397,6 +645,7 @@ export function Providers() {
   const [error, setError] = useState<string | null>(null)
   const [modalMode, setModalMode] = useState<"create" | "edit">("create")
   const [modalOpen, setModalOpen] = useState(false)
+  const [testModalOpen, setTestModalOpen] = useState(false)
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [selectedProvider, setSelectedProvider] = useState<ProviderConfig | null>(null)
 
@@ -455,17 +704,19 @@ export function Providers() {
       <PageHeader
         eyebrow="Configuration"
         title="Provider 配置"
-        description="维护统一的 ProviderConfig，包括名称、认证信息、Base URL 和兼容 API。"
+        description="维护统一的 ProviderConfig，包括名称、认证信息、Base URL、兼容 API 和模型列表。"
         actions={
           <>
             <Badge variant="outline" className="rounded-full px-3 py-1.5">
               {providers.length} 个 Provider
             </Badge>
-            <Button onClick={() => {
-              setModalMode("create")
-              setSelectedProvider(null)
-              setModalOpen(true)
-            }}>
+            <Button
+              onClick={() => {
+                setModalMode("create")
+                setSelectedProvider(null)
+                setModalOpen(true)
+              }}
+            >
               <Plus className="mr-2 size-4" />
               新建 Provider
             </Button>
@@ -485,13 +736,15 @@ export function Providers() {
         <EmptyState
           icon={KeyRound}
           title="还没有 Provider"
-          description="先配置 Provider，再去 Agent 页面绑定模型、提示词和默认角色。"
+          description="先配置 Provider 和模型列表，再去 Agent 页面绑定模型、提示词和默认角色。"
           action={
-            <Button onClick={() => {
-              setModalMode("create")
-              setSelectedProvider(null)
-              setModalOpen(true)
-            }}>
+            <Button
+              onClick={() => {
+                setModalMode("create")
+                setSelectedProvider(null)
+                setModalOpen(true)
+              }}
+            >
               <Plus className="mr-2 size-4" />
               创建第一个 Provider
             </Button>
@@ -503,7 +756,10 @@ export function Providers() {
             <ProviderCard
               key={provider.name}
               provider={provider}
-              onTest={handleTestSavedConnection}
+              onOpenTest={(nextProvider) => {
+                setSelectedProvider(nextProvider)
+                setTestModalOpen(true)
+              }}
               onEdit={(nextProvider) => {
                 setModalMode("edit")
                 setSelectedProvider(nextProvider)
@@ -523,6 +779,13 @@ export function Providers() {
         provider={selectedProvider}
         onClose={() => setModalOpen(false)}
         onSubmit={modalMode === "create" ? handleCreate : handleEdit}
+      />
+
+      <ProviderConnectionTestDialog
+        provider={selectedProvider}
+        open={testModalOpen}
+        onOpenChange={setTestModalOpen}
+        onTest={handleTestSavedConnection}
       />
 
       <ProviderDeleteDialog

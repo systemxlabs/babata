@@ -56,6 +56,7 @@ import type {
   AgentDetail,
   AgentFrontmatter,
   CreateAgentRequest,
+  ProviderConfig,
   UpdateAgentRequest,
 } from "@/types"
 
@@ -63,32 +64,39 @@ interface AgentModalProps {
   isOpen: boolean
   onClose: () => void
   onSubmit: (data: CreateAgentRequest | UpdateAgentRequest) => Promise<void>
-  providerNames: string[]
+  providerConfigs: ProviderConfig[]
   agent?: AgentDetail | null
   mode: "create" | "edit"
 }
 
-function createInitialForm(providerNames: string[]): CreateAgentRequest {
+function createInitialForm(providerConfigs: ProviderConfig[]): CreateAgentRequest {
+  const firstProvider = providerConfigs[0]
+  const firstModel = firstProvider?.models[0]
+
   return {
     name: "",
     description: "",
-    provider: providerNames[0] ?? "openai",
-    model: "gpt-4",
+    provider: firstProvider?.name ?? "",
+    model: firstModel?.id ?? "",
     allowed_tools: [],
     default: false,
     body: "",
   }
 }
 
+function formatContextWindowTokens(value: number): string {
+  return `${value.toLocaleString("en-US")} tokens`
+}
+
 function AgentModal({
   isOpen,
   onClose,
   onSubmit,
-  providerNames,
+  providerConfigs,
   agent,
   mode,
 }: AgentModalProps) {
-  const [formData, setFormData] = useState<CreateAgentRequest>(createInitialForm(providerNames))
+  const [formData, setFormData] = useState<CreateAgentRequest>(createInitialForm(providerConfigs))
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -106,11 +114,45 @@ function AgentModal({
         body: agent.body,
       })
     } else {
-      setFormData(createInitialForm(providerNames))
+      setFormData(createInitialForm(providerConfigs))
     }
 
     setError(null)
-  }, [agent, isOpen, mode, providerNames])
+  }, [agent, isOpen, mode, providerConfigs])
+
+  const selectedProvider = useMemo(
+    () => providerConfigs.find((provider) => provider.name === formData.provider) ?? null,
+    [formData.provider, providerConfigs]
+  )
+
+  const selectedModel = useMemo(
+    () => selectedProvider?.models.find((model) => model.id === formData.model) ?? null,
+    [formData.model, selectedProvider]
+  )
+
+  useEffect(() => {
+    if (!isOpen) return
+
+    if (!selectedProvider) {
+      if (providerConfigs.length > 0) {
+        const firstProvider = providerConfigs[0]
+        setFormData((current) => ({
+          ...current,
+          provider: firstProvider.name,
+          model: firstProvider.models[0]?.id ?? "",
+        }))
+      }
+      return
+    }
+
+    const modelExists = selectedProvider.models.some((model) => model.id === formData.model)
+    if (!modelExists) {
+      setFormData((current) => ({
+        ...current,
+        model: selectedProvider.models[0]?.id ?? "",
+      }))
+    }
+  }, [formData.model, isOpen, providerConfigs, selectedProvider])
 
   const toolsValue = useMemo(() => formData.allowed_tools.join(", "), [formData.allowed_tools])
 
@@ -119,6 +161,14 @@ function AgentModal({
 
     if (!formData.name.trim() || !formData.body.trim()) {
       setError("名称和 Body 不能为空")
+      return
+    }
+    if (!formData.provider.trim()) {
+      setError("Provider 不能为空")
+      return
+    }
+    if (!formData.model.trim()) {
+      setError("Model 不能为空")
       return
     }
 
@@ -177,17 +227,40 @@ function AgentModal({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="agent-model">Model</Label>
-                <Input
-                  id="agent-model"
-                  value={formData.model}
-                  onChange={(event) =>
-                    setFormData((current) => ({ ...current, model: event.target.value }))
-                  }
-                  disabled={loading}
-                  className="h-11 rounded-2xl"
-                  placeholder="例如 gpt-4.1"
-                />
+                <Label>Provider</Label>
+                {providerConfigs.length > 0 ? (
+                  <Select
+                    value={formData.provider}
+                    onValueChange={(value) => {
+                      const nextProvider =
+                        providerConfigs.find((provider) => provider.name === value) ?? null
+                      setFormData((current) => ({
+                        ...current,
+                        provider: value,
+                        model: nextProvider?.models[0]?.id ?? "",
+                      }))
+                    }}
+                    disabled={loading}
+                  >
+                    <SelectTrigger className="h-11 rounded-2xl">
+                      <SelectValue placeholder="选择 Provider" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {providerConfigs.map((provider) => (
+                        <SelectItem key={provider.name} value={provider.name}>
+                          {provider.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    value=""
+                    disabled
+                    className="h-11 rounded-2xl"
+                    placeholder="请先创建 Provider"
+                  />
+                )}
               </div>
             </div>
 
@@ -207,37 +280,39 @@ function AgentModal({
 
             <div className="grid gap-5 md:grid-cols-2">
               <div className="space-y-2">
-                <Label>Provider</Label>
-                {providerNames.length > 0 ? (
+                <Label>Model</Label>
+                {selectedProvider ? (
                   <Select
-                    value={formData.provider}
+                    value={formData.model}
                     onValueChange={(value) =>
-                      setFormData((current) => ({ ...current, provider: value }))
+                      setFormData((current) => ({ ...current, model: value }))
                     }
                     disabled={loading}
                   >
                     <SelectTrigger className="h-11 rounded-2xl">
-                      <SelectValue placeholder="选择 Provider" />
+                      <SelectValue placeholder="选择模型" />
                     </SelectTrigger>
                     <SelectContent>
-                      {providerNames.map((providerName) => (
-                        <SelectItem key={providerName} value={providerName}>
-                          {providerName}
+                      {selectedProvider.models.map((model) => (
+                        <SelectItem key={model.id} value={model.id}>
+                          {model.id}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 ) : (
                   <Input
-                    value={formData.provider}
-                    onChange={(event) =>
-                      setFormData((current) => ({ ...current, provider: event.target.value }))
-                    }
-                    disabled={loading}
+                    value=""
+                    disabled
                     className="h-11 rounded-2xl"
-                    placeholder="先配置 Provider，或手动输入 provider 名称"
+                    placeholder="请先选择 Provider"
                   />
                 )}
+                {selectedModel ? (
+                  <div className="text-sm text-muted-foreground">
+                    上下文长度: {formatContextWindowTokens(selectedModel.context_window)}
+                  </div>
+                ) : null}
               </div>
 
               <div className="space-y-2">
@@ -294,7 +369,7 @@ function AgentModal({
             <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
               取消
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading || providerConfigs.length === 0}>
               {loading ? "保存中..." : mode === "create" ? "创建 Agent" : "保存修改"}
             </Button>
           </DialogFooter>
@@ -452,7 +527,7 @@ function AgentCard({
 
 export function Agents() {
   const [agents, setAgents] = useState<AgentFrontmatter[]>([])
-  const [providerNames, setProviderNames] = useState<string[]>([])
+  const [providerConfigs, setProviderConfigs] = useState<ProviderConfig[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
@@ -471,7 +546,7 @@ export function Agents() {
       ])
 
       setAgents(agentsResponse.agents)
-      setProviderNames(providersResponse.providers.map((provider) => provider.name))
+      setProviderConfigs(providersResponse.providers)
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : "获取 Agent 列表失败")
@@ -600,7 +675,7 @@ export function Agents() {
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         onSubmit={modalMode === "create" ? handleCreate : handleEdit}
-        providerNames={providerNames}
+        providerConfigs={providerConfigs}
         agent={selectedAgent}
         mode={modalMode}
       />

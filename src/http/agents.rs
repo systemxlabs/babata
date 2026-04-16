@@ -12,6 +12,7 @@ use crate::{
         AgentFrontmatter, agent_exists, delete_agent, load_agent_by_name, load_agents, save_agent,
     },
     error::BabataError,
+    provider::ProviderConfig,
     utils::agent_dir,
 };
 
@@ -53,6 +54,8 @@ pub(super) async fn create(
         return Err(BabataError::invalid_input("name cannot be empty"));
     }
 
+    validate_provider_model_selection(&request.provider, &request.model)?;
+
     if agent_exists(&request.name) {
         return Err(BabataError::invalid_input(format!(
             "Agent '{}' already exists",
@@ -93,6 +96,8 @@ pub(super) async fn update(
             name
         )));
     }
+
+    validate_provider_model_selection(&request.provider, &request.model)?;
 
     let existing_agent = load_agent_by_name(&name)?;
     let old_default = existing_agent.frontmatter.default == Some(true);
@@ -205,6 +210,12 @@ fn unset_current_default_agent(excluding: &str) -> BabataResult<()> {
         }
     }
 
+    Ok(())
+}
+
+fn validate_provider_model_selection(provider_name: &str, model_id: &str) -> BabataResult<()> {
+    let provider = ProviderConfig::load(provider_name)?;
+    provider.find_model(model_id)?;
     Ok(())
 }
 

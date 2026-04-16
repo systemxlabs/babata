@@ -16,6 +16,13 @@ pub struct ProviderConfig {
     pub api_key: String,
     pub base_url: String,
     pub compatible_api: CompatibleApi,
+    pub models: Vec<ProviderModelConfig>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+pub struct ProviderModelConfig {
+    pub id: String,
+    pub context_window: u32,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
@@ -41,11 +48,55 @@ impl ProviderConfig {
             ));
         }
 
+        if self.models.is_empty() {
+            return Err(BabataError::config("Provider models cannot be empty"));
+        }
+
+        let mut model_ids = HashSet::new();
+        for model in &self.models {
+            if model.id.trim().is_empty() {
+                return Err(BabataError::config(
+                    "Provider model id cannot be empty or whitespace",
+                ));
+            }
+
+            if model.id.trim() != model.id {
+                return Err(BabataError::config(
+                    "Provider model id cannot have leading or trailing whitespace",
+                ));
+            }
+
+            if model.context_window == 0 {
+                return Err(BabataError::config(
+                    "Provider model context_window_tokens must be greater than zero",
+                ));
+            }
+
+            if !model_ids.insert(model.id.clone()) {
+                return Err(BabataError::config(format!(
+                    "Duplicate provider model '{}' found in provider '{}'",
+                    model.id, self.name
+                )));
+            }
+        }
+
         Ok(())
     }
 
     pub fn matches_name(&self, name: &str) -> bool {
         self.name.eq_ignore_ascii_case(name)
+    }
+
+    pub fn find_model(&self, model_id: &str) -> BabataResult<&ProviderModelConfig> {
+        self.models
+            .iter()
+            .find(|model| model.id == model_id)
+            .ok_or_else(|| {
+                BabataError::invalid_input(format!(
+                    "Model '{}' is not configured for provider '{}'",
+                    model_id, self.name
+                ))
+            })
     }
 
     pub fn load(name: &str) -> BabataResult<Self> {
@@ -177,6 +228,10 @@ mod tests {
             api_key: "test-key".to_string(),
             base_url: "   ".to_string(),
             compatible_api: CompatibleApi::Openai,
+            models: vec![ProviderModelConfig {
+                id: "gpt-4.1".to_string(),
+                context_window: 128000,
+            }],
         };
 
         let result = config.validate();
@@ -192,6 +247,10 @@ mod tests {
             api_key: "test-key".to_string(),
             base_url: "https://example.com/v1".to_string(),
             compatible_api: CompatibleApi::Openai,
+            models: vec![ProviderModelConfig {
+                id: "gpt-4.1".to_string(),
+                context_window: 128000,
+            }],
         };
 
         let result = config.validate();
@@ -206,7 +265,13 @@ mod tests {
             "name": "custom-dev",
             "api_key": "test-key",
             "base_url": "https://example.com/v1",
-            "compatible_api": "openai"
+            "compatible_api": "openai",
+            "models": [
+                {
+                    "id": "gpt-4.1-mini",
+                    "context_window": 128000
+                }
+            ]
         }"#;
         let parsed: ProviderConfig = serde_json::from_str(payload).expect("parse provider json");
 
@@ -214,5 +279,122 @@ mod tests {
         assert_eq!(parsed.api_key, "test-key");
         assert_eq!(parsed.base_url, "https://example.com/v1");
         assert_eq!(parsed.compatible_api, CompatibleApi::Openai);
+        assert_eq!(
+            parsed.models,
+            vec![ProviderModelConfig {
+                id: "gpt-4.1-mini".to_string(),
+                context_window: 128000,
+            }]
+        );
+    }
+
+    #[test]
+    fn validate_provider_rejects_empty_models() {
+        let config = ProviderConfig {
+            name: "custom".to_string(),
+            api_key: "test-key".to_string(),
+            base_url: "https://example.com/v1".to_string(),
+            compatible_api: CompatibleApi::Openai,
+            models: Vec::new(),
+        };
+
+        let err = config
+            .validate()
+            .expect_err("expected models validation error");
+        assert!(err.to_string().contains("models"));
+    }
+
+    #[test]
+    fn validate_provider_rejects_duplicate_model_ids() {
+        let config = ProviderConfig {
+            name: "custom".to_string(),
+            api_key: "test-key".to_string(),
+            base_url: "https://example.com/v1".to_string(),
+            compatible_api: CompatibleApi::Openai,
+            models: vec![
+                ProviderModelConfig {
+                    id: "gpt-4.1".to_string(),
+                    context_window: 128000,
+                },
+                ProviderModelConfig {
+                    id: "gpt-4.1".to_string(),
+                    context_window: 200000,
+                },
+            ],
+        };
+
+        let err = config
+            .validate()
+            .expect_err("expected duplicate model validation error");
+        assert!(err.to_string().contains("Duplicate provider model"));
+    }
+
+    #[test]
+    fn validate_provider_rejects_zero_context_window() {
+        let config = ProviderConfig {
+            name: "custom".to_string(),
+            api_key: "test-key".to_string(),
+            base_url: "https://example.com/v1".to_string(),
+            compatible_api: CompatibleApi::Openai,
+            models: vec![ProviderModelConfig {
+                id: "gpt-4.1".to_string(),
+                context_window: 0,
+            }],
+        };
+
+        let err = config
+            .validate()
+            .expect_err("expected context window validation error");
+        assert!(err.to_string().contains("context_window"));
+    }
+
+    #[test]
+    fn find_model_returns_matching_model() {
+        let config = ProviderConfig {
+            name: "custom".to_string(),
+            api_key: "test-key".to_string(),
+            base_url: "https://example.com/v1".to_string(),
+            compatible_api: CompatibleApi::Openai,
+            models: vec![
+                ProviderModelConfig {
+                    id: "gpt-4.1".to_string(),
+                    context_window: 128000,
+                },
+                ProviderModelConfig {
+                    id: "o4-mini".to_string(),
+                    context_window: 200000,
+                },
+            ],
+        };
+
+        let model = config
+            .find_model("o4-mini")
+            .expect("expected model to exist");
+        assert_eq!(
+            model,
+            &ProviderModelConfig {
+                id: "o4-mini".to_string(),
+                context_window: 200000,
+            }
+        );
+    }
+
+    #[test]
+    fn find_model_rejects_unknown_model() {
+        let config = ProviderConfig {
+            name: "custom".to_string(),
+            api_key: "test-key".to_string(),
+            base_url: "https://example.com/v1".to_string(),
+            compatible_api: CompatibleApi::Openai,
+            models: vec![ProviderModelConfig {
+                id: "gpt-4.1".to_string(),
+                context_window: 128000,
+            }],
+        };
+
+        let err = config
+            .find_model("claude-3-5-sonnet")
+            .expect_err("expected unknown model error");
+        assert!(err.to_string().contains("not configured"));
     }
 }

@@ -109,11 +109,17 @@ export type CompatibleApi = 'openai' | 'anthropic';
 
 export type ChannelKind = 'telegram' | 'wechat';
 
+export interface ProviderModelConfig {
+  id: string;
+  context_window: number;
+}
+
 export interface ProviderConfig {
   name: string;
   api_key: string;
   base_url: string;
   compatible_api: CompatibleApi;
+  models: ProviderModelConfig[];
 }
 
 export interface ProvidersResponse {
