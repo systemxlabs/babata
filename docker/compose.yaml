@@ -9,6 +9,7 @@ services:
       - "18800:18800"
     environment:
       BABATA_SERVER_ADDR: 0.0.0.0:18800
+      TZ: Asia/Shanghai
     volumes:
       - type: bind
         source: ${HOME}/.babata
