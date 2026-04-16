@@ -106,7 +106,7 @@ fn load_agents_from_dir(dir: &Path) -> BabataResult<HashMap<String, Arc<Agent>>>
         .values()
         .filter(|d| d.frontmatter.default == Some(true))
         .count();
-    if agents.len() > 0 && default_count == 0 {
+    if agents.is_empty() && default_count == 0 {
         return Err(BabataError::config(
             "No default agent found. Exactly one agent must have 'default: true' in its frontmatter.",
         ));

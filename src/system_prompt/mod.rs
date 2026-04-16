@@ -198,15 +198,11 @@ mod tests {
         let prompt = build_channels_prompt(&channel_configs).unwrap();
 
         assert!(prompt.contains("# Configured channels"));
-        assert!(prompt.contains(
-            "telegram-main (telegram): receives messages from Telegram user (id: 123456)"
-        ));
-        assert!(prompt.contains("via bot (token: token)"));
         assert!(
-            prompt.contains(
-                "wechat-main (wechat): receives messages from Wechat user (id: wxid_123)"
-            )
+            prompt.contains("telegram-main: receives messages from Telegram user (id: 123456)")
         );
+        assert!(prompt.contains("via bot (token: token)"));
+        assert!(prompt.contains("wechat-main: receives messages from Wechat user (id: wxid_123)"));
         assert!(prompt.contains("Read file `"));
         assert!(prompt.contains("latest_context_token"));
     }
