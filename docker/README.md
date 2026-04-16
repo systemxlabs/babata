@@ -10,14 +10,6 @@ From the repository root:
 docker build -f docker/Dockerfile -t babata .
 ```
 
-If you need a proxy for GitHub, npm, apt, or Cargo during build, export it before building:
-
-```bash
-export HTTP_PROXY=http://your-proxy-host:7890
-export HTTPS_PROXY=http://your-proxy-host:7890
-export NO_PROXY=localhost,127.0.0.1,::1
-```
-
 ## Run
 
 From the repository root:
@@ -51,7 +43,5 @@ docker compose -f docker/compose.yaml down
 ```
 
 The Compose setup bind-mounts `${HOME}/.babata` to `/home/babata/.babata` and publishes the Web UI on `http://127.0.0.1:18800`.
-
-The Compose file forwards `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` into both the image build and the running container, so exporting those variables in your shell is enough before `docker compose up --build`.
 
 This setup assumes a Unix-like host with `HOME` available. Windows-specific path handling is intentionally not covered here.

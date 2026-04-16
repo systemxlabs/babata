@@ -1,14 +1,7 @@
 # syntax=docker/dockerfile:1
 
 FROM node:24-bookworm-slim AS web-builder
-ARG HTTP_PROXY
-ARG HTTPS_PROXY
-ARG NO_PROXY
 WORKDIR /app/web
-
-ENV HTTP_PROXY=${HTTP_PROXY} \
-    HTTPS_PROXY=${HTTPS_PROXY} \
-    NO_PROXY=${NO_PROXY}
 
 RUN npm install -g npm@11.6.2
 
@@ -19,14 +12,7 @@ COPY web/ ./
 RUN npm run build
 
 FROM rust:1-bookworm AS rust-builder
-ARG HTTP_PROXY
-ARG HTTPS_PROXY
-ARG NO_PROXY
 WORKDIR /app
-
-ENV HTTP_PROXY=${HTTP_PROXY} \
-    HTTPS_PROXY=${HTTPS_PROXY} \
-    NO_PROXY=${NO_PROXY}
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git libssl-dev pkg-config \
@@ -38,20 +24,14 @@ COPY src/ ./src/
 RUN cargo build --release
 
 FROM debian:bookworm-slim AS runtime
-ARG HTTP_PROXY
-ARG HTTPS_PROXY
-ARG NO_PROXY
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends bash ca-certificates git libssl3 ripgrep \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --home-dir /home/babata --shell /bin/bash babata
 
-ENV HOME=/home/babata \
-    BABATA_SERVER_ADDR=0.0.0.0:18800 \
-    HTTP_PROXY=${HTTP_PROXY} \
-    HTTPS_PROXY=${HTTPS_PROXY} \
-    NO_PROXY=${NO_PROXY}
+ENV HOME=/home/babata
+ENV BABATA_SERVER_ADDR=0.0.0.0:18800
 
 WORKDIR /app
 
