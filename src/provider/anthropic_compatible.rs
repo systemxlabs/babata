@@ -154,8 +154,15 @@ impl AnthropicCompatibleProvider {
 
         Ok(request_messages)
     }
+}
 
-    pub async fn generate<'a>(
+#[async_trait::async_trait]
+impl Provider for AnthropicCompatibleProvider {
+    fn name() -> &'static str {
+        "anthropic-compatible"
+    }
+
+    async fn generate<'a>(
         &self,
         request: GenerationRequest<'a>,
     ) -> BabataResult<GenerationResponse> {
@@ -264,20 +271,6 @@ impl AnthropicCompatibleProvider {
                 created_at: Utc::now(),
             },
         })
-    }
-}
-
-#[async_trait::async_trait]
-impl Provider for AnthropicCompatibleProvider {
-    fn name() -> &'static str {
-        "anthropic-compatible"
-    }
-
-    async fn generate<'a>(
-        &self,
-        request: GenerationRequest<'a>,
-    ) -> BabataResult<GenerationResponse> {
-        AnthropicCompatibleProvider::generate(self, request).await
     }
 }
 

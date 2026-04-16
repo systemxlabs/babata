@@ -174,8 +174,15 @@ impl OpenAICompatibleProvider {
 
         Ok(request_messages)
     }
+}
 
-    pub async fn generate<'a>(
+#[async_trait::async_trait]
+impl Provider for OpenAICompatibleProvider {
+    fn name() -> &'static str {
+        "openai-compatible"
+    }
+
+    async fn generate<'a>(
         &self,
         request: GenerationRequest<'a>,
     ) -> BabataResult<GenerationResponse> {
@@ -273,20 +280,6 @@ impl OpenAICompatibleProvider {
                 created_at: Utc::now(),
             },
         })
-    }
-}
-
-#[async_trait::async_trait]
-impl Provider for OpenAICompatibleProvider {
-    fn name() -> &'static str {
-        "openai-compatible"
-    }
-
-    async fn generate<'a>(
-        &self,
-        request: GenerationRequest<'a>,
-    ) -> BabataResult<GenerationResponse> {
-        OpenAICompatibleProvider::generate(self, request).await
     }
 }
 
