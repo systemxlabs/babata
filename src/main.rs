@@ -15,7 +15,7 @@ use log::info;
 async fn main() -> BabataResult<()> {
     babata::logging::init()?;
 
-    info!("Server run babata dir: {}", babata_dir()?.display());
+    info!("Server run at babata dir: {}", babata_dir()?.display());
 
     let channel_configs = ChannelConfig::load_all()?;
     let channels = build_channels(&channel_configs)?;

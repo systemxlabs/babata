@@ -18,7 +18,11 @@ mod task_files;
 
 mod steer_task;
 
-use std::{env, sync::Arc};
+use std::{
+    env,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4},
+    sync::Arc,
+};
 
 use axum::{
     Json, Router,
@@ -39,9 +43,9 @@ pub(crate) use control_task::{ControlTaskRequest, TaskAction};
 pub(crate) use create_task::CreateTaskResponse;
 pub(crate) use steer_task::SteerTaskRequest;
 
-pub const BABATA_SERVER_PORT_ENV: &str = "BABATA_SERVER_PORT";
-pub const DEFAULT_HTTP_HOST: &str = "127.0.0.1";
-pub const DEFAULT_HTTP_PORT: u16 = 18800;
+pub const BABATA_SERVER_ADDR_ENV: &str = "BABATA_SERVER_ADDR";
+pub const DEFAULT_HTTP_ADDR: SocketAddr =
+    SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 18800));
 
 #[derive(Clone)]
 pub struct HttpApp {
@@ -55,7 +59,7 @@ impl HttpApp {
 
     pub async fn serve(&self) -> BabataResult<()> {
         let http_addr = http_addr()?;
-        let listener = tokio::net::TcpListener::bind(&http_addr).await?;
+        let listener = tokio::net::TcpListener::bind(http_addr).await?;
 
         log::info!("HTTP server listening on {}", http_addr);
 
@@ -200,33 +204,49 @@ pub(crate) fn ensure_task_exists(task_manager: &TaskManager, task_id: Uuid) -> B
     Ok(())
 }
 
-pub(crate) fn http_port() -> BabataResult<u16> {
-    match env::var(BABATA_SERVER_PORT_ENV) {
-        Ok(raw) => raw.parse::<u16>().map_err(|err| {
-            BabataError::config(format!(
-                "Invalid {BABATA_SERVER_PORT_ENV} value '{}': {}",
-                raw, err
-            ))
-        }),
-        Err(env::VarError::NotPresent) => Ok(DEFAULT_HTTP_PORT),
+fn parse_http_addr(raw: &str) -> BabataResult<SocketAddr> {
+    raw.parse::<SocketAddr>().map_err(|err| {
+        BabataError::config(format!(
+            "Invalid {BABATA_SERVER_ADDR_ENV} value '{}': {}",
+            raw, err
+        ))
+    })
+}
+
+fn client_http_addr(http_addr: SocketAddr) -> SocketAddr {
+    match http_addr.ip() {
+        IpAddr::V4(ip) if ip.is_unspecified() => {
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), http_addr.port())
+        }
+        IpAddr::V6(ip) if ip.is_unspecified() => {
+            SocketAddr::new(IpAddr::V6(Ipv6Addr::LOCALHOST), http_addr.port())
+        }
+        _ => http_addr,
+    }
+}
+
+pub(crate) fn http_addr() -> BabataResult<SocketAddr> {
+    match env::var(BABATA_SERVER_ADDR_ENV) {
+        Ok(raw) => parse_http_addr(&raw),
+        Err(env::VarError::NotPresent) => Ok(DEFAULT_HTTP_ADDR),
         Err(err) => Err(BabataError::config(format!(
-            "Failed to read {BABATA_SERVER_PORT_ENV}: {err}"
+            "Failed to read {BABATA_SERVER_ADDR_ENV}: {err}"
         ))),
     }
 }
 
-pub(crate) fn http_addr() -> BabataResult<String> {
-    Ok(format!("{DEFAULT_HTTP_HOST}:{}", http_port()?))
-}
-
 pub(crate) fn http_base_url() -> BabataResult<String> {
-    Ok(format!("http://{}", http_addr()?))
+    Ok(format!("http://{}", client_http_addr(http_addr()?)))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{path_has_extension, request_accepts_html, should_serve_spa_index};
+    use super::{
+        client_http_addr, parse_http_addr, path_has_extension, request_accepts_html,
+        should_serve_spa_index,
+    };
     use axum::http::{HeaderMap, HeaderValue, Method, Uri, header};
+    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 
     #[test]
     fn spa_fallback_matches_html_navigation_routes() {
@@ -268,5 +288,29 @@ mod tests {
             HeaderValue::from_static("text/css,*/*;q=0.1"),
         );
         assert!(!request_accepts_html(&asset_headers));
+    }
+
+    #[test]
+    fn parse_http_addr_requires_host_and_port() {
+        let error = parse_http_addr("18800").expect_err("missing host should fail");
+        assert!(error.to_string().contains("Invalid BABATA_SERVER_ADDR"));
+    }
+
+    #[test]
+    fn http_client_addr_rewrites_unspecified_ipv4_to_loopback() {
+        let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 18800);
+        assert_eq!(
+            client_http_addr(addr),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 18800)
+        );
+    }
+
+    #[test]
+    fn http_client_addr_rewrites_unspecified_ipv6_to_loopback() {
+        let addr = SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), 18800);
+        assert_eq!(
+            client_http_addr(addr),
+            SocketAddr::new(IpAddr::V6(Ipv6Addr::LOCALHOST), 18800)
+        );
     }
 }
