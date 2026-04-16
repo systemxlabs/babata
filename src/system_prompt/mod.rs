@@ -50,14 +50,16 @@ pub fn build_environment_prompt(task_id: Uuid) -> BabataResult<String> {
 - Current working directory(CWD): {}
 - User time zone: {}
 - Operating system: {}
-- CPU architecture: {}"#,
+- CPU architecture: {}
+- Babata version: {}"#,
         user_home_dir()?.display(),
         babata_dir()?.display(),
         task_dir(task_id)?.display(),
         std::env::current_dir()?.display(),
         now.format("%Z (%:z)"),
         std::env::consts::OS,
-        std::env::consts::ARCH
+        std::env::consts::ARCH,
+        env!("CARGO_PKG_VERSION")
     ))
 }
 
