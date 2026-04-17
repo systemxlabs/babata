@@ -40,3 +40,10 @@ pub fn channel_dir(channel_name: &str) -> BabataResult<PathBuf> {
 pub fn agent_dir(agent_name: &str) -> BabataResult<PathBuf> {
     Ok(babata_dir()?.join("agents").join(agent_name))
 }
+
+pub const fn build_commit() -> Option<&'static str> {
+    match option_env!("BABATA_GIT_COMMIT") {
+        Some(commit_id) if !commit_id.is_empty() => Some(commit_id),
+        _ => None,
+    }
+}

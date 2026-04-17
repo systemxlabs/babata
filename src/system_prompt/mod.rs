@@ -6,7 +6,7 @@ use crate::{
     channel::ChannelConfig,
     skill::Skill,
     tool::ToolSpec,
-    utils::{babata_dir, channel_dir, task_dir, user_home_dir},
+    utils::{babata_dir, build_commit, channel_dir, task_dir, user_home_dir},
 };
 use chrono::Local;
 use uuid::Uuid;
@@ -41,7 +41,6 @@ pub fn build_system_prompts(
 }
 
 pub fn build_environment_prompt(task_id: Uuid) -> BabataResult<String> {
-    let now = Local::now();
     Ok(format!(
         r#"# Environment
 - User home directory(USER_HOME): {}
@@ -50,14 +49,18 @@ pub fn build_environment_prompt(task_id: Uuid) -> BabataResult<String> {
 - Current working directory(CWD): {}
 - User time zone: {}
 - Operating system: {}
-- CPU architecture: {}"#,
+- CPU architecture: {}
+- Babata version: {}
+- Babata build commit: {}"#,
         user_home_dir()?.display(),
         babata_dir()?.display(),
         task_dir(task_id)?.display(),
         std::env::current_dir()?.display(),
-        now.format("%Z (%:z)"),
+        Local::now().format("%Z (%:z)"),
         std::env::consts::OS,
-        std::env::consts::ARCH
+        std::env::consts::ARCH,
+        env!("CARGO_PKG_VERSION"),
+        build_commit().unwrap_or("unknown"),
     ))
 }
 
