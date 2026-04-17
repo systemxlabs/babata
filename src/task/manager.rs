@@ -30,8 +30,6 @@ pub struct TaskManager {
     running_tasks: Arc<Mutex<HashMap<Uuid, RunningTask>>>,
     exit_tx: mpsc::Sender<TaskExitEvent>,
     exit_rx: Mutex<Option<mpsc::Receiver<TaskExitEvent>>>,
-    #[cfg(test)]
-    next_task_id: Mutex<Option<Uuid>>,
 }
 
 impl TaskManager {
@@ -43,8 +41,6 @@ impl TaskManager {
             running_tasks: Arc::new(Mutex::new(HashMap::new())),
             exit_tx,
             exit_rx: Mutex::new(Some(exit_rx)),
-            #[cfg(test)]
-            next_task_id: Mutex::new(None),
         })
     }
 
@@ -205,10 +201,10 @@ impl TaskManager {
     }
 
     pub fn create_task(&self, request: CreateTaskRequest) -> BabataResult<Uuid> {
-        #[cfg(test)]
-        let task_id = self.next_task_id.lock().take().unwrap_or_else(Uuid::new_v4);
-        #[cfg(not(test))]
-        let task_id = Uuid::new_v4();
+        self.create_task_with_id(Uuid::new_v4(), request)
+    }
+
+    fn create_task_with_id(&self, task_id: Uuid, request: CreateTaskRequest) -> BabataResult<Uuid> {
         task_info!(task_id, "Creating task with request: {:?}", request);
 
         let (root_task_id, parent_depth) = if let Some(parent_task_id) = request.parent_task_id {
@@ -727,9 +723,15 @@ mod tests {
         steer_queue
     }
 
-    impl TaskManager {
-        fn set_next_task_id_for_test(&self, task_id: Uuid) {
-            *self.next_task_id.lock() = Some(task_id);
+    fn create_task_request(description: &str, agent: &str) -> CreateTaskRequest {
+        CreateTaskRequest {
+            description: description.to_string(),
+            prompt: vec![Content::Text {
+                text: description.to_string(),
+            }],
+            parent_task_id: None,
+            agent: agent.to_string(),
+            never_ends: false,
         }
     }
 
@@ -858,19 +860,13 @@ mod tests {
         let temp_root = temp_test_root("manager-create-launch-failure");
         fs::create_dir_all(&temp_root).expect("create temp root");
         let manager = build_test_manager(&temp_root);
-        let failing_task_id = Uuid::new_v4();
-        manager.set_next_task_id_for_test(failing_task_id);
+        let task_id = Uuid::new_v4();
 
         let error = manager
-            .create_task(CreateTaskRequest {
-                description: "test create task failure".to_string(),
-                prompt: vec![Content::Text {
-                    text: "test create task failure".to_string(),
-                }],
-                parent_task_id: None,
-                agent: "missing-agent".to_string(),
-                never_ends: false,
-            })
+            .create_task_with_id(
+                task_id,
+                create_task_request("test create task failure", "missing-agent"),
+            )
             .expect_err("create task should fail when launch cannot resolve agent");
 
         assert!(
@@ -878,13 +874,13 @@ mod tests {
                 .to_string()
                 .contains("Agent 'missing-agent' not found")
         );
-        assert!(matches!(
-            manager.store.get_task(failing_task_id),
-            Err(BabataError::NotFound(..))
-        ));
+        assert_eq!(manager.store.count_tasks(None).expect("count tasks"), 0);
 
-        let created_task_dir = task_dir(failing_task_id).expect("resolve task dir");
-        assert!(!created_task_dir.exists());
+        let created_task_dir = task_dir(task_id).expect("resolve task dir");
+        assert!(
+            !created_task_dir.exists(),
+            "launch failure should roll back the created task directory"
+        );
 
         let _ = fs::remove_dir_all(&temp_root);
     }
