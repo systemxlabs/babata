@@ -30,6 +30,8 @@ pub struct TaskManager {
     running_tasks: Arc<Mutex<HashMap<Uuid, RunningTask>>>,
     exit_tx: mpsc::Sender<TaskExitEvent>,
     exit_rx: Mutex<Option<mpsc::Receiver<TaskExitEvent>>>,
+    #[cfg(test)]
+    next_task_id: Mutex<Option<Uuid>>,
 }
 
 impl TaskManager {
@@ -41,6 +43,8 @@ impl TaskManager {
             running_tasks: Arc::new(Mutex::new(HashMap::new())),
             exit_tx,
             exit_rx: Mutex::new(Some(exit_rx)),
+            #[cfg(test)]
+            next_task_id: Mutex::new(None),
         })
     }
 
@@ -201,6 +205,9 @@ impl TaskManager {
     }
 
     pub fn create_task(&self, request: CreateTaskRequest) -> BabataResult<Uuid> {
+        #[cfg(test)]
+        let task_id = self.next_task_id.lock().take().unwrap_or_else(Uuid::new_v4);
+        #[cfg(not(test))]
         let task_id = Uuid::new_v4();
         task_info!(task_id, "Creating task with request: {:?}", request);
 
@@ -234,8 +241,29 @@ impl TaskManager {
         std::fs::create_dir_all(task_dir(task_id)?)?;
 
         let running_task =
-            self.launcher
-                .launch(&task_record, request.prompt, self.exit_tx.clone())?;
+            match self
+                .launcher
+                .launch(&task_record, request.prompt, self.exit_tx.clone())
+            {
+                Ok(running_task) => running_task,
+                Err(error) => {
+                    if let Err(rollback_error) = self.store.delete_task(task_id) {
+                        task_error!(
+                            task_id,
+                            "Failed to rollback task record after launch error: {}",
+                            rollback_error
+                        );
+                    }
+                    if let Err(rollback_error) = remove_task_dir(task_id) {
+                        task_error!(
+                            task_id,
+                            "Failed to rollback task directory after launch error: {}",
+                            rollback_error
+                        );
+                    }
+                    return Err(error);
+                }
+            };
         {
             let mut guard = self.running_tasks.lock();
             guard.insert(task_id, running_task);
@@ -699,6 +727,12 @@ mod tests {
         steer_queue
     }
 
+    impl TaskManager {
+        fn set_next_task_id_for_test(&self, task_id: Uuid) {
+            *self.next_task_id.lock() = Some(task_id);
+        }
+    }
+
     #[tokio::test]
     async fn handle_task_completed_relaunches_never_ending_task() {
         let temp_root = temp_test_root("manager-never-ends");
@@ -816,6 +850,42 @@ mod tests {
 
         cleanup_task_artifacts(&manager, task_id);
         let _ = manager.store.delete_task(task_id);
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[tokio::test]
+    async fn create_task_returns_error_when_launch_fails_and_rolls_back_store_and_directory() {
+        let temp_root = temp_test_root("manager-create-launch-failure");
+        fs::create_dir_all(&temp_root).expect("create temp root");
+        let manager = build_test_manager(&temp_root);
+        let failing_task_id = Uuid::new_v4();
+        manager.set_next_task_id_for_test(failing_task_id);
+
+        let error = manager
+            .create_task(CreateTaskRequest {
+                description: "test create task failure".to_string(),
+                prompt: vec![Content::Text {
+                    text: "test create task failure".to_string(),
+                }],
+                parent_task_id: None,
+                agent: "missing-agent".to_string(),
+                never_ends: false,
+            })
+            .expect_err("create task should fail when launch cannot resolve agent");
+
+        assert!(
+            error
+                .to_string()
+                .contains("Agent 'missing-agent' not found")
+        );
+        assert!(matches!(
+            manager.store.get_task(failing_task_id),
+            Err(BabataError::NotFound(..))
+        ));
+
+        let created_task_dir = task_dir(failing_task_id).expect("resolve task dir");
+        assert!(!created_task_dir.exists());
+
         let _ = fs::remove_dir_all(&temp_root);
     }
 
