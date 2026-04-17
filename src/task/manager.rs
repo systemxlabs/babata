@@ -254,9 +254,7 @@ impl TaskManager {
             )));
         }
 
-        if let Some(running_task) = self.running_tasks.lock().remove(&task_id) {
-            running_task.abort();
-        }
+        self.stop_running_task(task_id);
 
         self.store.update_task_status(task_id, TaskStatus::Paused)?;
         Ok(())
@@ -293,9 +291,7 @@ impl TaskManager {
         let task = self.store.get_task(task_id)?;
         task_info!(task_id, "Relaunching task from status {}", task.status);
 
-        if let Some(running_task) = self.running_tasks.lock().remove(&task_id) {
-            running_task.abort();
-        }
+        self.stop_running_task(task_id);
 
         let running_task = self
             .launcher
@@ -373,6 +369,12 @@ impl TaskManager {
             .unwrap_or_default()
     }
 
+    fn stop_running_task(&self, task_id: Uuid) {
+        if let Some(running_task) = self.running_tasks.lock().remove(&task_id) {
+            running_task.abort();
+        }
+    }
+
     pub fn task_exists(&self, task_id: Uuid) -> BabataResult<bool> {
         self.store.task_exists(task_id)
     }
@@ -388,16 +390,12 @@ impl TaskManager {
         let subtasks = self.store.list_all_subtasks(task_id)?;
 
         // Cancel and delete the target task if it's running
-        if let Some(running_task) = self.running_tasks.lock().remove(&task_id) {
-            running_task.abort();
-        }
+        self.stop_running_task(task_id);
 
         // Delete subtasks: cancel running, delete metadata, delete directory
         for subtask in &subtasks {
             // Cancel if running
-            if let Some(running_task) = self.running_tasks.lock().remove(&subtask.task_id) {
-                running_task.abort();
-            }
+            self.stop_running_task(subtask.task_id);
             // Delete from store
             if let Err(err) = self.store.delete_task(subtask.task_id) {
                 task_error!(subtask.task_id, "Failed to delete subtask: {}", err);
@@ -443,9 +441,7 @@ impl TaskManager {
     }
 
     fn handle_task_completed(&self, task_id: Uuid) {
-        if let Some(running_task) = self.running_tasks.lock().remove(&task_id) {
-            running_task.abort();
-        }
+        self.stop_running_task(task_id);
         let task = match self.store.get_task(task_id) {
             Ok(task) => task,
             Err(err) => {
@@ -511,9 +507,7 @@ impl TaskManager {
     }
 
     fn handle_task_failed(&self, task_id: Uuid, error: BabataError) {
-        if let Some(running_task) = self.running_tasks.lock().remove(&task_id) {
-            running_task.abort();
-        }
+        self.stop_running_task(task_id);
 
         let task = match self.store.get_task(task_id) {
             Ok(task) => task,
@@ -572,9 +566,7 @@ impl TaskManager {
         }
 
         task_info!(task_id, "Cancelling task recursively");
-        if let Some(running_task) = self.running_tasks.lock().remove(&task_id) {
-            running_task.abort();
-        }
+        self.stop_running_task(task_id);
 
         self.store
             .update_task_status(task_id, TaskStatus::Canceled)?;
