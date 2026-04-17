@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { AlertTriangle, LoaderCircle } from "lucide-react"
 
 import {
@@ -31,11 +31,16 @@ export function DeleteConfirmModal({
 }: DeleteConfirmModalProps) {
   const [isDeleting, setIsDeleting] = useState(false)
 
+  useEffect(() => {
+    if (isOpen) {
+      setIsDeleting(false)
+    }
+  }, [isOpen, taskId])
+
   const handleConfirm = async () => {
     setIsDeleting(true)
     try {
       await onConfirm()
-      onCancel()
     } catch {
       setIsDeleting(false)
     }

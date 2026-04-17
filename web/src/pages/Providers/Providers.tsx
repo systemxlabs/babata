@@ -45,6 +45,7 @@ import {
 import type { CompatibleApi, ProviderConfig, ProviderModelConfig } from "@/types"
 
 interface ProviderModelFormState {
+  rowKey: string
   id: string
   context_window: string
 }
@@ -57,8 +58,16 @@ interface ProviderFormState {
   models: ProviderModelFormState[]
 }
 
+let providerModelRowKeyCounter = 0
+
+function createProviderModelRowKey(): string {
+  providerModelRowKeyCounter += 1
+  return `provider-model-${providerModelRowKeyCounter}`
+}
+
 function createEmptyModelFormState(): ProviderModelFormState {
   return {
+    rowKey: createProviderModelRowKey(),
     id: "",
     context_window: "",
   }
@@ -81,6 +90,7 @@ function toFormState(provider?: ProviderConfig | null): ProviderFormState {
     base_url: provider.base_url,
     compatible_api: provider.compatible_api,
     models: provider.models.map((model) => ({
+      rowKey: createProviderModelRowKey(),
       id: model.id,
       context_window: model.context_window.toString(),
     })),
@@ -313,7 +323,7 @@ function ProviderModal({
               <div className="space-y-3">
                 {formState.models.map((model, index) => (
                   <div
-                    key={`${index}-${model.id}`}
+                    key={model.rowKey}
                     className="grid gap-3 rounded-[1.25rem] border border-border/70 bg-card/70 p-4 md:grid-cols-[minmax(0,1fr)_220px_auto]"
                   >
                     <div className="space-y-2">
