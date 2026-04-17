@@ -7,7 +7,7 @@ use babata::{
     http::HttpApp,
     message::Content,
     task::{CreateTaskRequest, TaskLauncher, TaskManager, TaskStore},
-    utils::babata_dir,
+    utils::{babata_dir, build_commit},
 };
 use log::info;
 
@@ -39,8 +39,9 @@ async fn main() -> BabataResult<()> {
 
 async fn broadcast_service_started(task_manager: &Arc<TaskManager>) -> BabataResult<()> {
     let notification = format!(
-        "Babata server started.\nVersion: {}\nBabata home: {}",
+        "Babata server started.\nVersion: {}\nBuild commit: {}\nBabata home: {}",
         env!("CARGO_PKG_VERSION"),
+        build_commit().unwrap_or("unknown"),
         babata_dir()?.display(),
     );
 
