@@ -445,8 +445,11 @@ export function Dashboard() {
                   className="rounded-[1.6rem] border border-border/70 bg-background/70 p-5 transition-transform duration-200 hover:-translate-y-0.5"
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div className="space-y-2">
-                      <div className="text-lg font-semibold tracking-tight text-foreground">
+                    <div className="space-y-2 flex-1 min-w-0">
+                      <div 
+                        className="text-lg font-semibold tracking-tight text-foreground truncate" 
+                        title={task.description}
+                      >
                         {task.description}
                       </div>
                       <div className="flex flex-wrap gap-2">
