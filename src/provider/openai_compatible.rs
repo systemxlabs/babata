@@ -232,10 +232,16 @@ impl Provider for OpenAICompatibleProvider {
             )));
         }
 
-        let mut response_body: ChatCompletionResponse = response
-            .json()
+        let raw_response_body = response
+            .text()
             .await
-            .map_err(|e| BabataError::provider(format!("Failed to parse response body: {e}")))?;
+            .map_err(|e| BabataError::provider(format!("Failed to read response body: {e}")))?;
+        let mut response_body: ChatCompletionResponse = serde_json::from_str(&raw_response_body)
+            .map_err(|e| {
+                BabataError::provider(format!(
+                    "Failed to parse response body: {e}. Response body: {raw_response_body}"
+                ))
+            })?;
         debug!(
             "OpenAI-compatible response: {}",
             serde_json::to_string_pretty(&response_body)?

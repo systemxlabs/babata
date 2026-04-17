@@ -52,31 +52,55 @@ impl Tool for SleepTool {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
-#[serde(tag = "mode", rename_all = "snake_case", deny_unknown_fields)]
-enum SleepArgs {
-    Seconds {
-        #[schemars(description = "Sleep duration in seconds")]
-        seconds: f64,
-    },
-    Until {
-        #[schemars(
-            description = "Wake-up time in RFC3339 format with timezone, for example 2026-03-16T18:30:00+08:00"
-        )]
-        until: String,
-    },
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+struct SleepArgs {
+    #[schemars(description = "Sleep mode: 'seconds' or 'until'")]
+    mode: SleepMode,
+    #[schemars(description = "Sleep duration in seconds when mode is 'seconds'")]
+    seconds: Option<f64>,
+    #[schemars(
+        description = "Wake-up time in RFC3339 format with timezone when mode is 'until', for example 2026-03-16T18:30:00+08:00"
+    )]
+    until: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+enum SleepMode {
+    Seconds,
+    Until,
 }
 
 fn parse_sleep_duration(args: &SleepArgs) -> BabataResult<Duration> {
-    match args {
-        SleepArgs::Seconds { seconds } => {
-            if !seconds.is_finite() || *seconds < 0.0 {
+    match args.mode {
+        SleepMode::Seconds => {
+            let seconds = args
+                .seconds
+                .ok_or_else(|| BabataError::tool("seconds is required when mode is 'seconds'"))?;
+            if args.until.is_some() {
+                return Err(BabataError::tool(
+                    "until must not be provided when mode is 'seconds'",
+                ));
+            }
+            if !seconds.is_finite() || seconds < 0.0 {
                 return Err(BabataError::tool(
                     "seconds must be a non-negative finite number",
                 ));
             }
-            Ok(Duration::from_secs_f64(*seconds))
+            Ok(Duration::from_secs_f64(seconds))
         }
-        SleepArgs::Until { until } => parse_until_duration(until),
+        SleepMode::Until => {
+            let until = args
+                .until
+                .as_deref()
+                .ok_or_else(|| BabataError::tool("until is required when mode is 'until'"))?;
+            if args.seconds.is_some() {
+                return Err(BabataError::tool(
+                    "seconds must not be provided when mode is 'until'",
+                ));
+            }
+            parse_until_duration(until)
+        }
     }
 }
 
@@ -146,7 +170,7 @@ mod tests {
 
     #[test]
     fn parse_sleep_duration_rejects_multiple_modes() {
-        let err = parse_tool_args::<SleepArgs>(
+        let args = parse_tool_args::<SleepArgs>(
             &json!({
                 "mode": "seconds",
                 "seconds": 1,
@@ -154,8 +178,9 @@ mod tests {
             })
             .to_string(),
         )
-        .expect_err("reject conflicting inputs");
-        assert!(err.to_string().contains("Invalid tool arguments"));
+        .expect("sleep args");
+        let err = parse_sleep_duration(&args).expect_err("reject conflicting inputs");
+        assert!(err.to_string().contains("until must not be provided"));
     }
 
     #[test]
@@ -163,6 +188,26 @@ mod tests {
         let err = parse_tool_args::<SleepArgs>(&json!({ "seconds": 1 }).to_string())
             .expect_err("missing mode should fail");
         assert!(err.to_string().contains("Invalid tool arguments"));
+    }
+
+    #[test]
+    fn parse_sleep_duration_rejects_missing_seconds_for_seconds_mode() {
+        let args = serde_json::from_value::<SleepArgs>(json!({
+            "mode": "seconds"
+        }))
+        .expect("sleep args");
+        let err = parse_sleep_duration(&args).expect_err("missing seconds should fail");
+        assert!(err.to_string().contains("seconds is required"));
+    }
+
+    #[test]
+    fn parse_sleep_duration_rejects_missing_until_for_until_mode() {
+        let args = serde_json::from_value::<SleepArgs>(json!({
+            "mode": "until"
+        }))
+        .expect("sleep args");
+        let err = parse_sleep_duration(&args).expect_err("missing until should fail");
+        assert!(err.to_string().contains("until is required"));
     }
 
     #[test]

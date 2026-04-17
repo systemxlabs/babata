@@ -38,7 +38,7 @@ impl Tool for UpdateTaskTool {
 
     async fn execute(&self, args: &str, context: &ToolContext<'_>) -> BabataResult<String> {
         let args: UpdateTaskArgs = parse_tool_args(args)?;
-        let task_id = args.task_id.unwrap_or(*context.task_id);
+        let (task_id, update) = validate_update_args(args, context)?;
 
         let task = self.task_store.get_task(task_id)?;
         if !matches!(task.status, TaskStatus::Running | TaskStatus::Paused) {
@@ -48,9 +48,9 @@ impl Tool for UpdateTaskTool {
             )));
         }
 
-        self.task_store.update_task(task_id, args.update.clone())?;
+        self.task_store.update_task(task_id, update.clone())?;
 
-        let update_description = match &args.update {
+        let update_description = match &update {
             TaskUpdate::Description { description } => format!("description='{}'", description),
             TaskUpdate::NeverEnds { never_ends } => format!("never_ends={}", never_ends),
         };
@@ -63,13 +63,73 @@ impl Tool for UpdateTaskTool {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct UpdateTaskArgs {
     #[schemars(
         description = "Optional UUID of the task to update. If omitted, the current task is used."
     )]
     task_id: Option<Uuid>,
-    #[serde(flatten)]
-    update: TaskUpdate,
+    #[schemars(description = "Task field to update: 'description' or 'never_ends'")]
+    field: UpdateTaskField,
+    #[schemars(description = "New task description when field is 'description'")]
+    description: Option<String>,
+    #[schemars(
+        description = "New value for the task's never_ends flag when field is 'never_ends'"
+    )]
+    never_ends: Option<bool>,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+enum UpdateTaskField {
+    Description,
+    NeverEnds,
+}
+
+fn validate_update_args(
+    args: UpdateTaskArgs,
+    context: &ToolContext<'_>,
+) -> BabataResult<(Uuid, TaskUpdate)> {
+    let task_id = args.task_id.unwrap_or(*context.task_id);
+
+    let update = match args.field {
+        UpdateTaskField::Description => {
+            if args.never_ends.is_some() {
+                return Err(BabataError::tool(
+                    "never_ends must not be provided when field is 'description'",
+                ));
+            }
+
+            let description = args
+                .description
+                .ok_or_else(|| {
+                    BabataError::tool("description is required when field is 'description'")
+                })?
+                .trim()
+                .to_string();
+
+            if description.is_empty() {
+                return Err(BabataError::tool("description cannot be empty"));
+            }
+
+            TaskUpdate::Description { description }
+        }
+        UpdateTaskField::NeverEnds => {
+            if args.description.is_some() {
+                return Err(BabataError::tool(
+                    "description must not be provided when field is 'never_ends'",
+                ));
+            }
+
+            let never_ends = args.never_ends.ok_or_else(|| {
+                BabataError::tool("never_ends is required when field is 'never_ends'")
+            })?;
+
+            TaskUpdate::NeverEnds { never_ends }
+        }
+    };
+
+    Ok((task_id, update))
 }
 
 #[cfg(test)]
@@ -88,20 +148,7 @@ mod tests {
         context: &ToolContext<'_>,
     ) -> Result<(Uuid, TaskUpdate), BabataError> {
         let args: UpdateTaskArgs = parse_tool_args(args)?;
-        let task_id = args.task_id.unwrap_or(*context.task_id);
-
-        match args.update {
-            TaskUpdate::Description { description } => {
-                let description = description.trim().to_string();
-                if description.is_empty() {
-                    return Err(BabataError::tool("description cannot be empty"));
-                }
-                Ok((task_id, TaskUpdate::Description { description }))
-            }
-            TaskUpdate::NeverEnds { never_ends } => {
-                Ok((task_id, TaskUpdate::NeverEnds { never_ends }))
-            }
-        }
+        super::validate_update_args(args, context)
     }
 
     #[test]
@@ -118,7 +165,8 @@ mod tests {
         assert!(matches!(
             args,
             UpdateTaskArgs {
-                update: TaskUpdate::Description { description },
+                field: super::UpdateTaskField::Description,
+                description: Some(description),
                 ..
             } if description == "trim me"
         ));
@@ -138,7 +186,8 @@ mod tests {
         assert!(matches!(
             args,
             UpdateTaskArgs {
-                update: TaskUpdate::NeverEnds { never_ends },
+                field: super::UpdateTaskField::NeverEnds,
+                never_ends: Some(never_ends),
                 ..
             } if never_ends
         ));
@@ -184,16 +233,49 @@ mod tests {
 
     #[test]
     fn parse_args_rejects_multiple_update_fields() {
-        let error = parse_tool_args::<UpdateTaskArgs>(
+        let error = parse_update_args(
             &json!({
                 "field": "description",
                 "description": "x",
                 "never_ends": true
             })
             .to_string(),
+            &ToolContext::test(),
         )
         .expect_err("multiple update fields should fail");
 
-        assert!(error.to_string().contains("Invalid tool arguments"));
+        assert!(
+            error
+                .to_string()
+                .contains("never_ends must not be provided")
+        );
+    }
+
+    #[test]
+    fn parse_args_rejects_missing_description_for_description_field() {
+        let error = parse_update_args(
+            &json!({
+                "field": "description"
+            })
+            .to_string(),
+            &ToolContext::test(),
+        )
+        .expect_err("missing description should fail");
+
+        assert!(error.to_string().contains("description is required"));
+    }
+
+    #[test]
+    fn parse_args_rejects_missing_never_ends_for_never_ends_field() {
+        let error = parse_update_args(
+            &json!({
+                "field": "never_ends"
+            })
+            .to_string(),
+            &ToolContext::test(),
+        )
+        .expect_err("missing never_ends should fail");
+
+        assert!(error.to_string().contains("never_ends is required"));
     }
 }

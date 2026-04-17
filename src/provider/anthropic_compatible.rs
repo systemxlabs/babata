@@ -207,10 +207,16 @@ impl Provider for AnthropicCompatibleProvider {
             )));
         }
 
-        let response_body: AnthropicResponse = response
-            .json()
+        let raw_response_body = response
+            .text()
             .await
-            .map_err(|e| BabataError::provider(format!("Failed to parse response body: {e}")))?;
+            .map_err(|e| BabataError::provider(format!("Failed to read response body: {e}")))?;
+        let response_body: AnthropicResponse =
+            serde_json::from_str(&raw_response_body).map_err(|e| {
+                BabataError::provider(format!(
+                    "Failed to parse response body: {e}. Response body: {raw_response_body}"
+                ))
+            })?;
 
         debug!(
             "Anthropic-compatible API response: {}",
