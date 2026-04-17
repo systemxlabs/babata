@@ -273,7 +273,7 @@ export function TaskDetailModal({ taskId, isOpen, onClose }: TaskDetailModalProp
                           <div className="text-[0.72rem] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
                             Description
                           </div>
-                          <div className="mt-3 text-base font-semibold leading-7 tracking-tight text-foreground">
+                          <div className="mt-3 text-base font-semibold leading-7 tracking-tight text-foreground truncate" title={task.description}>
                             {task.description}
                           </div>
                         </div>
