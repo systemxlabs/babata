@@ -42,7 +42,7 @@ pub fn agent_dir(agent_name: &str) -> BabataResult<PathBuf> {
 }
 
 pub const fn build_commit() -> Option<&'static str> {
-    match option_env!("BABATA_GIT_COMMIT") {
+    match option_env!("BABATA_BUILD_COMMIT") {
         Some(commit_id) if !commit_id.is_empty() => Some(commit_id),
         _ => None,
     }

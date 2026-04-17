@@ -1,5 +1,6 @@
 use schemars::JsonSchema;
 use serde::Deserialize;
+use std::cmp::Reverse;
 use std::path::PathBuf;
 
 use crate::{
@@ -77,7 +78,7 @@ impl Tool for GlobTool {
                     .map(|d| (p, d.as_secs()))
             })
             .collect();
-        hits_with_mtime.sort_by(|a, b| b.1.cmp(&a.1));
+        hits_with_mtime.sort_by_key(|entry| Reverse(entry.1));
 
         let total = hits_with_mtime.len();
         let shown: Vec<_> = hits_with_mtime.into_iter().take(MAX_RESULTS).collect();

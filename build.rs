@@ -5,7 +5,7 @@ fn main() {
     println!("cargo:rerun-if-changed=.git/refs");
 
     if let Some(commit_id) = git_commit_id() {
-        println!("cargo:rustc-env=BABATA_GIT_COMMIT={commit_id}");
+        println!("cargo:rustc-env=BABATA_BUILD_COMMIT={commit_id}");
     }
 }
 

@@ -71,7 +71,7 @@ async fn read_task_logs(
     }
 
     // Sort by modification time: oldest first (chronological order)
-    log_files.sort_by(|a, b| a.1.cmp(&b.1));
+    log_files.sort_by_key(|entry| entry.1);
 
     let target_start = offset;
     let target_end = offset.saturating_add(limit);
