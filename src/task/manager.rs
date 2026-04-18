@@ -201,10 +201,7 @@ impl TaskManager {
     }
 
     pub fn create_task(&self, request: CreateTaskRequest) -> BabataResult<Uuid> {
-        self.create_task_with_id(Uuid::new_v4(), request)
-    }
-
-    fn create_task_with_id(&self, task_id: Uuid, request: CreateTaskRequest) -> BabataResult<Uuid> {
+        let task_id = Uuid::new_v4();
         task_info!(task_id, "Creating task with request: {:?}", request);
 
         let (root_task_id, parent_depth) = if let Some(parent_task_id) = request.parent_task_id {
@@ -735,6 +732,18 @@ mod tests {
         }
     }
 
+    fn task_dir_count() -> usize {
+        let task_root = crate::utils::babata_dir()
+            .expect("resolve babata dir")
+            .join("tasks");
+        std::fs::read_dir(&task_root)
+            .ok()
+            .into_iter()
+            .flat_map(|entries| entries.filter_map(Result::ok))
+            .filter(|entry| entry.path().is_dir())
+            .count()
+    }
+
     #[tokio::test]
     async fn handle_task_completed_relaunches_never_ending_task() {
         let temp_root = temp_test_root("manager-never-ends");
@@ -860,13 +869,13 @@ mod tests {
         let temp_root = temp_test_root("manager-create-launch-failure");
         fs::create_dir_all(&temp_root).expect("create temp root");
         let manager = build_test_manager(&temp_root);
-        let task_id = Uuid::new_v4();
 
+        let before_task_dirs = task_dir_count();
         let error = manager
-            .create_task_with_id(
-                task_id,
-                create_task_request("test create task failure", "missing-agent"),
-            )
+            .create_task(create_task_request(
+                "test create task failure",
+                "missing-agent",
+            ))
             .expect_err("create task should fail when launch cannot resolve agent");
 
         assert!(
@@ -876,9 +885,9 @@ mod tests {
         );
         assert_eq!(manager.store.count_tasks(None).expect("count tasks"), 0);
 
-        let created_task_dir = task_dir(task_id).expect("resolve task dir");
-        assert!(
-            !created_task_dir.exists(),
+        let after_task_dirs = task_dir_count();
+        assert_eq!(
+            after_task_dirs, before_task_dirs,
             "launch failure should roll back the created task directory"
         );
 
