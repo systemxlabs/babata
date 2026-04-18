@@ -88,13 +88,12 @@ impl WechatChannel {
                 continue;
             }
 
-            self.persist_latest_context_token(&message.context_token)?;
-
             let message_content = self.incoming_message_to_content(&message).await?;
 
             if let Some(hash) = extract_quote_hash(&message)
                 && let Some(waiter) = self.feedback_waiters.lock().await.remove(&hash)
             {
+                self.persist_latest_context_token(&message.context_token)?;
                 let _ = waiter.send(message_content);
                 continue;
             }
@@ -107,6 +106,7 @@ impl WechatChannel {
                 continue;
             }
 
+            self.persist_latest_context_token(&message.context_token)?;
             content.extend(message_content);
         }
 
@@ -679,6 +679,71 @@ mod tests {
             .await
             .expect("route incoming");
         assert!(routed.is_empty());
+    }
+
+    #[tokio::test]
+    async fn route_incoming_stale_non_feedback_message_does_not_persist_latest_context_token() {
+        let unique_name = format!("wechat-stale-no-persist-{}", uuid::Uuid::new_v4());
+        let latest_context_token_path = WechatChannel::latest_context_token_path(&unique_name)
+            .expect("latest context token path");
+        let parent_dir = latest_context_token_path
+            .parent()
+            .expect("channel directory")
+            .to_path_buf();
+        if parent_dir.exists() {
+            std::fs::remove_dir_all(&parent_dir).expect("cleanup existing channel directory");
+        }
+
+        let channel = WechatChannel::new(crate::channel::WechatChannelConfig {
+            name: unique_name.clone(),
+            bot_token: "token".to_string(),
+            user_id: "wxid_user".to_string(),
+        })
+        .expect("channel");
+
+        write_text_file(&latest_context_token_path, "existing-token")
+            .expect("seed latest context token");
+
+        let stale_timestamp = SystemTime::now()
+            .checked_sub(Duration::from_secs(7200))
+            .expect("stale timestamp");
+
+        let incoming = vec![IncomingMessage {
+            user_id: "wxid_user".to_string(),
+            text: "normal stale message".to_string(),
+            content_type: wechatbot::types::ContentType::Text,
+            timestamp: stale_timestamp,
+            images: Vec::new(),
+            voices: Vec::new(),
+            files: Vec::new(),
+            videos: Vec::new(),
+            quoted: None,
+            raw: WireMessage {
+                from_user_id: "wxid_user".to_string(),
+                to_user_id: "wxid_bot".to_string(),
+                client_id: "client".to_string(),
+                create_time_ms: 1,
+                message_type: wechatbot::types::MessageType::User,
+                message_state: MessageState::Finish,
+                context_token: "ctx-stale-normal-new".to_string(),
+                item_list: Vec::new(),
+            },
+            context_token: "ctx-stale-normal-new".to_string(),
+        }];
+
+        let routed = channel
+            .route_incoming(incoming)
+            .await
+            .expect("route incoming");
+        assert!(routed.is_empty());
+
+        let persisted = read_optional_trimmed_text(&latest_context_token_path)
+            .expect("read latest context token");
+        assert_eq!(persisted.as_deref(), Some("existing-token"));
+
+        if parent_dir.exists() {
+            std::fs::remove_dir_all(&parent_dir).expect("cleanup channel directory");
+        }
     }
 
     #[test]
