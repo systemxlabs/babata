@@ -201,10 +201,7 @@ impl TaskManager {
     }
 
     pub fn create_task(&self, request: CreateTaskRequest) -> BabataResult<Uuid> {
-        self.create_task_with_id(Uuid::new_v4(), request)
-    }
-
-    fn create_task_with_id(&self, task_id: Uuid, request: CreateTaskRequest) -> BabataResult<Uuid> {
+        let task_id = Uuid::new_v4();
         task_info!(task_id, "Creating task with request: {:?}", request);
 
         let (root_task_id, parent_depth) = if let Some(parent_task_id) = request.parent_task_id {
@@ -634,7 +631,12 @@ fn remove_task_dir(task_id: Uuid) -> BabataResult<()> {
 mod tests {
     use super::*;
     use crate::agent::{Agent, AgentFrontmatter};
-    use std::{collections::HashMap, fs, path::PathBuf};
+    use std::{
+        collections::HashMap,
+        fs,
+        path::{Path, PathBuf},
+        process::Command,
+    };
     use uuid::Uuid;
 
     fn task_record(never_ends: bool) -> TaskRecord {
@@ -735,6 +737,71 @@ mod tests {
         }
     }
 
+    fn isolated_task_root(temp_root: &Path) -> PathBuf {
+        temp_root.join(".babata").join("tasks")
+    }
+
+    fn count_task_subdirs(task_root: &Path) -> usize {
+        fs::read_dir(task_root)
+            .ok()
+            .into_iter()
+            .flat_map(|entries| entries.filter_map(Result::ok))
+            .filter(|entry| entry.path().is_dir())
+            .count()
+    }
+
+    fn current_test_binary() -> PathBuf {
+        std::env::current_exe().expect("resolve current test binary")
+    }
+
+    fn create_task_child_env(test_name: &str) -> (PathBuf, PathBuf, PathBuf) {
+        let temp_root = temp_test_root(test_name);
+        fs::create_dir_all(&temp_root).expect("create temp root");
+        let task_root = isolated_task_root(&temp_root);
+        let state_file = temp_root.join("child-state.txt");
+        (temp_root, task_root, state_file)
+    }
+
+    fn child_create_task_paths(expected_test_case: &str) -> Option<(PathBuf, PathBuf)> {
+        let actual_test_case = std::env::var("BABATA_MANAGER_CREATE_TASK_CHILD").ok()?;
+        if actual_test_case != expected_test_case {
+            return None;
+        }
+
+        let temp_root = PathBuf::from(
+            std::env::var("BABATA_MANAGER_CREATE_TASK_TEMP_ROOT")
+                .expect("child temp root env should be set"),
+        );
+        let state_file = PathBuf::from(
+            std::env::var("BABATA_MANAGER_CREATE_TASK_STATE_FILE")
+                .expect("child state file env should be set"),
+        );
+        Some((temp_root, state_file))
+    }
+
+    fn run_create_task_child(test_case: &str, temp_root: &Path, state_file: &Path) {
+        let status = Command::new(current_test_binary())
+            .arg("--exact")
+            .arg(test_case)
+            .arg("--nocapture")
+            .env("BABATA_MANAGER_CREATE_TASK_CHILD", test_case)
+            .env("BABATA_MANAGER_CREATE_TASK_TEMP_ROOT", temp_root)
+            .env("BABATA_MANAGER_CREATE_TASK_STATE_FILE", state_file)
+            .env("HOME", temp_root)
+            .env("USERPROFILE", temp_root)
+            .status()
+            .expect("spawn create_task child test process");
+
+        assert!(
+            status.success(),
+            "child test process for {test_case} should succeed"
+        );
+    }
+
+    fn read_child_state_file(state_file: &Path) -> String {
+        fs::read_to_string(state_file).expect("read child state file")
+    }
+
     #[tokio::test]
     async fn handle_task_completed_relaunches_never_ending_task() {
         let temp_root = temp_test_root("manager-never-ends");
@@ -829,84 +896,108 @@ mod tests {
 
     #[tokio::test]
     async fn create_task_stores_steer_queue_in_running_task() {
-        let temp_root = temp_test_root("manager-create-stores-steer");
-        fs::create_dir_all(&temp_root).expect("create temp root");
-        let manager = build_test_manager(&temp_root);
-        let task_id = manager
-            .create_task(CreateTaskRequest {
-                description: "test create task".to_string(),
-                prompt: vec![Content::Text {
-                    text: "test create task".to_string(),
-                }],
-                parent_task_id: None,
-                agent: "test-agent".to_string(),
-                never_ends: false,
-            })
-            .expect("create task");
+        let test_case = "task::manager::tests::create_task_stores_steer_queue_in_running_task";
+        if let Some((temp_root, state_file)) = child_create_task_paths(test_case) {
+            let manager = build_test_manager(&temp_root);
+            let task_id = manager
+                .create_task(CreateTaskRequest {
+                    description: "test create task".to_string(),
+                    prompt: vec![Content::Text {
+                        text: "test create task".to_string(),
+                    }],
+                    parent_task_id: None,
+                    agent: "test-agent".to_string(),
+                    never_ends: false,
+                })
+                .expect("create task");
 
-        {
-            let guard = manager.running_tasks.lock();
-            let running_task = guard.get(&task_id).expect("running task should exist");
-            let _queue = running_task.steer_queue.clone();
+            {
+                let guard = manager.running_tasks.lock();
+                let running_task = guard.get(&task_id).expect("running task should exist");
+                let _queue = running_task.steer_queue.clone();
+            }
+
+            cleanup_task_artifacts(&manager, task_id);
+            let _ = manager.store.delete_task(task_id);
+            fs::write(&state_file, "steer_queue_present").expect("write child state file");
+            return;
         }
 
-        cleanup_task_artifacts(&manager, task_id);
-        let _ = manager.store.delete_task(task_id);
+        let (temp_root, _task_root, state_file) =
+            create_task_child_env("manager-create-stores-steer");
+        run_create_task_child(test_case, &temp_root, &state_file);
+        assert_eq!(read_child_state_file(&state_file), "steer_queue_present");
         let _ = fs::remove_dir_all(&temp_root);
     }
 
     #[tokio::test]
     async fn create_task_returns_error_when_launch_fails_and_rolls_back_store_and_directory() {
-        let temp_root = temp_test_root("manager-create-launch-failure");
-        fs::create_dir_all(&temp_root).expect("create temp root");
-        let manager = build_test_manager(&temp_root);
-        let task_id = Uuid::new_v4();
+        let test_case = "task::manager::tests::create_task_returns_error_when_launch_fails_and_rolls_back_store_and_directory";
+        if let Some((temp_root, state_file)) = child_create_task_paths(test_case) {
+            let manager = build_test_manager(&temp_root);
+            let isolated_task_root = isolated_task_root(&temp_root);
 
-        let error = manager
-            .create_task_with_id(
-                task_id,
-                create_task_request("test create task failure", "missing-agent"),
-            )
-            .expect_err("create task should fail when launch cannot resolve agent");
+            let error = manager
+                .create_task(create_task_request(
+                    "test create task failure",
+                    "missing-agent",
+                ))
+                .expect_err("create task should fail when launch cannot resolve agent");
 
-        assert!(
-            error
-                .to_string()
-                .contains("Agent 'missing-agent' not found")
-        );
-        assert_eq!(manager.store.count_tasks(None).expect("count tasks"), 0);
+            assert!(
+                error
+                    .to_string()
+                    .contains("Agent 'missing-agent' not found")
+            );
+            assert_eq!(manager.store.count_tasks(None).expect("count tasks"), 0);
+            assert_eq!(
+                count_task_subdirs(&isolated_task_root),
+                0,
+                "launch failure should roll back the created task directory in the isolated test home"
+            );
 
-        let created_task_dir = task_dir(task_id).expect("resolve task dir");
-        assert!(
-            !created_task_dir.exists(),
-            "launch failure should roll back the created task directory"
-        );
+            fs::write(&state_file, "rollback_verified").expect("write child state file");
+            return;
+        }
 
+        let (temp_root, _task_root, state_file) =
+            create_task_child_env("manager-create-launch-failure");
+        run_create_task_child(test_case, &temp_root, &state_file);
+        assert_eq!(read_child_state_file(&state_file), "rollback_verified");
         let _ = fs::remove_dir_all(&temp_root);
     }
 
     #[tokio::test]
     async fn create_task_creates_task_directory() {
-        let temp_root = temp_test_root("manager-create-task-dir");
-        fs::create_dir_all(&temp_root).expect("create temp root");
-        let manager = build_test_manager(&temp_root);
-        let task_id = manager
-            .create_task(CreateTaskRequest {
-                description: "test create task dir".to_string(),
-                prompt: vec![Content::Text {
-                    text: "test create task dir".to_string(),
-                }],
-                parent_task_id: None,
-                agent: "test-agent".to_string(),
-                never_ends: false,
-            })
-            .expect("create task");
+        let test_case = "task::manager::tests::create_task_creates_task_directory";
+        if let Some((temp_root, state_file)) = child_create_task_paths(test_case) {
+            let manager = build_test_manager(&temp_root);
+            let task_id = manager
+                .create_task(CreateTaskRequest {
+                    description: "test create task dir".to_string(),
+                    prompt: vec![Content::Text {
+                        text: "test create task dir".to_string(),
+                    }],
+                    parent_task_id: None,
+                    agent: "test-agent".to_string(),
+                    never_ends: false,
+                })
+                .expect("create task");
 
-        let created_task_dir = task_dir(task_id).expect("resolve task dir");
-        assert!(created_task_dir.is_dir());
+            let created_task_dir = task_dir(task_id).expect("resolve task dir");
+            assert!(created_task_dir.is_dir());
 
-        cleanup_task_artifacts(&manager, task_id);
-        let _ = manager.store.delete_task(task_id);
+            cleanup_task_artifacts(&manager, task_id);
+            let _ = manager.store.delete_task(task_id);
+            fs::write(&state_file, created_task_dir.display().to_string())
+                .expect("write child state file");
+            return;
+        }
+
+        let (temp_root, task_root, state_file) = create_task_child_env("manager-create-task-dir");
+        run_create_task_child(test_case, &temp_root, &state_file);
+        let created_task_dir = read_child_state_file(&state_file);
+        assert!(created_task_dir.starts_with(&task_root.display().to_string()));
         let _ = fs::remove_dir_all(&temp_root);
     }
 
