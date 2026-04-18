@@ -631,7 +631,13 @@ fn remove_task_dir(task_id: Uuid) -> BabataResult<()> {
 mod tests {
     use super::*;
     use crate::agent::{Agent, AgentFrontmatter};
-    use std::{collections::HashMap, fs, path::PathBuf};
+    use std::{
+        collections::HashMap,
+        ffi::OsString,
+        fs,
+        path::{Path, PathBuf},
+        sync::{Mutex, MutexGuard, OnceLock},
+    };
     use uuid::Uuid;
 
     fn task_record(never_ends: bool) -> TaskRecord {
@@ -732,11 +738,61 @@ mod tests {
         }
     }
 
-    fn task_dir_count() -> usize {
-        let task_root = crate::utils::babata_dir()
-            .expect("resolve babata dir")
-            .join("tasks");
-        std::fs::read_dir(&task_root)
+    static ENV_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
+
+    struct HomeEnvGuard {
+        _guard: MutexGuard<'static, ()>,
+        original_home: Option<OsString>,
+        original_userprofile: Option<OsString>,
+    }
+
+    impl HomeEnvGuard {
+        fn set_temp_home(temp_root: &Path) -> Self {
+            let guard = ENV_MUTEX
+                .get_or_init(|| Mutex::new(()))
+                .lock()
+                .expect("lock home env mutex");
+            let original_home = std::env::var_os("HOME");
+            let original_userprofile = std::env::var_os("USERPROFILE");
+            let temp_home = temp_root.as_os_str();
+
+            unsafe {
+                std::env::set_var("HOME", temp_home);
+                std::env::set_var("USERPROFILE", temp_home);
+            }
+
+            Self {
+                _guard: guard,
+                original_home,
+                original_userprofile,
+            }
+        }
+    }
+
+    impl Drop for HomeEnvGuard {
+        fn drop(&mut self) {
+            unsafe {
+                if let Some(value) = &self.original_home {
+                    std::env::set_var("HOME", value);
+                } else {
+                    std::env::remove_var("HOME");
+                }
+
+                if let Some(value) = &self.original_userprofile {
+                    std::env::set_var("USERPROFILE", value);
+                } else {
+                    std::env::remove_var("USERPROFILE");
+                }
+            }
+        }
+    }
+
+    fn isolated_task_root(temp_root: &Path) -> PathBuf {
+        temp_root.join(".babata").join("tasks")
+    }
+
+    fn count_task_subdirs(task_root: &Path) -> usize {
+        fs::read_dir(task_root)
             .ok()
             .into_iter()
             .flat_map(|entries| entries.filter_map(Result::ok))
@@ -840,6 +896,7 @@ mod tests {
     async fn create_task_stores_steer_queue_in_running_task() {
         let temp_root = temp_test_root("manager-create-stores-steer");
         fs::create_dir_all(&temp_root).expect("create temp root");
+        let _home_env = HomeEnvGuard::set_temp_home(&temp_root);
         let manager = build_test_manager(&temp_root);
         let task_id = manager
             .create_task(CreateTaskRequest {
@@ -868,9 +925,10 @@ mod tests {
     async fn create_task_returns_error_when_launch_fails_and_rolls_back_store_and_directory() {
         let temp_root = temp_test_root("manager-create-launch-failure");
         fs::create_dir_all(&temp_root).expect("create temp root");
+        let _home_env = HomeEnvGuard::set_temp_home(&temp_root);
         let manager = build_test_manager(&temp_root);
+        let isolated_task_root = isolated_task_root(&temp_root);
 
-        let before_task_dirs = task_dir_count();
         let error = manager
             .create_task(create_task_request(
                 "test create task failure",
@@ -884,11 +942,10 @@ mod tests {
                 .contains("Agent 'missing-agent' not found")
         );
         assert_eq!(manager.store.count_tasks(None).expect("count tasks"), 0);
-
-        let after_task_dirs = task_dir_count();
         assert_eq!(
-            after_task_dirs, before_task_dirs,
-            "launch failure should roll back the created task directory"
+            count_task_subdirs(&isolated_task_root),
+            0,
+            "launch failure should roll back the created task directory in the isolated test home"
         );
 
         let _ = fs::remove_dir_all(&temp_root);
@@ -898,6 +955,7 @@ mod tests {
     async fn create_task_creates_task_directory() {
         let temp_root = temp_test_root("manager-create-task-dir");
         fs::create_dir_all(&temp_root).expect("create temp root");
+        let _home_env = HomeEnvGuard::set_temp_home(&temp_root);
         let manager = build_test_manager(&temp_root);
         let task_id = manager
             .create_task(CreateTaskRequest {
