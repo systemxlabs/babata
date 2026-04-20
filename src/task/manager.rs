@@ -481,21 +481,28 @@ impl TaskManager {
             return;
         }
 
-        if self.has_unfinished_subtasks(task_id) {
-            let reason = format!(
-                "Task {} is being relaunched because it attempted to finish while there are still unfinished subtasks. A parent task must remain running until all of its subtasks are completed, failed, or canceled.",
-                task.task_id
-            );
-            self.relaunch_after_completion(&task, &reason, "deferred completion");
-            return;
-        }
+        let completion_action = if self.has_unfinished_subtasks(task_id) {
+            Some((
+                format!(
+                    "Task {} is being relaunched because it attempted to finish while there are still unfinished subtasks. A parent task must remain running until all of its subtasks are completed, failed, or canceled.",
+                    task.task_id
+                ),
+                "deferred completion",
+            ))
+        } else if task.never_ends {
+            Some((
+                format!(
+                    "Task {} is being relaunched because it is configured with never_ends=true and should keep running after reporting completion.",
+                    task.task_id
+                ),
+                "never-ending completion",
+            ))
+        } else {
+            None
+        };
 
-        if task.never_ends {
-            let reason = format!(
-                "Task {} is being relaunched because it is configured with never_ends=true and should keep running after reporting completion.",
-                task.task_id
-            );
-            self.relaunch_after_completion(&task, &reason, "never-ending completion");
+        if let Some((reason, context)) = completion_action {
+            self.relaunch_after_completion(&task, &reason, context);
             return;
         }
 
