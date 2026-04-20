@@ -38,43 +38,8 @@ impl TaskLauncher {
             task,
             prompt
         );
-        let agent = load_agent_by_name(&task.agent)?;
-        let memory = Memory::new(agent.home()?)?;
-
-        let steer_queue = SteerQueue::default();
-
-        let task_id = task.task_id;
-        let prompt = build_launch_prompt(task_id, prompt)?;
-        let mut agent_task = AgentTask {
-            task_id,
-            parent_task_id: task.parent_task_id,
-            root_task_id: task.root_task_id,
-            prompt,
-            agent,
-            memory,
-            all_tools: self.all_tools.clone(),
-            steer_queue: Some(steer_queue.clone()),
-        };
-        let handle = tokio::spawn(async move {
-            let result = agent_task.run().await;
-            let event = match result {
-                Ok(content) => {
-                    if let Err(error) = write_final_response(task_id, &content).await {
-                        task_warn!(task_id, "Failed to persist final response: {}", error);
-                    }
-                    TaskExitEvent::Completed { task_id }
-                }
-                Err(error) => TaskExitEvent::Failed { task_id, error },
-            };
-            let _ = exit_tx.send(event).await;
-        });
-
-        Ok(RunningTask {
-            task_id,
-            handle,
-            steer_queue,
-            collaboration_handle: None,
-        })
+        let prompt = build_launch_prompt(task.task_id, prompt)?;
+        self.spawn_running_task(task, prompt, exit_tx)
     }
 
     pub fn relaunch(
@@ -89,13 +54,21 @@ impl TaskLauncher {
             reason,
             task
         );
+        let prompt = build_relaunch_prompt(task.task_id, reason)?;
+        self.spawn_running_task(task, prompt, exit_tx)
+    }
+
+    fn spawn_running_task(
+        &self,
+        task: &TaskRecord,
+        prompt: Vec<Content>,
+        exit_tx: mpsc::Sender<TaskExitEvent>,
+    ) -> BabataResult<RunningTask> {
         let agent = load_agent_by_name(&task.agent)?;
         let memory = Memory::new(agent.home()?)?;
-
         let steer_queue = SteerQueue::default();
 
         let task_id = task.task_id;
-        let prompt = build_relaunch_prompt(task_id, reason)?;
         let mut agent_task = AgentTask {
             task_id,
             parent_task_id: task.parent_task_id,
