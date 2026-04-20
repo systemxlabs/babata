@@ -31,7 +31,7 @@ pub struct AgentTask {
     pub root_task_id: Uuid,
     pub prompt: Vec<Content>,
     pub agent: Arc<Agent>,
-    pub memory: Arc<Memory>,
+    pub memory: Memory,
     pub all_tools: HashMap<String, Arc<dyn Tool>>,
     pub steer_queue: Option<SteerQueue>,
 }

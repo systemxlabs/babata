@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use babata::{
     BabataResult,
-    agent::load_agents,
+    agent::load_default_agent,
     channel::{ChannelConfig, build_channels, start_channel_loops},
     http::HttpApp,
     message::Content,
@@ -20,7 +20,7 @@ async fn main() -> BabataResult<()> {
     let channel_configs = ChannelConfig::load_all()?;
     let channels = build_channels(&channel_configs)?;
     let task_store = TaskStore::new()?;
-    let task_launcher = TaskLauncher::new(load_agents()?, channels.clone())?;
+    let task_launcher = TaskLauncher::new(channels.clone())?;
     let task_manager = Arc::new(TaskManager::new(task_store, task_launcher)?);
 
     let http_app = HttpApp::new(task_manager.clone());
@@ -49,7 +49,7 @@ async fn broadcast_service_started(task_manager: &Arc<TaskManager>) -> BabataRes
         text: format!("Send below notification to each channel: \n{notification}"),
     };
 
-    if let Some(default_agent) = task_manager.default_agent() {
+    if let Ok(default_agent) = load_default_agent() {
         let task = CreateTaskRequest {
             description: "broadcast service started notification".to_string(),
             prompt: vec![prompt],

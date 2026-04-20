@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 use std::{fmt::Debug, sync::Arc};
 
+use crate::agent::load_default_agent;
 use crate::{
     BabataResult,
     message::Content,
@@ -87,7 +88,7 @@ pub fn start_channel_loops(
                             }];
                             prompt.extend(content);
 
-                            let Some(default_agent) = task_manager.default_agent() else {
+                            let Ok(default_agent) = load_default_agent() else {
                                 error!(
                                     "Failed to create task for channel message due to no default agent"
                                 );

@@ -37,8 +37,12 @@ pub fn channel_dir(channel_name: &str) -> BabataResult<PathBuf> {
     Ok(channels_dir()?.join(channel_name.to_ascii_lowercase()))
 }
 
+pub fn agents_dir() -> BabataResult<PathBuf> {
+    Ok(babata_dir()?.join("agents"))
+}
+
 pub fn agent_dir(agent_name: &str) -> BabataResult<PathBuf> {
-    Ok(babata_dir()?.join("agents").join(agent_name))
+    Ok(agents_dir()?.join(agent_name))
 }
 
 pub const fn build_commit() -> Option<&'static str> {

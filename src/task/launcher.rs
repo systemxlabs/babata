@@ -5,9 +5,8 @@ use uuid::Uuid;
 
 use crate::{
     BabataResult,
-    agent::{Agent, AgentTask},
+    agent::{AgentTask, load_agent_by_name},
     channel::Channel,
-    error::BabataError,
     memory::Memory,
     message::Content,
     task::{RunningTask, SteerQueue, TaskExitEvent, TaskRecord},
@@ -18,33 +17,13 @@ use crate::{
 
 #[derive(Debug)]
 pub struct TaskLauncher {
-    pub default_agent: Option<Arc<Agent>>,
-    pub agents: HashMap<String, Arc<Agent>>,
-    pub memories: HashMap<String, Arc<Memory>>,
     pub all_tools: HashMap<String, Arc<dyn Tool>>,
 }
 
 impl TaskLauncher {
-    pub fn new(
-        agents: HashMap<String, Arc<Agent>>,
-        channels: HashMap<String, Arc<dyn Channel>>,
-    ) -> BabataResult<Self> {
-        let default_agent = agents
-            .values()
-            .find(|agent| matches!(agent.frontmatter.default, Some(true)))
-            .cloned();
-        let mut memories = HashMap::with_capacity(agents.len());
-        for (name, agent) in &agents {
-            let memory = Memory::new(agent.home()?)?;
-            memories.insert(name.clone(), Arc::new(memory));
-        }
+    pub fn new(channels: HashMap<String, Arc<dyn Channel>>) -> BabataResult<Self> {
         let all_tools = build_tools(channels)?;
-        Ok(Self {
-            default_agent,
-            agents,
-            memories,
-            all_tools,
-        })
+        Ok(Self { all_tools })
     }
 
     pub fn launch(
@@ -59,22 +38,8 @@ impl TaskLauncher {
             task,
             prompt
         );
-        let agent = self
-            .agents
-            .get(&task.agent)
-            .ok_or_else(|| BabataError::not_found(format!("Agent '{}' not found", task.agent)))?
-            .clone();
-
-        let memory = self
-            .memories
-            .get(&agent.frontmatter.name)
-            .ok_or_else(|| {
-                BabataError::config(format!(
-                    "Agent '{}' memory not found",
-                    agent.frontmatter.name
-                ))
-            })?
-            .clone();
+        let agent = load_agent_by_name(&task.agent)?;
+        let memory = Memory::new(agent.home()?)?;
 
         let steer_queue = SteerQueue::default();
 
@@ -124,22 +89,8 @@ impl TaskLauncher {
             reason,
             task
         );
-        let agent = self
-            .agents
-            .get(&task.agent)
-            .ok_or_else(|| BabataError::not_found(format!("Agent '{}' not found", task.agent)))?
-            .clone();
-
-        let memory = self
-            .memories
-            .get(&agent.frontmatter.name)
-            .ok_or_else(|| {
-                BabataError::config(format!(
-                    "Agent '{}' memory not found",
-                    agent.frontmatter.name
-                ))
-            })?
-            .clone();
+        let agent = load_agent_by_name(&task.agent)?;
+        let memory = Memory::new(agent.home()?)?;
 
         let steer_queue = SteerQueue::default();
 
@@ -183,16 +134,8 @@ impl TaskLauncher {
         agent_name: &str,
         collaboration_prompt: &str,
     ) -> BabataResult<JoinHandle<BabataResult<Vec<Content>>>> {
-        let agent = self
-            .agents
-            .get(agent_name)
-            .ok_or_else(|| BabataError::not_found(format!("Agent '{}' not found", agent_name)))?
-            .clone();
-        let memory = self
-            .memories
-            .get(agent_name)
-            .ok_or_else(|| BabataError::config(format!("Agent memory '{}' not found", agent_name)))?
-            .clone();
+        let agent = load_agent_by_name(agent_name)?;
+        let memory = Memory::new(agent.home()?)?;
 
         let prompt = build_collaboration_prompt(task.task_id, collaboration_prompt)?;
 

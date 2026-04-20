@@ -11,17 +11,16 @@ const MAX_TASK_TREE_DEPTH: usize = 5;
 
 use crate::{
     BabataResult,
-    agent::Agent,
     error::BabataError,
     http::CollaborateTaskRequest,
-    memory::MessageRecord,
+    memory::{Memory, MessageRecord},
     message::Content,
     task::{
         CollaborationTaskState, CreateTaskRequest, SteerMessage, SteerQueue, TaskExitEvent,
         TaskRecord, TaskStatus, TaskStore, launcher::TaskLauncher,
     },
     task_error, task_info,
-    utils::task_dir,
+    utils::{agent_dir, task_dir},
 };
 
 pub struct TaskManager {
@@ -375,10 +374,8 @@ impl TaskManager {
         limit: usize,
     ) -> BabataResult<Vec<MessageRecord>> {
         let task = self.store.get_task(task_id)?;
-        let memory = self.launcher.memories.get(&task.agent).ok_or_else(|| {
-            BabataError::config(format!("Agent '{}' memory not found", task.agent))
-        })?;
-
+        let agent_dir = agent_dir(&task.agent)?;
+        let memory = Memory::new(agent_dir)?;
         memory.scan_task_message_records(task_id, offset, limit)
     }
 
@@ -593,10 +590,6 @@ impl TaskManager {
             .update_task_status(task_id, TaskStatus::Canceled)?;
         Ok(())
     }
-
-    pub fn default_agent(&self) -> Option<&Arc<Agent>> {
-        self.launcher.default_agent.as_ref()
-    }
 }
 
 #[derive(Debug)]
@@ -698,7 +691,7 @@ mod tests {
         );
 
         let store = TaskStore::open(temp_root.join("task.db")).expect("open temp task store");
-        let launcher = TaskLauncher::new(agents, HashMap::new()).expect("build task launcher");
+        let launcher = TaskLauncher::new(HashMap::new()).expect("build task launcher");
         TaskManager::new(store, launcher).expect("build task manager")
     }
 
