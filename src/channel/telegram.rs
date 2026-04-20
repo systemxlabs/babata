@@ -93,14 +93,6 @@ impl TelegramChannel {
                 continue;
             }
 
-            if message.timestamp < one_hour_ago {
-                warn!(
-                    "Ignoring Telegram message from {} older than 1 hour (timestamp: {})",
-                    message.chat_id, message.timestamp
-                );
-                continue;
-            }
-
             let mut message_content = self.incoming_message_to_content(&message).await?;
             if message_content.is_empty() {
                 continue;
@@ -114,6 +106,14 @@ impl TelegramChannel {
                     .remove(&reply_to_message_id)
             {
                 let _ = waiter.send(message_content);
+                continue;
+            }
+
+            if message.timestamp < one_hour_ago {
+                warn!(
+                    "Ignoring Telegram message from {} older than 1 hour (timestamp: {})",
+                    message.chat_id, message.timestamp
+                );
                 continue;
             }
 
@@ -848,5 +848,76 @@ mod tests {
             private_messages[0].audio_media_type,
             Some("audio/ogg".to_string())
         );
+    }
+
+    #[tokio::test]
+    async fn route_incoming_delivers_stale_feedback_reply_before_stale_filter() {
+        let channel = TelegramChannel::new(crate::channel::TelegramChannelConfig {
+            name: "telegram-main".to_string(),
+            bot_token: "token".to_string(),
+            user_id: 1001,
+        })
+        .expect("channel");
+
+        let (sender, receiver) = oneshot::channel();
+        channel.feedback_waiters.lock().await.insert(42, sender);
+
+        let stale_timestamp = chrono::Utc::now().timestamp() - 7200;
+        let incoming = vec![IncomingPrivateMessage {
+            chat_id: 1001,
+            timestamp: stale_timestamp,
+            text: Some("reply body".to_string()),
+            image_file_id: None,
+            image_media_type: None,
+            audio_file_id: None,
+            audio_media_type: None,
+            reply_to_message_id: Some(42),
+            reply_to_message_content: Some(vec![Content::Text {
+                text: "quoted".to_string(),
+            }]),
+        }];
+
+        let routed = channel
+            .route_incoming(incoming)
+            .await
+            .expect("route incoming");
+        assert!(routed.is_empty());
+
+        let delivered = receiver.await.expect("feedback delivery");
+        assert_eq!(
+            delivered,
+            vec![Content::Text {
+                text: "reply body".to_string()
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn route_incoming_drops_stale_non_feedback_message() {
+        let channel = TelegramChannel::new(crate::channel::TelegramChannelConfig {
+            name: "telegram-main".to_string(),
+            bot_token: "token".to_string(),
+            user_id: 1001,
+        })
+        .expect("channel");
+
+        let stale_timestamp = chrono::Utc::now().timestamp() - 7200;
+        let incoming = vec![IncomingPrivateMessage {
+            chat_id: 1001,
+            timestamp: stale_timestamp,
+            text: Some("normal stale message".to_string()),
+            image_file_id: None,
+            image_media_type: None,
+            audio_file_id: None,
+            audio_media_type: None,
+            reply_to_message_id: None,
+            reply_to_message_content: None,
+        }];
+
+        let routed = channel
+            .route_incoming(incoming)
+            .await
+            .expect("route incoming");
+        assert!(routed.is_empty());
     }
 }
