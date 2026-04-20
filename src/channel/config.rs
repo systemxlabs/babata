@@ -7,6 +7,7 @@ use crate::{
     error::BabataError,
     utils::{channel_dir, channels_dir},
 };
+use log::error;
 
 const CHANNEL_CONFIG_FILE_NAME: &str = "config.json";
 
@@ -175,7 +176,13 @@ fn load_all_from_dir(channels_dir: &Path) -> BabataResult<Vec<ChannelConfig>> {
             )));
         };
 
-        let channel = ChannelConfig::load(channel_name)?;
+        let channel = match ChannelConfig::load(channel_name) {
+            Ok(channel) => channel,
+            Err(e) => {
+                error!("Failed to load channel config: {e}");
+                continue;
+            }
+        };
         let normalized_name = channel.name().to_ascii_lowercase();
         if !channel_names.insert(normalized_name) {
             return Err(BabataError::config(format!(
