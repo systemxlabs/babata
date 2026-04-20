@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
-import { BookMarked, Trash2 } from "lucide-react"
+import { BookMarked, Trash2, AlertTriangle } from "lucide-react"
 
 import { deleteSkill, getSkills } from "@/api"
 import { EmptyState } from "@/components/empty-state"
@@ -7,6 +7,16 @@ import { ErrorAlert } from "@/components/error-alert"
 import { LoadingState } from "@/components/loading-state"
 import { PageHeader } from "@/components/page-header"
 import { SkillDetailModal } from "@/components/SkillDetailModal/SkillDetailModal"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -17,6 +27,8 @@ export function Skills() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null)
+  const [skillToDelete, setSkillToDelete] = useState<Skill | null>(null)
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
 
   const fetchSkills = useCallback(async () => {
     try {
@@ -35,18 +47,19 @@ export function Skills() {
     void fetchSkills()
   }, [fetchSkills])
 
-  const handleDelete = async (skill: Skill) => {
-    const confirmed = window.confirm(`确定要删除技能 "${skill.name}" 吗？此操作不可撤销。`)
-    if (!confirmed) return
-
+  const handleDeleteConfirm = async () => {
+    if (!skillToDelete) return
     try {
-      await deleteSkill(skill.name)
-      if (selectedSkill?.name === skill.name) {
+      await deleteSkill(skillToDelete.name)
+      if (selectedSkill?.name === skillToDelete.name) {
         setSelectedSkill(null)
       }
       await fetchSkills()
     } catch (err) {
       setError(err instanceof Error ? err.message : "删除技能失败")
+    } finally {
+      setSkillToDelete(null)
+      setDeleteModalOpen(false)
     }
   }
 
@@ -106,7 +119,8 @@ export function Skills() {
                   size="icon"
                   onClick={(event) => {
                     event.stopPropagation()
-                    void handleDelete(skill)
+                    setSkillToDelete(skill)
+                    setDeleteModalOpen(true)
                   }}
                 >
                   <Trash2 className="size-4 text-destructive" />
@@ -123,6 +137,68 @@ export function Skills() {
         isOpen={selectedSkill !== null}
         onClose={() => setSelectedSkill(null)}
       />
+
+      <SkillDeleteDialog
+        skill={skillToDelete}
+        open={deleteModalOpen}
+        onOpenChange={setDeleteModalOpen}
+        onConfirm={handleDeleteConfirm}
+      />
     </div>
+  )
+}
+
+function SkillDeleteDialog({
+  skill,
+  open,
+  onOpenChange,
+  onConfirm,
+}: {
+  skill: Skill | null
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onConfirm: () => Promise<void>
+}) {
+  const [loading, setLoading] = useState(false)
+
+  if (!skill) return null
+
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent className="rounded-[1.75rem] border-border/70 bg-card/95">
+        <AlertDialogHeader>
+          <div className="mb-3 flex items-center gap-3">
+            <div className="rounded-2xl bg-destructive/12 p-3 text-destructive">
+              <AlertTriangle className="size-5" />
+            </div>
+            <div>
+              <AlertDialogTitle>删除 Skill</AlertDialogTitle>
+              <AlertDialogDescription>
+                删除后该技能文件将从系统移除，已关联的任务可能受影响。
+              </AlertDialogDescription>
+            </div>
+          </div>
+        </AlertDialogHeader>
+
+        <div className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4 text-sm text-muted-foreground">
+          即将删除 <span className="font-semibold text-foreground">{skill.name}</span>
+        </div>
+
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={loading}>取消</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            disabled={loading}
+            onClick={(event) => {
+              event.preventDefault()
+              setLoading(true)
+              void onConfirm().finally(() => setLoading(false))
+            }}
+          >
+            {loading ? "删除中..." : "确认删除"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }
