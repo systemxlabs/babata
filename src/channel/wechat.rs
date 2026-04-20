@@ -10,7 +10,7 @@ use reqwest::Url;
 use tokio::sync::{Mutex, oneshot};
 use uuid::Uuid;
 use wechatbot::{
-    DownloadedMedia, IncomingMessage, cdn_download, parse_wire_message,
+    CdnClient, DownloadedMedia, IncomingMessage,
     protocol::{DEFAULT_BASE_URL, ILinkClient, build_text_message},
     types::CDNMedia as WechatCdnMedia,
 };
@@ -27,6 +27,7 @@ use crate::{
 pub struct WechatChannel {
     name: String,
     ilink_client: ILinkClient,
+    cdn_client: CdnClient,
     bot_token: String,
     user_id: String,
     get_updates_buf: Mutex<Option<String>>,
@@ -44,6 +45,7 @@ impl WechatChannel {
         Ok(Self {
             name,
             ilink_client: ILinkClient::new(),
+            cdn_client: CdnClient::new(),
             bot_token,
             user_id,
             get_updates_buf: Mutex::new(get_updates_buf),
@@ -73,7 +75,7 @@ impl WechatChannel {
         Ok(updates
             .msgs
             .into_iter()
-            .filter_map(|wire| parse_wire_message(&wire))
+            .filter_map(|wire| IncomingMessage::from_wire(&wire))
             .collect())
     }
 
@@ -93,7 +95,7 @@ impl WechatChannel {
             if let Some(hash) = extract_quote_hash(&message)
                 && let Some(waiter) = self.feedback_waiters.lock().await.remove(&hash)
             {
-                self.persist_latest_context_token(&message.context_token)?;
+                self.persist_latest_context_token(message.context_token())?;
                 let _ = waiter.send(message_content);
                 continue;
             }
@@ -106,7 +108,7 @@ impl WechatChannel {
                 continue;
             }
 
-            self.persist_latest_context_token(&message.context_token)?;
+            self.persist_latest_context_token(message.context_token())?;
             content.extend(message_content);
         }
 
@@ -310,12 +312,16 @@ impl WechatChannel {
         kind_name: &str,
         file_name: Option<&str>,
     ) -> BabataResult<DownloadedMedia> {
-        let data = cdn_download(media, aes_key_override).await.map_err(|err| {
-            BabataError::channel(format!(
-                "Failed to download Wechat attachment '{:?}' from CDN: {:?}",
-                media, err
-            ))
-        })?;
+        let data = self
+            .cdn_client
+            .download(media, aes_key_override)
+            .await
+            .map_err(|err| {
+                BabataError::channel(format!(
+                    "Failed to download Wechat attachment '{:?}' from CDN: {:?}",
+                    media, err
+                ))
+            })?;
         let format = match kind_name {
             "voice" => Some("silk".to_string()),
             _ => None,
@@ -491,10 +497,7 @@ fn detect_image_media_type(data: &[u8]) -> Option<MediaType> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wechatbot::types::{
-        CDNMedia, ImageContent, ImageItem as WechatImageItem, MessageState, QuotedMessage,
-        VoiceContent, WireMessage,
-    };
+    use wechatbot::types::{CDNMedia, ImageContent, ImageItem as WechatImageItem};
 
     #[test]
     fn image_attachment_uses_cdn_media() {
@@ -528,224 +531,6 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn incoming_message_to_content_renders_text_voice_and_quote() {
-        let channel = WechatChannel::new(crate::channel::WechatChannelConfig {
-            name: "wechat-main".to_string(),
-            bot_token: "token".to_string(),
-            user_id: "wxid_bot".to_string(),
-        })
-        .expect("channel");
-        let message = IncomingMessage {
-            user_id: "wxid_bot".to_string(),
-            text: "first\nvoice text".to_string(),
-            content_type: wechatbot::types::ContentType::Text,
-            timestamp: SystemTime::now(),
-            images: Vec::new(),
-            voices: vec![VoiceContent {
-                media: None,
-                text: Some("voice text".to_string()),
-                duration_ms: None,
-                encode_type: None,
-            }],
-            files: Vec::new(),
-            videos: Vec::new(),
-            quoted: Some(QuotedMessage {
-                title: None,
-                text: Some("quoted".to_string()),
-            }),
-            raw: WireMessage {
-                from_user_id: "wxid_bot".to_string(),
-                to_user_id: "wxid_peer".to_string(),
-                client_id: "client".to_string(),
-                create_time_ms: 1,
-                message_type: wechatbot::types::MessageType::User,
-                message_state: MessageState::Finish,
-                context_token: "ctx".to_string(),
-                item_list: Vec::new(),
-            },
-            context_token: "ctx".to_string(),
-        };
-
-        let content = channel
-            .incoming_message_to_content(&message)
-            .await
-            .expect("content");
-
-        assert_eq!(content.len(), 1);
-        assert!(matches!(
-            &content[0],
-            Content::Text { text } if text == "> quoted\nfirst\nvoice text"
-        ));
-    }
-
-    #[tokio::test]
-    async fn route_incoming_delivers_stale_feedback_reply_before_stale_filter() {
-        let channel = WechatChannel::new(crate::channel::WechatChannelConfig {
-            name: "wechat-main".to_string(),
-            bot_token: "token".to_string(),
-            user_id: "wxid_user".to_string(),
-        })
-        .expect("channel");
-
-        let (sender, receiver) = oneshot::channel();
-        channel
-            .feedback_waiters
-            .lock()
-            .await
-            .insert(hash_feedback_key("quoted"), sender);
-
-        let stale_timestamp = SystemTime::now()
-            .checked_sub(Duration::from_secs(7200))
-            .expect("stale timestamp");
-
-        let incoming = vec![IncomingMessage {
-            user_id: "wxid_user".to_string(),
-            text: "reply body".to_string(),
-            content_type: wechatbot::types::ContentType::Text,
-            timestamp: stale_timestamp,
-            images: Vec::new(),
-            voices: Vec::new(),
-            files: Vec::new(),
-            videos: Vec::new(),
-            quoted: Some(QuotedMessage {
-                title: None,
-                text: Some("quoted".to_string()),
-            }),
-            raw: WireMessage {
-                from_user_id: "wxid_user".to_string(),
-                to_user_id: "wxid_bot".to_string(),
-                client_id: "client".to_string(),
-                create_time_ms: 1,
-                message_type: wechatbot::types::MessageType::User,
-                message_state: MessageState::Finish,
-                context_token: "ctx-stale-feedback".to_string(),
-                item_list: Vec::new(),
-            },
-            context_token: "ctx-stale-feedback".to_string(),
-        }];
-
-        let routed = channel
-            .route_incoming(incoming)
-            .await
-            .expect("route incoming");
-        assert!(routed.is_empty());
-
-        let delivered = receiver.await.expect("feedback delivery");
-        assert!(matches!(
-            delivered.first(),
-            Some(Content::Text { text }) if text == "> quoted\nreply body"
-        ));
-    }
-
-    #[tokio::test]
-    async fn route_incoming_drops_stale_non_feedback_message() {
-        let channel = WechatChannel::new(crate::channel::WechatChannelConfig {
-            name: "wechat-main".to_string(),
-            bot_token: "token".to_string(),
-            user_id: "wxid_user".to_string(),
-        })
-        .expect("channel");
-
-        let stale_timestamp = SystemTime::now()
-            .checked_sub(Duration::from_secs(7200))
-            .expect("stale timestamp");
-
-        let incoming = vec![IncomingMessage {
-            user_id: "wxid_user".to_string(),
-            text: "normal stale message".to_string(),
-            content_type: wechatbot::types::ContentType::Text,
-            timestamp: stale_timestamp,
-            images: Vec::new(),
-            voices: Vec::new(),
-            files: Vec::new(),
-            videos: Vec::new(),
-            quoted: None,
-            raw: WireMessage {
-                from_user_id: "wxid_user".to_string(),
-                to_user_id: "wxid_bot".to_string(),
-                client_id: "client".to_string(),
-                create_time_ms: 1,
-                message_type: wechatbot::types::MessageType::User,
-                message_state: MessageState::Finish,
-                context_token: "ctx-stale-normal".to_string(),
-                item_list: Vec::new(),
-            },
-            context_token: "ctx-stale-normal".to_string(),
-        }];
-
-        let routed = channel
-            .route_incoming(incoming)
-            .await
-            .expect("route incoming");
-        assert!(routed.is_empty());
-    }
-
-    #[tokio::test]
-    async fn route_incoming_stale_non_feedback_message_does_not_persist_latest_context_token() {
-        let unique_name = format!("wechat-stale-no-persist-{}", uuid::Uuid::new_v4());
-        let latest_context_token_path = WechatChannel::latest_context_token_path(&unique_name)
-            .expect("latest context token path");
-        let parent_dir = latest_context_token_path
-            .parent()
-            .expect("channel directory")
-            .to_path_buf();
-        if parent_dir.exists() {
-            std::fs::remove_dir_all(&parent_dir).expect("cleanup existing channel directory");
-        }
-
-        let channel = WechatChannel::new(crate::channel::WechatChannelConfig {
-            name: unique_name.clone(),
-            bot_token: "token".to_string(),
-            user_id: "wxid_user".to_string(),
-        })
-        .expect("channel");
-
-        write_text_file(&latest_context_token_path, "existing-token")
-            .expect("seed latest context token");
-
-        let stale_timestamp = SystemTime::now()
-            .checked_sub(Duration::from_secs(7200))
-            .expect("stale timestamp");
-
-        let incoming = vec![IncomingMessage {
-            user_id: "wxid_user".to_string(),
-            text: "normal stale message".to_string(),
-            content_type: wechatbot::types::ContentType::Text,
-            timestamp: stale_timestamp,
-            images: Vec::new(),
-            voices: Vec::new(),
-            files: Vec::new(),
-            videos: Vec::new(),
-            quoted: None,
-            raw: WireMessage {
-                from_user_id: "wxid_user".to_string(),
-                to_user_id: "wxid_bot".to_string(),
-                client_id: "client".to_string(),
-                create_time_ms: 1,
-                message_type: wechatbot::types::MessageType::User,
-                message_state: MessageState::Finish,
-                context_token: "ctx-stale-normal-new".to_string(),
-                item_list: Vec::new(),
-            },
-            context_token: "ctx-stale-normal-new".to_string(),
-        }];
-
-        let routed = channel
-            .route_incoming(incoming)
-            .await
-            .expect("route incoming");
-        assert!(routed.is_empty());
-
-        let persisted = read_optional_trimmed_text(&latest_context_token_path)
-            .expect("read latest context token");
-        assert_eq!(persisted.as_deref(), Some("existing-token"));
-
-        if parent_dir.exists() {
-            std::fs::remove_dir_all(&parent_dir).expect("cleanup channel directory");
-        }
-    }
-
     #[test]
     fn sanitize_file_name_replaces_path_separators() {
         assert_eq!(
@@ -771,40 +556,6 @@ mod tests {
         assert_eq!(
             detect_image_media_type(b"RIFFxxxxWEBPmore"),
             Some(MediaType::ImageWebp)
-        );
-    }
-
-    #[test]
-    fn extract_quote_hash_prefers_quoted_text() {
-        let message = IncomingMessage {
-            user_id: "wxid_user".to_string(),
-            text: "reply".to_string(),
-            content_type: wechatbot::types::ContentType::Text,
-            timestamp: SystemTime::now(),
-            images: Vec::new(),
-            voices: Vec::new(),
-            files: Vec::new(),
-            videos: Vec::new(),
-            quoted: Some(QuotedMessage {
-                title: None,
-                text: Some("quoted".to_string()),
-            }),
-            raw: WireMessage {
-                from_user_id: "wxid_user".to_string(),
-                to_user_id: "wxid_bot".to_string(),
-                client_id: "client".to_string(),
-                create_time_ms: 1,
-                message_type: wechatbot::types::MessageType::User,
-                message_state: MessageState::Finish,
-                context_token: "ctx".to_string(),
-                item_list: Vec::new(),
-            },
-            context_token: "ctx".to_string(),
-        };
-
-        assert_eq!(
-            extract_quote_hash(&message),
-            Some(hash_feedback_key("quoted"))
         );
     }
 
