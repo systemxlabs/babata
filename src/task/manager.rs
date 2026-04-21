@@ -623,7 +623,6 @@ fn remove_task_dir(task_id: Uuid) -> BabataResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::agent::{Agent, AgentFrontmatter};
     use std::{
         collections::HashMap,
         fs,
@@ -667,28 +666,25 @@ mod tests {
         let _workspace = temp_root.join("workspace");
         fs::create_dir_all(&_workspace).expect("create workspace");
 
-        // Create agent home directory and AGENT.md
-        let agent_home = temp_root.join("agents").join("test-agent");
+        // Create agent home directory and AGENT.md in the isolated Babata home.
+        let agent_home = temp_root.join(".babata").join("agents").join("test-agent");
         fs::create_dir_all(&agent_home).expect("create agent home directory");
         let agent_md_path = agent_home.join("AGENT.md");
-        fs::write(&agent_md_path, "---\nname: test-agent\n---\n").expect("create AGENT.md");
-
-        let mut agents = HashMap::new();
-        agents.insert(
-            "test-agent".to_string(),
-            Arc::new(Agent {
-                path: agent_md_path,
-                frontmatter: AgentFrontmatter {
-                    name: "test-agent".to_string(),
-                    description: "Test agent".to_string(),
-                    provider: "openai".to_string(),
-                    model: "gpt-4".to_string(),
-                    allowed_tools: vec!["*".to_string()],
-                    default: Some(true),
-                },
-                body: String::new(),
-            }),
-        );
+        fs::write(
+            &agent_md_path,
+            concat!(
+                "---\n",
+                "name: test-agent\n",
+                "description: Test agent\n",
+                "provider: openai\n",
+                "model: gpt-4\n",
+                "allowed_tools:\n",
+                "  - \"*\"\n",
+                "default: true\n",
+                "---\n"
+            ),
+        )
+        .expect("create AGENT.md");
 
         let store = TaskStore::open(temp_root.join("task.db")).expect("open temp task store");
         let launcher = TaskLauncher::new(HashMap::new()).expect("build task launcher");
@@ -755,35 +751,35 @@ mod tests {
         (temp_root, task_root, state_file)
     }
 
-    fn child_create_task_paths(expected_test_case: &str) -> Option<(PathBuf, PathBuf)> {
-        let actual_test_case = std::env::var("BABATA_MANAGER_CREATE_TASK_CHILD").ok()?;
+    fn child_test_paths(expected_test_case: &str) -> Option<(PathBuf, PathBuf)> {
+        let actual_test_case = std::env::var("BABATA_MANAGER_TEST_CHILD").ok()?;
         if actual_test_case != expected_test_case {
             return None;
         }
 
         let temp_root = PathBuf::from(
-            std::env::var("BABATA_MANAGER_CREATE_TASK_TEMP_ROOT")
+            std::env::var("BABATA_MANAGER_TEST_TEMP_ROOT")
                 .expect("child temp root env should be set"),
         );
         let state_file = PathBuf::from(
-            std::env::var("BABATA_MANAGER_CREATE_TASK_STATE_FILE")
+            std::env::var("BABATA_MANAGER_TEST_STATE_FILE")
                 .expect("child state file env should be set"),
         );
         Some((temp_root, state_file))
     }
 
-    fn run_create_task_child(test_case: &str, temp_root: &Path, state_file: &Path) {
+    fn run_child_test(test_case: &str, temp_root: &Path, state_file: &Path) {
         let status = Command::new(current_test_binary())
             .arg("--exact")
             .arg(test_case)
             .arg("--nocapture")
-            .env("BABATA_MANAGER_CREATE_TASK_CHILD", test_case)
-            .env("BABATA_MANAGER_CREATE_TASK_TEMP_ROOT", temp_root)
-            .env("BABATA_MANAGER_CREATE_TASK_STATE_FILE", state_file)
+            .env("BABATA_MANAGER_TEST_CHILD", test_case)
+            .env("BABATA_MANAGER_TEST_TEMP_ROOT", temp_root)
+            .env("BABATA_MANAGER_TEST_STATE_FILE", state_file)
             .env("HOME", temp_root)
             .env("USERPROFILE", temp_root)
             .status()
-            .expect("spawn create_task child test process");
+            .expect("spawn child test process");
 
         assert!(
             status.success(),
@@ -797,23 +793,30 @@ mod tests {
 
     #[tokio::test]
     async fn handle_task_completed_relaunches_never_ending_task() {
-        let temp_root = temp_test_root("manager-never-ends");
-        fs::create_dir_all(&temp_root).expect("create temp root");
-        let manager = build_test_manager(&temp_root);
-        let task = task_record(true);
-        manager
-            .store
-            .insert_task(task.clone())
-            .expect("insert task record");
+        let test_case = "task::manager::tests::handle_task_completed_relaunches_never_ending_task";
+        if let Some((temp_root, state_file)) = child_test_paths(test_case) {
+            let manager = build_test_manager(&temp_root);
+            let task = task_record(true);
+            manager
+                .store
+                .insert_task(task.clone())
+                .expect("insert task record");
 
-        drop(insert_dummy_running_task(&manager, task.task_id));
-        manager.handle_task_completed(task.task_id);
+            drop(insert_dummy_running_task(&manager, task.task_id));
+            manager.handle_task_completed(task.task_id);
 
-        let stored_task = manager.store.get_task(task.task_id).expect("load task");
-        assert_eq!(stored_task.status, TaskStatus::Running);
-        assert!(manager.running_tasks.lock().contains_key(&task.task_id));
+            let stored_task = manager.store.get_task(task.task_id).expect("load task");
+            assert_eq!(stored_task.status, TaskStatus::Running);
+            assert!(manager.running_tasks.lock().contains_key(&task.task_id));
 
-        cleanup_task_artifacts(&manager, task.task_id);
+            cleanup_task_artifacts(&manager, task.task_id);
+            fs::write(&state_file, "relaunch_verified").expect("write child state file");
+            return;
+        }
+
+        let (temp_root, _task_root, state_file) = create_task_child_env("manager-never-ends");
+        run_child_test(test_case, &temp_root, &state_file);
+        assert_eq!(read_child_state_file(&state_file), "relaunch_verified");
         let _ = fs::remove_dir_all(&temp_root);
     }
 
@@ -838,31 +841,44 @@ mod tests {
 
     #[tokio::test]
     async fn handle_task_completed_relaunches_when_subtasks_are_unfinished() {
-        let temp_root = temp_test_root("manager-unfinished-subtasks");
-        fs::create_dir_all(&temp_root).expect("create temp root");
-        let manager = build_test_manager(&temp_root);
-        let task = task_record(false);
-        let subtask = subtask_record(task.task_id, task.root_task_id);
-        manager
-            .store
-            .insert_task(task.clone())
-            .expect("insert parent task record");
-        manager
-            .store
-            .insert_task(subtask.clone())
-            .expect("insert subtask record");
+        let test_case =
+            "task::manager::tests::handle_task_completed_relaunches_when_subtasks_are_unfinished";
+        if let Some((temp_root, state_file)) = child_test_paths(test_case) {
+            let manager = build_test_manager(&temp_root);
+            let task = task_record(false);
+            let subtask = subtask_record(task.task_id, task.root_task_id);
+            manager
+                .store
+                .insert_task(task.clone())
+                .expect("insert parent task record");
+            manager
+                .store
+                .insert_task(subtask.clone())
+                .expect("insert subtask record");
 
-        drop(insert_dummy_running_task(&manager, task.task_id));
-        manager.handle_task_completed(task.task_id);
+            drop(insert_dummy_running_task(&manager, task.task_id));
+            manager.handle_task_completed(task.task_id);
 
-        let stored_task = manager
-            .store
-            .get_task(task.task_id)
-            .expect("load parent task");
-        assert_eq!(stored_task.status, TaskStatus::Running);
-        assert!(manager.running_tasks.lock().contains_key(&task.task_id));
+            let stored_task = manager
+                .store
+                .get_task(task.task_id)
+                .expect("load parent task");
+            assert_eq!(stored_task.status, TaskStatus::Running);
+            assert!(manager.running_tasks.lock().contains_key(&task.task_id));
 
-        cleanup_task_artifacts(&manager, task.task_id);
+            cleanup_task_artifacts(&manager, task.task_id);
+            let _ = manager.store.delete_task(subtask.task_id);
+            fs::write(&state_file, "unfinished_subtasks_verified").expect("write child state file");
+            return;
+        }
+
+        let (temp_root, _task_root, state_file) =
+            create_task_child_env("manager-unfinished-subtasks");
+        run_child_test(test_case, &temp_root, &state_file);
+        assert_eq!(
+            read_child_state_file(&state_file),
+            "unfinished_subtasks_verified"
+        );
         let _ = fs::remove_dir_all(&temp_root);
     }
 
@@ -890,7 +906,7 @@ mod tests {
     #[tokio::test]
     async fn create_task_stores_steer_queue_in_running_task() {
         let test_case = "task::manager::tests::create_task_stores_steer_queue_in_running_task";
-        if let Some((temp_root, state_file)) = child_create_task_paths(test_case) {
+        if let Some((temp_root, state_file)) = child_test_paths(test_case) {
             let manager = build_test_manager(&temp_root);
             let task_id = manager
                 .create_task(CreateTaskRequest {
@@ -918,7 +934,7 @@ mod tests {
 
         let (temp_root, _task_root, state_file) =
             create_task_child_env("manager-create-stores-steer");
-        run_create_task_child(test_case, &temp_root, &state_file);
+        run_child_test(test_case, &temp_root, &state_file);
         assert_eq!(read_child_state_file(&state_file), "steer_queue_present");
         let _ = fs::remove_dir_all(&temp_root);
     }
@@ -926,7 +942,7 @@ mod tests {
     #[tokio::test]
     async fn create_task_returns_error_when_launch_fails_and_rolls_back_store_and_directory() {
         let test_case = "task::manager::tests::create_task_returns_error_when_launch_fails_and_rolls_back_store_and_directory";
-        if let Some((temp_root, state_file)) = child_create_task_paths(test_case) {
+        if let Some((temp_root, state_file)) = child_test_paths(test_case) {
             let manager = build_test_manager(&temp_root);
             let isolated_task_root = isolated_task_root(&temp_root);
 
@@ -955,7 +971,7 @@ mod tests {
 
         let (temp_root, _task_root, state_file) =
             create_task_child_env("manager-create-launch-failure");
-        run_create_task_child(test_case, &temp_root, &state_file);
+        run_child_test(test_case, &temp_root, &state_file);
         assert_eq!(read_child_state_file(&state_file), "rollback_verified");
         let _ = fs::remove_dir_all(&temp_root);
     }
@@ -963,7 +979,7 @@ mod tests {
     #[tokio::test]
     async fn create_task_creates_task_directory() {
         let test_case = "task::manager::tests::create_task_creates_task_directory";
-        if let Some((temp_root, state_file)) = child_create_task_paths(test_case) {
+        if let Some((temp_root, state_file)) = child_test_paths(test_case) {
             let manager = build_test_manager(&temp_root);
             let task_id = manager
                 .create_task(CreateTaskRequest {
@@ -988,7 +1004,7 @@ mod tests {
         }
 
         let (temp_root, task_root, state_file) = create_task_child_env("manager-create-task-dir");
-        run_create_task_child(test_case, &temp_root, &state_file);
+        run_child_test(test_case, &temp_root, &state_file);
         let created_task_dir = read_child_state_file(&state_file);
         assert!(created_task_dir.starts_with(&task_root.display().to_string()));
         let _ = fs::remove_dir_all(&temp_root);
@@ -1128,54 +1144,76 @@ mod tests {
 
     #[tokio::test]
     async fn relaunch_task_from_completed_sets_status_running() {
-        let temp_root = temp_test_root("manager-relaunch-completed");
-        fs::create_dir_all(&temp_root).expect("create temp root");
-        let manager = build_test_manager(&temp_root);
-        let mut task = task_record(false);
-        task.status = TaskStatus::Completed;
-        manager
-            .store
-            .insert_task(task.clone())
-            .expect("insert task record");
+        let test_case = "task::manager::tests::relaunch_task_from_completed_sets_status_running";
+        if let Some((temp_root, state_file)) = child_test_paths(test_case) {
+            let manager = build_test_manager(&temp_root);
+            let mut task = task_record(false);
+            task.status = TaskStatus::Completed;
+            manager
+                .store
+                .insert_task(task.clone())
+                .expect("insert task record");
 
-        manager
-            .relaunch_task(task.task_id, "retry completed task")
-            .expect("relaunch completed task");
+            manager
+                .relaunch_task(task.task_id, "retry completed task")
+                .expect("relaunch completed task");
 
-        let stored_task = manager.store.get_task(task.task_id).expect("load task");
-        assert_eq!(stored_task.status, TaskStatus::Running);
-        assert!(manager.running_tasks.lock().contains_key(&task.task_id));
+            let stored_task = manager.store.get_task(task.task_id).expect("load task");
+            assert_eq!(stored_task.status, TaskStatus::Running);
+            assert!(manager.running_tasks.lock().contains_key(&task.task_id));
 
-        cleanup_task_artifacts(&manager, task.task_id);
+            cleanup_task_artifacts(&manager, task.task_id);
+            fs::write(&state_file, "relaunch_completed_verified").expect("write child state file");
+            return;
+        }
+
+        let (temp_root, _task_root, state_file) =
+            create_task_child_env("manager-relaunch-completed");
+        run_child_test(test_case, &temp_root, &state_file);
+        assert_eq!(
+            read_child_state_file(&state_file),
+            "relaunch_completed_verified"
+        );
         let _ = fs::remove_dir_all(&temp_root);
     }
 
     #[tokio::test]
     async fn relaunch_task_from_running_replaces_existing_running_task() {
-        let temp_root = temp_test_root("manager-relaunch-running");
-        fs::create_dir_all(&temp_root).expect("create temp root");
-        let manager = build_test_manager(&temp_root);
-        let task = task_record(false);
-        manager
-            .store
-            .insert_task(task.clone())
-            .expect("insert task record");
+        let test_case =
+            "task::manager::tests::relaunch_task_from_running_replaces_existing_running_task";
+        if let Some((temp_root, state_file)) = child_test_paths(test_case) {
+            let manager = build_test_manager(&temp_root);
+            let task = task_record(false);
+            manager
+                .store
+                .insert_task(task.clone())
+                .expect("insert task record");
 
-        let old_steer_queue = insert_dummy_running_task(&manager, task.task_id);
-        old_steer_queue.push(SteerMessage::new(vec![Content::Text {
-            text: "stale message".to_string(),
-        }]));
+            let old_steer_queue = insert_dummy_running_task(&manager, task.task_id);
+            old_steer_queue.push(SteerMessage::new(vec![Content::Text {
+                text: "stale message".to_string(),
+            }]));
 
-        manager
-            .relaunch_task(task.task_id, "replace current run")
-            .expect("relaunch running task");
+            manager
+                .relaunch_task(task.task_id, "replace current run")
+                .expect("relaunch running task");
 
-        let stored_task = manager.store.get_task(task.task_id).expect("load task");
-        assert_eq!(stored_task.status, TaskStatus::Running);
-        assert!(manager.running_tasks.lock().contains_key(&task.task_id));
-        assert!(manager.get_pending_steer_messages(task.task_id).is_empty());
+            let stored_task = manager.store.get_task(task.task_id).expect("load task");
+            assert_eq!(stored_task.status, TaskStatus::Running);
+            assert!(manager.running_tasks.lock().contains_key(&task.task_id));
+            assert!(manager.get_pending_steer_messages(task.task_id).is_empty());
 
-        cleanup_task_artifacts(&manager, task.task_id);
+            cleanup_task_artifacts(&manager, task.task_id);
+            fs::write(&state_file, "relaunch_running_verified").expect("write child state file");
+            return;
+        }
+
+        let (temp_root, _task_root, state_file) = create_task_child_env("manager-relaunch-running");
+        run_child_test(test_case, &temp_root, &state_file);
+        assert_eq!(
+            read_child_state_file(&state_file),
+            "relaunch_running_verified"
+        );
         let _ = fs::remove_dir_all(&temp_root);
     }
 }
