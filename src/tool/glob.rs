@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use crate::{
     BabataResult,
     error::BabataError,
-    tool::{Tool, ToolContext, ToolSpec, parse_tool_args},
+    tool::{Tool, ToolContext, ToolSpec, parse_tool_args, resolve_tool_path},
 };
 
 const MAX_RESULTS: usize = 100;
@@ -46,14 +46,7 @@ impl Tool for GlobTool {
     async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
         let args: GlobArgs = parse_tool_args(args)?;
 
-        let path = args
-            .path
-            .map(|p| shellexpand::tilde(&p).to_string())
-            .unwrap_or_else(|| {
-                std::env::current_dir()
-                    .map(|p| p.to_string_lossy().to_string())
-                    .unwrap_or_else(|_| ".".to_string())
-            });
+        let path = resolve_tool_path(args.path);
 
         let base = PathBuf::from(&path);
         if !base.is_dir() {
@@ -121,14 +114,7 @@ mod tests {
 
     fn parse_glob_args(args: &str) -> crate::BabataResult<(String, String)> {
         let args: GlobArgs = parse_tool_args(args)?;
-        let path = args
-            .path
-            .map(|p| shellexpand::tilde(&p).to_string())
-            .unwrap_or_else(|| {
-                std::env::current_dir()
-                    .map(|p| p.to_string_lossy().to_string())
-                    .unwrap_or_else(|_| ".".to_string())
-            });
+        let path = super::resolve_tool_path(args.path);
         Ok((args.pattern, path))
     }
 

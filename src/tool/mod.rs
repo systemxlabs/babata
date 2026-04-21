@@ -82,6 +82,17 @@ pub fn parse_tool_args<T: DeserializeOwned>(args: &str) -> BabataResult<T> {
         .map_err(|err| BabataError::tool(format!("Invalid tool arguments: {err}")))
 }
 
+/// Resolve a tool path argument: expand tilde and fall back to the current
+/// working directory (or "." if that fails).
+pub fn resolve_tool_path(path: Option<String>) -> String {
+    path.map(|p| shellexpand::tilde(&p).to_string())
+        .unwrap_or_else(|| {
+            std::env::current_dir()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|_| ".".to_string())
+        })
+}
+
 pub fn build_tools(
     channels: HashMap<String, Arc<dyn Channel>>,
 ) -> BabataResult<HashMap<String, Arc<dyn Tool>>> {
