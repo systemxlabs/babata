@@ -66,11 +66,13 @@ export function DeleteConfirmModal({
             </div>
           </div>
 
-          <div className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4 text-sm text-muted-foreground">
+          <div className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4 text-sm text-muted-foreground min-w-0 max-w-full">
             {taskDescription ? (
-              <div className="mb-2">
+              <div className="mb-2 overflow-hidden">
                 <span className="font-medium text-foreground">任务描述：</span>
-                {taskDescription}
+                <div className="line-clamp-2 break-words" title={taskDescription}>
+                  {taskDescription}
+                </div>
               </div>
             ) : null}
             <div className="font-mono text-xs text-muted-foreground">Task ID: {taskId}</div>
