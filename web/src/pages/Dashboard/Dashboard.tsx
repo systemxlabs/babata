@@ -271,8 +271,8 @@ export function Dashboard() {
       ) : null}
 
       <section className="grid gap-4 xl:grid-cols-5 md:grid-cols-2">
-        <StatCard icon={Activity} label="运行中任务" value={runningCount} tone="amber" />
         <StatCard icon={Workflow} label="运行中根任务" value={rootTasksWithChildren.length} tone="primary" />
+        <StatCard icon={Activity} label="运行中任务" value={runningCount} tone="amber" />
         <StatCard icon={Bot} label="Agents" value={agents.length} tone="cyan" />
         <StatCard icon={PlugZap} label="Providers" value={providers.length} tone="emerald" />
         <StatCard icon={Package2} label="Skills" value={skills.length} tone="rose" />
