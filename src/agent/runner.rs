@@ -65,9 +65,7 @@ impl AgentTask {
         }];
         self.memory.append_messages(self.task_id, &conversation)?;
 
-        let mut final_response = None;
-        let max_steps = 100;
-        for _ in 0..max_steps {
+        loop {
             // Check for steer messages before calling the model
             if let Some(steer_queue) = self.steer_queue.as_ref() {
                 for steer_msg in steer_queue.drain() {
@@ -102,8 +100,7 @@ impl AgentTask {
 
             match message {
                 Message::AssistantResponse { content, .. } => {
-                    final_response = Some(content);
-                    break;
+                    return Ok(content);
                 }
                 Message::AssistantToolCalls { calls, .. } => {
                     if calls.is_empty() {
@@ -154,15 +151,6 @@ impl AgentTask {
                     ));
                 }
             }
-        }
-
-        if let Some(final_response) = final_response {
-            Ok(final_response)
-        } else {
-            Err(BabataError::provider(format!(
-                "Max steps ({}) reached before final answer",
-                max_steps
-            )))
         }
     }
 
