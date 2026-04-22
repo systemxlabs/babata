@@ -54,8 +54,7 @@ impl AnthropicCompatibleProvider {
                 ))
             }
             Content::ImageData { data, media_type } => Ok(AnthropicContentBlock::Image {
-                source: AnthropicImageSource {
-                    source_type: "base64".to_string(),
+                source: AnthropicImageSource::Base64 {
                     media_type: media_type.as_mime_str(),
                     data: data.clone(),
                 },
@@ -87,7 +86,7 @@ impl AnthropicCompatibleProvider {
                             }
                         }
                     }
-                    ("user", blocks)
+                    (AnthropicRole::User, blocks)
                 }
                 Message::AssistantToolCalls {
                     calls,
@@ -106,7 +105,7 @@ impl AnthropicCompatibleProvider {
                             }
                         })
                         .collect();
-                    ("assistant", blocks)
+                    (AnthropicRole::Assistant, blocks)
                 }
                 Message::AssistantResponse {
                     content,
@@ -123,10 +122,10 @@ impl AnthropicCompatibleProvider {
                             }
                         }
                     }
-                    ("assistant", blocks)
+                    (AnthropicRole::Assistant, blocks)
                 }
                 Message::ToolResult { call, result, .. } => (
-                    "user",
+                    AnthropicRole::User,
                     vec![AnthropicContentBlock::ToolResult {
                         tool_use_id: call.call_id.clone(),
                         content: result.clone(),
@@ -147,7 +146,7 @@ impl AnthropicCompatibleProvider {
             }
 
             request_messages.push(AnthropicMessage {
-                role: role.to_string(),
+                role,
                 content: blocks,
             });
         }
@@ -321,9 +320,16 @@ enum AnthropicSystemBlock {
     Text { text: String },
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum AnthropicRole {
+    User,
+    Assistant,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 struct AnthropicMessage {
-    role: String,
+    role: AnthropicRole,
     content: Vec<AnthropicContentBlock>,
 }
 
@@ -347,12 +353,11 @@ enum AnthropicContentBlock {
     },
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct AnthropicImageSource {
-    #[serde(rename = "type")]
-    source_type: String,
-    media_type: String,
-    data: String,
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum AnthropicImageSource {
+    Base64 { media_type: String, data: String },
+    Url { url: String },
 }
 
 #[derive(Debug, Serialize)]
@@ -441,5 +446,202 @@ mod tests {
             .test_connection("test-model")
             .await
             .expect("test connection should succeed");
+    }
+
+    // Tests for AnthropicImageSource with base64 and url types
+    #[test]
+    fn test_base64_image_source_serde() {
+        let source = AnthropicImageSource::Base64 {
+            media_type: "image/jpeg".to_string(),
+            data: "base64encodeddata".to_string(),
+        };
+        let json_value = serde_json::to_value(&source).expect("serialize base64 source");
+        assert_eq!(
+            json_value,
+            json!({
+                "type": "base64",
+                "media_type": "image/jpeg",
+                "data": "base64encodeddata"
+            })
+        );
+
+        // Test deserialization
+        let deserialized: AnthropicImageSource =
+            serde_json::from_value(json_value).expect("deserialize base64 source");
+        match deserialized {
+            AnthropicImageSource::Base64 { media_type, data } => {
+                assert_eq!(media_type, "image/jpeg");
+                assert_eq!(data, "base64encodeddata");
+            }
+            _ => panic!("expected Base64 variant"),
+        }
+    }
+
+    #[test]
+    fn test_url_image_source_serde() {
+        let source = AnthropicImageSource::Url {
+            url: "https://example.com/image.png".to_string(),
+        };
+        let json_value = serde_json::to_value(&source).expect("serialize url source");
+        assert_eq!(
+            json_value,
+            json!({
+                "type": "url",
+                "url": "https://example.com/image.png"
+            })
+        );
+
+        // Test deserialization
+        let deserialized: AnthropicImageSource =
+            serde_json::from_value(json_value).expect("deserialize url source");
+        match deserialized {
+            AnthropicImageSource::Url { url } => {
+                assert_eq!(url, "https://example.com/image.png");
+            }
+            _ => panic!("expected Url variant"),
+        }
+    }
+
+    #[test]
+    fn test_anthropic_message_role_serde() {
+        // Test User role
+        let user_msg = AnthropicMessage {
+            role: AnthropicRole::User,
+            content: vec![AnthropicContentBlock::Text {
+                text: "hello".to_string(),
+            }],
+        };
+        let json_value = serde_json::to_value(&user_msg).expect("serialize user message");
+        assert_eq!(
+            json_value,
+            json!({
+                "role": "user",
+                "content": [{"type": "text", "text": "hello"}]
+            })
+        );
+
+        // Test Assistant role
+        let assistant_msg = AnthropicMessage {
+            role: AnthropicRole::Assistant,
+            content: vec![AnthropicContentBlock::Text {
+                text: "hi".to_string(),
+            }],
+        };
+        let json_value = serde_json::to_value(&assistant_msg).expect("serialize assistant message");
+        assert_eq!(
+            json_value,
+            json!({
+                "role": "assistant",
+                "content": [{"type": "text", "text": "hi"}]
+            })
+        );
+
+        // Test deserialization
+        let deserialized: AnthropicMessage =
+            serde_json::from_value(json_value).expect("deserialize message");
+        assert!(matches!(deserialized.role, AnthropicRole::Assistant));
+    }
+
+    #[test]
+    fn test_image_content_block_with_base64_source() {
+        let block = AnthropicContentBlock::Image {
+            source: AnthropicImageSource::Base64 {
+                media_type: "image/png".to_string(),
+                data: "pngdata".to_string(),
+            },
+        };
+        let json_value = serde_json::to_value(&block).expect("serialize image block");
+        assert_eq!(
+            json_value,
+            json!({
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": "image/png",
+                    "data": "pngdata"
+                }
+            })
+        );
+    }
+
+    #[test]
+    fn test_image_content_block_with_url_source() {
+        let block = AnthropicContentBlock::Image {
+            source: AnthropicImageSource::Url {
+                url: "https://example.com/photo.jpg".to_string(),
+            },
+        };
+        let json_value = serde_json::to_value(&block).expect("serialize image block");
+        assert_eq!(
+            json_value,
+            json!({
+                "type": "image",
+                "source": {
+                    "type": "url",
+                    "url": "https://example.com/photo.jpg"
+                }
+            })
+        );
+    }
+
+    // Regression test: ensure message/image block output matches Anthropic API expectations
+    #[test]
+    fn test_request_body_serialization_with_image_and_role() {
+        let request = AnthropicRequest {
+            model: "claude-3-opus-20240229".to_string(),
+            max_tokens: 1024,
+            system: None,
+            messages: vec![
+                AnthropicMessage {
+                    role: AnthropicRole::User,
+                    content: vec![
+                        AnthropicContentBlock::Text {
+                            text: "Describe this image".to_string(),
+                        },
+                        AnthropicContentBlock::Image {
+                            source: AnthropicImageSource::Url {
+                                url: "https://example.com/image.jpg".to_string(),
+                            },
+                        },
+                    ],
+                },
+                AnthropicMessage {
+                    role: AnthropicRole::Assistant,
+                    content: vec![AnthropicContentBlock::Text {
+                        text: "I see...".to_string(),
+                    }],
+                },
+            ],
+            tools: None,
+        };
+
+        let json_value = serde_json::to_value(&request).expect("serialize request");
+        let expected = json!({
+            "model": "claude-3-opus-20240229",
+            "max_tokens": 1024,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Describe this image"},
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "url",
+                                "url": "https://example.com/image.jpg"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "text", "text": "I see..."}
+                    ]
+                }
+            ]
+        });
+
+        assert_eq!(json_value, expected);
     }
 }
