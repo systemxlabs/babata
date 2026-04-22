@@ -326,7 +326,7 @@ export function Tasks() {
                         className="rounded-[1.3rem] border-destructive/20"
                       />
                     ) : null}
-                    <div className="overflow-x-auto pb-2">
+                    <div className="overflow-x-auto overflow-y-auto max-h-[720px] pb-2">
                       <div className="min-w-max px-4 pb-2 pt-3">
                         <TaskTreeItem
                           task={selectedTree}
