@@ -50,6 +50,7 @@ pub fn build_environment_prompt(task_id: Uuid) -> BabataResult<String> {
 - User time zone: {}
 - Operating system: {}
 - CPU architecture: {}
+- Shell type: {}
 - Babata version: {}
 - Babata build commit: {}"#,
         user_home_dir()?.display(),
@@ -59,6 +60,7 @@ pub fn build_environment_prompt(task_id: Uuid) -> BabataResult<String> {
         Local::now().format("%Z (%:z)"),
         std::env::consts::OS,
         std::env::consts::ARCH,
+        crate::tool::detect_shell_type(),
         env!("CARGO_PKG_VERSION"),
         build_commit().unwrap_or("unknown"),
     ))
@@ -181,6 +183,7 @@ mod tests {
         assert!(prompt.contains("User time zone:"));
         assert!(prompt.contains("Operating system:"));
         assert!(prompt.contains("CPU architecture:"));
+        assert!(prompt.contains("Shell type:"));
     }
 
     #[test]

@@ -106,6 +106,13 @@ async fn exec_shell(command: &str, timeout_secs: usize) -> BabataResult<Output> 
     Ok(output)
 }
 
+pub fn detect_shell_type() -> &'static str {
+    match std::env::consts::OS {
+        "windows" => "powershell",
+        _ => "bash",
+    }
+}
+
 fn create_command(command: &str) -> tokio::process::Command {
     match std::env::consts::OS {
         "windows" => {
@@ -178,7 +185,7 @@ fn get_shell_log_path(context: &ToolContext<'_>, stream_name: &str) -> BabataRes
 
 #[cfg(test)]
 mod tests {
-    use super::create_command;
+    use super::{create_command, detect_shell_type};
 
     #[test]
     fn spawn_shell_command_windows_includes_utf8_setup() {
@@ -200,5 +207,15 @@ mod tests {
         }
         let cmd = create_command("echo hello");
         assert_eq!(cmd.as_std().get_program(), "bash");
+    }
+
+    #[test]
+    fn detect_shell_type_matches_platform() {
+        let shell = detect_shell_type();
+        if std::env::consts::OS == "windows" {
+            assert_eq!(shell, "powershell");
+        } else {
+            assert_eq!(shell, "bash");
+        }
     }
 }
