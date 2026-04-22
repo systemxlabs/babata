@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use crate::{
     BabataResult,
     error::BabataError,
-    tool::{Tool, ToolContext, ToolSpec, parse_tool_args},
+    tool::{Tool, ToolContext, ToolSpec, parse_tool_args, resolve_tool_path},
 };
 
 // skip these dirs to avoid noise
@@ -98,14 +98,7 @@ impl Tool for GrepTool {
     async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
         let args: GrepArgs = parse_tool_args(args)?;
 
-        let path = args
-            .path
-            .map(|p| shellexpand::tilde(&p).to_string())
-            .unwrap_or_else(|| {
-                std::env::current_dir()
-                    .map(|p| p.to_string_lossy().to_string())
-                    .unwrap_or_else(|_| ".".to_string())
-            });
+        let path = resolve_tool_path(args.path);
         let matcher = RegexMatcherBuilder::new()
             .build(&args.pattern)
             .map_err(|err| BabataError::tool(format!("Invalid regex: {}", err)))?;
@@ -185,14 +178,7 @@ mod tests {
 
     fn parse_grep_args(args: &str) -> BabataResult<(String, String, Option<String>)> {
         let args: GrepArgs = parse_tool_args(args)?;
-        let path = args
-            .path
-            .map(|p| shellexpand::tilde(&p).to_string())
-            .unwrap_or_else(|| {
-                std::env::current_dir()
-                    .map(|p| p.to_string_lossy().to_string())
-                    .unwrap_or_else(|_| ".".to_string())
-            });
+        let path = super::resolve_tool_path(args.path);
         Ok((args.pattern, path, args.include))
     }
 
