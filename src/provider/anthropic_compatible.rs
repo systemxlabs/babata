@@ -85,29 +85,51 @@ impl AnthropicCompatibleProvider {
                 }
                 Message::AssistantToolCalls {
                     calls,
-                    reasoning_content: _,
+                    reasoning_content,
                     ..
                 } => {
-                    let blocks = calls
-                        .iter()
-                        .map(|call| {
-                            let input: Value = serde_json::from_str(&call.args)
-                                .unwrap_or_else(|_| Value::Object(Default::default()));
-                            AnthropicContentBlock::ToolUse {
-                                id: call.call_id.clone(),
-                                name: call.tool_name.clone(),
-                                input,
-                            }
-                        })
-                        .collect();
+                    let mut blocks = Vec::new();
+                    if let Some(rc) = reasoning_content {
+                        // The generic Message model does not store provider-specific signatures.
+                        // Therefore we send an empty signature here. This is a design boundary:
+                        // round-tripping a thinking block through the generic Message model will
+                        // lose the original signature, and the provider may reject it on
+                        // subsequent turns. A provider-specific storage layer would be needed
+                        // to preserve signatures across turns.
+                        blocks.push(AnthropicContentBlock::Thinking {
+                            thinking: rc.clone(),
+                            signature: String::new(),
+                        });
+                    }
+                    blocks.extend(calls.iter().map(|call| {
+                        let input: Value = serde_json::from_str(&call.args)
+                            .unwrap_or_else(|_| Value::Object(Default::default()));
+                        AnthropicContentBlock::ToolUse {
+                            id: call.call_id.clone(),
+                            name: call.tool_name.clone(),
+                            input,
+                        }
+                    }));
                     (AnthropicRole::Assistant, blocks)
                 }
                 Message::AssistantResponse {
                     content,
-                    reasoning_content: _,
+                    reasoning_content,
                     ..
                 } => {
                     let mut blocks = Vec::new();
+                    if let Some(rc) = reasoning_content {
+                        // The generic Message model does not store provider-specific signatures.
+                        // Therefore we send an empty signature here. This is a design boundary:
+                        // round-tripping a thinking block through the generic Message model will
+                        // lose the original signature, and the provider may reject it on
+                        // subsequent turns. A provider-specific storage layer would be needed
+                        // to preserve signatures across turns.
+                        blocks.push(AnthropicContentBlock::Thinking {
+                            thinking: rc.clone(),
+                            signature: String::new(),
+                        });
+                    }
                     for part in content {
                         match self.format_content_block(part) {
                             Ok(block) => blocks.push(block),
@@ -147,6 +169,77 @@ impl AnthropicCompatibleProvider {
         }
 
         Ok(request_messages)
+    }
+
+    fn parse_response(&self, response_body: AnthropicResponse) -> BabataResult<GenerationResponse> {
+        let mut tool_calls = Vec::new();
+        let mut text_content = Vec::new();
+        let mut thinking_parts = Vec::new();
+
+        for block in response_body.content {
+            match block {
+                AnthropicContentBlock::Text { text } => {
+                    text_content.push(Content::Text { text });
+                }
+                AnthropicContentBlock::ToolUse { id, name, input } => {
+                    let args = serde_json::to_string(&input)?;
+                    tool_calls.push(ToolCall {
+                        call_id: id,
+                        tool_name: name,
+                        args,
+                    });
+                }
+                AnthropicContentBlock::Thinking { thinking, .. } => {
+                    thinking_parts.push(thinking);
+                }
+                _ => {}
+            }
+        }
+
+        let reasoning_content = if !thinking_parts.is_empty() {
+            Some(thinking_parts.join("\n"))
+        } else {
+            None
+        };
+
+        if !tool_calls.is_empty() {
+            // For tool_calls path, if no thinking block was present but there is text content,
+            // fall back to using the text as reasoning_content to preserve backward-compatible
+            // behavior (older models may emit plain text before tool_use without a thinking block).
+            let reasoning_content = reasoning_content.or_else(|| {
+                if text_content.is_empty() {
+                    None
+                } else {
+                    let texts: Vec<String> = text_content
+                        .iter()
+                        .filter_map(|c| match c {
+                            Content::Text { text } => Some(text.clone()),
+                            _ => None,
+                        })
+                        .collect();
+                    Some(texts.join("\n"))
+                }
+            });
+            return Ok(GenerationResponse {
+                message: Message::AssistantToolCalls {
+                    calls: tool_calls,
+                    reasoning_content,
+                    created_at: Utc::now(),
+                },
+            });
+        }
+
+        if text_content.is_empty() && reasoning_content.is_none() {
+            return Err(BabataError::provider("No content in assistant message"));
+        }
+
+        Ok(GenerationResponse {
+            message: Message::AssistantResponse {
+                content: text_content,
+                reasoning_content,
+                created_at: Utc::now(),
+            },
+        })
     }
 }
 
@@ -217,60 +310,7 @@ impl Provider for AnthropicCompatibleProvider {
             serde_json::to_string_pretty(&response_body)?
         );
 
-        // Check for tool use in response
-        let mut tool_calls = Vec::new();
-        let mut text_content = Vec::new();
-
-        for block in response_body.content {
-            match block {
-                AnthropicContentBlock::Text { text } => {
-                    text_content.push(Content::Text { text });
-                }
-                AnthropicContentBlock::ToolUse { id, name, input } => {
-                    let args = serde_json::to_string(&input)?;
-                    tool_calls.push(ToolCall {
-                        call_id: id,
-                        tool_name: name,
-                        args,
-                    });
-                }
-                _ => {}
-            }
-        }
-
-        if !tool_calls.is_empty() {
-            let reasoning_content = if text_content.is_empty() {
-                None
-            } else {
-                let texts: Vec<String> = text_content
-                    .into_iter()
-                    .filter_map(|c| match c {
-                        Content::Text { text } => Some(text),
-                        _ => None,
-                    })
-                    .collect();
-                Some(texts.join("\n"))
-            };
-            return Ok(GenerationResponse {
-                message: Message::AssistantToolCalls {
-                    calls: tool_calls,
-                    reasoning_content,
-                    created_at: Utc::now(),
-                },
-            });
-        }
-
-        if text_content.is_empty() {
-            return Err(BabataError::provider("No content in assistant message"));
-        }
-
-        Ok(GenerationResponse {
-            message: Message::AssistantResponse {
-                content: text_content,
-                reasoning_content: None,
-                created_at: Utc::now(),
-            },
-        })
+        self.parse_response(response_body)
     }
 }
 
@@ -345,6 +385,10 @@ enum AnthropicContentBlock {
     ToolResult {
         tool_use_id: String,
         content: String,
+    },
+    Thinking {
+        thinking: String,
+        signature: String,
     },
 }
 
@@ -446,6 +490,238 @@ mod tests {
             .test_connection("test-model")
             .await
             .expect("test connection should succeed");
+    }
+
+    // --- Thinking block tests ---
+
+    #[test]
+    fn test_thinking_block_serde() {
+        let block = AnthropicContentBlock::Thinking {
+            thinking: "Let me think step by step...".to_string(),
+            signature: "sig-abc123".to_string(),
+        };
+        let json_value = serde_json::to_value(&block).expect("serialize thinking block");
+        assert_eq!(
+            json_value,
+            json!({
+                "type": "thinking",
+                "thinking": "Let me think step by step...",
+                "signature": "sig-abc123"
+            })
+        );
+
+        let deserialized: AnthropicContentBlock =
+            serde_json::from_value(json_value).expect("deserialize thinking block");
+        match deserialized {
+            AnthropicContentBlock::Thinking {
+                thinking,
+                signature,
+            } => {
+                assert_eq!(thinking, "Let me think step by step...");
+                assert_eq!(signature, "sig-abc123");
+            }
+            other => panic!("expected Thinking variant, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_format_messages_encodes_reasoning_content_as_thinking_block_for_assistant_response() {
+        let provider = AnthropicCompatibleProvider::new("test-key", "http://localhost");
+        let messages = vec![Message::AssistantResponse {
+            content: vec![Content::Text {
+                text: "The answer is 42.".to_string(),
+            }],
+            reasoning_content: Some("I need to calculate...".to_string()),
+            created_at: chrono::Utc::now(),
+        }];
+        let anthropic_messages = provider
+            .format_messages(&messages)
+            .expect("format messages");
+        assert_eq!(anthropic_messages.len(), 1);
+        assert_eq!(anthropic_messages[0].role, AnthropicRole::Assistant);
+        assert_eq!(anthropic_messages[0].content.len(), 2);
+
+        match &anthropic_messages[0].content[0] {
+            AnthropicContentBlock::Thinking {
+                thinking,
+                signature,
+            } => {
+                assert_eq!(thinking, "I need to calculate...");
+                assert!(signature.is_empty());
+            }
+            other => panic!("expected Thinking block, got {other:?}"),
+        }
+        match &anthropic_messages[0].content[1] {
+            AnthropicContentBlock::Text { text } => {
+                assert_eq!(text, "The answer is 42.");
+            }
+            other => panic!("expected Text block, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_format_messages_encodes_reasoning_content_as_thinking_block_for_tool_calls() {
+        let provider = AnthropicCompatibleProvider::new("test-key", "http://localhost");
+        let messages = vec![Message::AssistantToolCalls {
+            calls: vec![ToolCall {
+                call_id: "call-1".to_string(),
+                tool_name: "calculator".to_string(),
+                args: "{\"a\":1,\"b\":2}".to_string(),
+            }],
+            reasoning_content: Some("I should use a tool.".to_string()),
+            created_at: chrono::Utc::now(),
+        }];
+        let anthropic_messages = provider
+            .format_messages(&messages)
+            .expect("format messages");
+        assert_eq!(anthropic_messages.len(), 1);
+        assert_eq!(anthropic_messages[0].role, AnthropicRole::Assistant);
+        assert_eq!(anthropic_messages[0].content.len(), 2);
+
+        match &anthropic_messages[0].content[0] {
+            AnthropicContentBlock::Thinking {
+                thinking,
+                signature,
+            } => {
+                assert_eq!(thinking, "I should use a tool.");
+                assert!(signature.is_empty());
+            }
+            other => panic!("expected Thinking block, got {other:?}"),
+        }
+        match &anthropic_messages[0].content[1] {
+            AnthropicContentBlock::ToolUse { id, name, .. } => {
+                assert_eq!(id, "call-1");
+                assert_eq!(name, "calculator");
+            }
+            other => panic!("expected ToolUse block, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_response_parsing_extracts_thinking_block_as_reasoning_content() {
+        let provider = AnthropicCompatibleProvider::new("test-key", "http://localhost");
+        let response_body = AnthropicResponse {
+            id: "msg-1".to_string(),
+            response_type: "message".to_string(),
+            role: "assistant".to_string(),
+            content: vec![
+                AnthropicContentBlock::Thinking {
+                    thinking: "Let me analyze this...".to_string(),
+                    signature: "sig-xyz".to_string(),
+                },
+                AnthropicContentBlock::Text {
+                    text: "Here is my analysis.".to_string(),
+                },
+            ],
+            model: "claude-3-7-sonnet".to_string(),
+            stop_reason: Some("end_turn".to_string()),
+        };
+
+        let response = provider
+            .parse_response(response_body)
+            .expect("parse response");
+        match response.message {
+            Message::AssistantResponse {
+                content,
+                reasoning_content,
+                ..
+            } => {
+                assert_eq!(content.len(), 1);
+                assert_eq!(
+                    content[0],
+                    Content::Text {
+                        text: "Here is my analysis.".to_string()
+                    }
+                );
+                assert_eq!(
+                    reasoning_content,
+                    Some("Let me analyze this...".to_string())
+                );
+            }
+            other => panic!("expected AssistantResponse, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_response_parsing_handles_thinking_text_and_tool_use() {
+        let provider = AnthropicCompatibleProvider::new("test-key", "http://localhost");
+        let response_body = AnthropicResponse {
+            id: "msg-1".to_string(),
+            response_type: "message".to_string(),
+            role: "assistant".to_string(),
+            content: vec![
+                AnthropicContentBlock::Thinking {
+                    thinking: "I need to search.".to_string(),
+                    signature: "sig-abc".to_string(),
+                },
+                AnthropicContentBlock::Text {
+                    text: "Let me search for you.".to_string(),
+                },
+                AnthropicContentBlock::ToolUse {
+                    id: "tool-1".to_string(),
+                    name: "search".to_string(),
+                    input: json!({"query": "rust"}),
+                },
+            ],
+            model: "claude-3-7-sonnet".to_string(),
+            stop_reason: Some("tool_use".to_string()),
+        };
+
+        let response = provider
+            .parse_response(response_body)
+            .expect("parse response");
+        match response.message {
+            Message::AssistantToolCalls {
+                calls,
+                reasoning_content,
+                ..
+            } => {
+                assert_eq!(calls.len(), 1);
+                assert_eq!(calls[0].call_id, "tool-1");
+                assert_eq!(calls[0].tool_name, "search");
+                // thinking text goes to reasoning_content; regular text is not used as
+                // reasoning_content because a thinking block was present
+                assert_eq!(reasoning_content, Some("I need to search.".to_string()));
+            }
+            other => panic!("expected AssistantToolCalls, got {other:?}"),
+        }
+    }
+
+    // Regression test: plain text response (no thinking block) must have reasoning_content == None
+    #[test]
+    fn test_response_parsing_plain_text_has_no_reasoning_content() {
+        let provider = AnthropicCompatibleProvider::new("test-key", "http://localhost");
+        let response_body = AnthropicResponse {
+            id: "msg-1".to_string(),
+            response_type: "message".to_string(),
+            role: "assistant".to_string(),
+            content: vec![AnthropicContentBlock::Text {
+                text: "Hello, world!".to_string(),
+            }],
+            model: "claude-3-5-sonnet".to_string(),
+            stop_reason: Some("end_turn".to_string()),
+        };
+
+        let response = provider
+            .parse_response(response_body)
+            .expect("parse response");
+        match response.message {
+            Message::AssistantResponse {
+                content,
+                reasoning_content,
+                ..
+            } => {
+                assert_eq!(content.len(), 1);
+                assert_eq!(
+                    content[0],
+                    Content::Text {
+                        text: "Hello, world!".to_string()
+                    }
+                );
+                assert_eq!(reasoning_content, None);
+            }
+            other => panic!("expected AssistantResponse, got {other:?}"),
+        }
     }
 
     // Tests for AnthropicImageSource with base64 and url types
