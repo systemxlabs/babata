@@ -97,8 +97,8 @@ struct ShellArgs {
 
 async fn exec_shell(command: &str, timeout_secs: usize) -> BabataResult<Output> {
     // Run command with timeout
-    let mut cmd = create_command(command);
-    let output = tokio::time::timeout(Duration::from_secs(timeout_secs as u64), cmd.output())
+    let mut shell_cmd = create_command(command);
+    let output = tokio::time::timeout(Duration::from_secs(timeout_secs as u64), shell_cmd.output())
         .await
         .map_err(|_| BabataError::tool(format!("Command timed out after {}s", timeout_secs)))?
         .map_err(|e| BabataError::tool(format!("Failed to execute command: {}", e)))?;
@@ -108,15 +108,15 @@ async fn exec_shell(command: &str, timeout_secs: usize) -> BabataResult<Output> 
 
 pub fn detect_shell_type() -> &'static str {
     match std::env::consts::OS {
-        "windows" => "powershell",
+        "windows" => "powershell.exe",
         _ => "bash",
     }
 }
 
 fn create_command(command: &str) -> tokio::process::Command {
+    let mut shell_cmd = tokio::process::Command::new(detect_shell_type());
     match std::env::consts::OS {
         "windows" => {
-            let mut cmd = tokio::process::Command::new("powershell.exe");
             let utf8_session_setup = r#"$utf8NoBom = [System.Text.UTF8Encoding]::new($false);
 $OutputEncoding = $utf8NoBom;
 [Console]::InputEncoding = $utf8NoBom;
@@ -125,18 +125,18 @@ $PSDefaultParameterValues['Out-File:Encoding'] = 'utf8';
 $PSDefaultParameterValues['Set-Content:Encoding'] = 'utf8';
 $PSDefaultParameterValues['Add-Content:Encoding'] = 'utf8';"#;
             let wrapped_command = format!("{utf8_session_setup}\n{command}");
-            cmd.arg("-NoProfile")
+            shell_cmd
+                .arg("-NoProfile")
                 .arg("-NonInteractive")
                 .arg("-ExecutionPolicy")
                 .arg("Bypass")
                 .arg("-Command")
                 .arg(wrapped_command);
-            cmd
+            shell_cmd
         }
         _ => {
-            let mut cmd = tokio::process::Command::new("bash");
-            cmd.arg("-c").arg(command);
-            cmd
+            shell_cmd.arg("-c").arg(command);
+            shell_cmd
         }
     }
 }
