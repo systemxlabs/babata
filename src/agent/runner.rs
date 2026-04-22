@@ -100,13 +100,22 @@ impl AgentTask {
                 response.thinking
             );
 
+            let message = response.message;
+
+            // Guard: provider must not return AssistantThinking as the primary message.
+            // Reject before any persistence to avoid dirty data.
+            if matches!(message, Message::AssistantThinking { .. }) {
+                return Err(BabataError::provider(
+                    "Provider returned AssistantThinking as primary message",
+                ));
+            }
+
             if let Some(thinking) = response.thinking {
                 self.memory
                     .append_messages(self.task_id, std::slice::from_ref(&thinking))?;
                 conversation.push(thinking);
             }
 
-            let message = response.message;
             self.memory
                 .append_messages(self.task_id, std::slice::from_ref(&message))?;
             conversation.push(message.clone());

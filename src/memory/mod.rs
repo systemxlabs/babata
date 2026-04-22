@@ -267,4 +267,49 @@ mod tests {
         assert!(context.contains("[user]\nhello"));
         assert!(context.contains("[assistant]\nworld"));
     }
+
+    #[test]
+    fn render_context_filters_out_assistant_thinking() {
+        let messages = vec![
+            Message::UserPrompt {
+                content: vec![Content::Text {
+                    text: "hello".to_string(),
+                }],
+                created_at: Utc::now(),
+            },
+            Message::AssistantThinking {
+                content: "thinking...".to_string(),
+                signature: None,
+                created_at: Utc::now(),
+            },
+            Message::AssistantResponse {
+                content: vec![Content::Text {
+                    text: "world".to_string(),
+                }],
+                created_at: Utc::now(),
+            },
+        ];
+
+        let context = Memory::render_context(&messages);
+        assert!(context.contains("[user]\nhello"));
+        assert!(context.contains("[assistant]\nworld"));
+        assert!(!context.contains("thinking"));
+    }
+
+    #[test]
+    fn assistant_thinking_serde_roundtrip() {
+        let message = Message::AssistantThinking {
+            content: "I need to calculate...".to_string(),
+            signature: Some("sig-xyz".to_string()),
+            created_at: Utc::now(),
+        };
+
+        let json = serde_json::to_string(&message).expect("serialize");
+        assert!(json.contains("\"type\":\"assistant_thinking\""));
+        assert!(json.contains("\"content\":\"I need to calculate...\""));
+        assert!(json.contains("\"signature\":\"sig-xyz\""));
+
+        let deserialized: Message = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(message, deserialized);
+    }
 }

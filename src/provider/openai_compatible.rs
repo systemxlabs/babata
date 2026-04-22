@@ -172,6 +172,13 @@ impl OpenAICompatibleProvider {
             }
         }
 
+        if let Some(reasoning) = pending_reasoning {
+            warn!(
+                "OpenAI-compatible provider: pending reasoning content was not consumed: {}",
+                reasoning
+            );
+        }
+
         Ok(request_messages)
     }
 }

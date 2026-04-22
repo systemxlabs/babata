@@ -191,6 +191,17 @@ impl MessageStore {
             BabataError::memory(format!("Failed to initialize messages table: {}", err))
         })?;
 
+        // Idempotent migration: old databases may lack the `signature` column.
+        if let Err(e) = conn.execute("ALTER TABLE messages ADD COLUMN signature TEXT", []) {
+            let err_msg = e.to_string();
+            if !err_msg.contains("duplicate column name") {
+                return Err(BabataError::memory(format!(
+                    "Failed to migrate messages table schema: {}",
+                    e
+                )));
+            }
+        }
+
         Ok(Self { db_path })
     }
 
@@ -686,6 +697,11 @@ mod tests {
                     tool_name: "read_file".to_string(),
                     args: r#"{"path": "README.md"}"#.to_string(),
                 }],
+                created_at: now,
+            },
+            Message::AssistantThinking {
+                content: "Let me think...".to_string(),
+                signature: Some("sig-abc".to_string()),
                 created_at: now,
             },
             Message::ToolResult {
