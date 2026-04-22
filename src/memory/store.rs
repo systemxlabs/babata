@@ -22,7 +22,7 @@ pub struct MessageRecord {
     pub message_type: MessageType,
     #[serde(with = "option_json_string")]
     pub content: Option<Vec<Content>>,
-    pub reasoning_content: Option<String>,
+    pub signature: Option<String>,
     #[serde(with = "option_json_string")]
     pub tool_calls: Option<Vec<ToolCall>>,
     pub result: Option<String>,
@@ -98,6 +98,7 @@ pub enum MessageType {
     UserSteering,
     AssistantResponse,
     AssistantToolCalls,
+    AssistantThinking,
     ToolResult,
 }
 
@@ -108,6 +109,7 @@ impl fmt::Display for MessageType {
             MessageType::UserSteering => "user_steering",
             MessageType::AssistantResponse => "assistant_response",
             MessageType::AssistantToolCalls => "assistant_tool_calls",
+            MessageType::AssistantThinking => "assistant_thinking",
             MessageType::ToolResult => "tool_result",
         };
         write!(f, "{}", s)
@@ -123,6 +125,7 @@ impl FromStr for MessageType {
             "user_steering" => Ok(MessageType::UserSteering),
             "assistant_response" => Ok(MessageType::AssistantResponse),
             "assistant_tool_calls" => Ok(MessageType::AssistantToolCalls),
+            "assistant_thinking" => Ok(MessageType::AssistantThinking),
             "tool_result" => Ok(MessageType::ToolResult),
             _ => Err(BabataError::memory(format!("Unknown message type: {}", s))),
         }
@@ -177,7 +180,7 @@ impl MessageStore {
                 task_id TEXT NOT NULL,
                 message_type TEXT NOT NULL,
                 content TEXT,
-                reasoning_content TEXT,
+                signature TEXT,
                 tool_calls TEXT,
                 result TEXT,
                 created_at TEXT NOT NULL
@@ -210,7 +213,7 @@ impl MessageStore {
                 task_id,
                 message_type: MessageType::UserPrompt,
                 content: Some(c.clone()),
-                reasoning_content: None,
+                signature: None,
                 tool_calls: None,
                 result: None,
                 created_at,
@@ -219,34 +222,39 @@ impl MessageStore {
                 task_id,
                 message_type: MessageType::UserSteering,
                 content: Some(c.clone()),
-                reasoning_content: None,
+                signature: None,
                 tool_calls: None,
                 result: None,
                 created_at,
             },
-            Message::AssistantResponse {
-                content: c,
-                reasoning_content: r,
-                ..
-            } => MessageRecord {
+            Message::AssistantResponse { content: c, .. } => MessageRecord {
                 task_id,
                 message_type: MessageType::AssistantResponse,
                 content: Some(c.clone()),
-                reasoning_content: r.clone(),
+                signature: None,
                 tool_calls: None,
                 result: None,
                 created_at,
             },
-            Message::AssistantToolCalls {
-                calls,
-                reasoning_content: r,
-                ..
-            } => MessageRecord {
+            Message::AssistantToolCalls { calls, .. } => MessageRecord {
                 task_id,
                 message_type: MessageType::AssistantToolCalls,
                 content: None,
-                reasoning_content: r.clone(),
+                signature: None,
                 tool_calls: Some(calls.clone()),
+                result: None,
+                created_at,
+            },
+            Message::AssistantThinking {
+                content, signature, ..
+            } => MessageRecord {
+                task_id,
+                message_type: MessageType::AssistantThinking,
+                content: Some(vec![Content::Text {
+                    text: content.clone(),
+                }]),
+                signature: signature.clone(),
+                tool_calls: None,
                 result: None,
                 created_at,
             },
@@ -256,7 +264,7 @@ impl MessageStore {
                 task_id,
                 message_type: MessageType::ToolResult,
                 content: None,
-                reasoning_content: None,
+                signature: None,
                 tool_calls: Some(vec![call.clone()]),
                 result: Some(res.clone()),
                 created_at,
@@ -289,15 +297,26 @@ impl MessageStore {
                 let content = record.content.clone().unwrap_or_default();
                 Message::AssistantResponse {
                     content,
-                    reasoning_content: record.reasoning_content.clone(),
                     created_at,
                 }
             }
             MessageType::AssistantToolCalls => {
                 let calls = record.tool_calls.clone().unwrap_or_default();
-                Message::AssistantToolCalls {
-                    calls,
-                    reasoning_content: record.reasoning_content.clone(),
+                Message::AssistantToolCalls { calls, created_at }
+            }
+            MessageType::AssistantThinking => {
+                let text = record
+                    .content
+                    .as_ref()
+                    .and_then(|c| c.first())
+                    .map(|c| match c {
+                        Content::Text { text } => text.clone(),
+                        _ => String::new(),
+                    })
+                    .unwrap_or_default();
+                Message::AssistantThinking {
+                    content: text,
+                    signature: record.signature.clone(),
                     created_at,
                 }
             }
@@ -330,7 +349,7 @@ impl MessageStore {
 
         let conn = self.connect()?;
         let mut stmt = conn
-            .prepare("INSERT INTO messages (task_id, message_type, content, reasoning_content, tool_calls, result, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)")
+            .prepare("INSERT INTO messages (task_id, message_type, content, signature, tool_calls, result, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)")
             .map_err(|err| {
                 BabataError::memory(format!(
                     "Failed to prepare message insert statement: {}",
@@ -365,7 +384,7 @@ impl MessageStore {
                 record.task_id.to_string(),
                 message_type_str,
                 content_json,
-                record.reasoning_content,
+                record.signature,
                 tool_calls_json,
                 record.result,
                 record.created_at.to_rfc3339()
@@ -386,7 +405,8 @@ impl MessageStore {
             return Ok(Vec::new());
         }
 
-        let query = "SELECT task_id, message_type, content, reasoning_content, tool_calls, result, created_at
+        let query =
+            "SELECT task_id, message_type, content, signature, tool_calls, result, created_at
             FROM messages
             WHERE task_id = ?1
             ORDER BY datetime(created_at), rowid
@@ -432,11 +452,8 @@ impl MessageStore {
             let content_json: Option<String> = row.get(2).map_err(|err| {
                 BabataError::memory(format!("Failed to read content from row: {}", err))
             })?;
-            let reasoning_content: Option<String> = row.get(3).map_err(|err| {
-                BabataError::memory(format!(
-                    "Failed to read reasoning_content from row: {}",
-                    err
-                ))
+            let signature: Option<String> = row.get(3).map_err(|err| {
+                BabataError::memory(format!("Failed to read signature from row: {}", err))
             })?;
             let tool_calls_json: Option<String> = row.get(4).map_err(|err| {
                 BabataError::memory(format!("Failed to read tool_calls from row: {}", err))
@@ -476,7 +493,7 @@ impl MessageStore {
                 task_id,
                 message_type,
                 content,
-                reasoning_content,
+                signature,
                 tool_calls,
                 result,
                 created_at,
@@ -494,8 +511,8 @@ impl MessageStore {
         }
 
         let query =
-            "SELECT task_id, message_type, content, reasoning_content, tool_calls, result, created_at FROM (
-            SELECT task_id, message_type, content, reasoning_content, tool_calls, result, created_at, rowid
+            "SELECT task_id, message_type, content, signature, tool_calls, result, created_at FROM (
+            SELECT task_id, message_type, content, signature, tool_calls, result, created_at, rowid
             FROM messages
             ORDER BY datetime(created_at) DESC, rowid DESC
             LIMIT ?1
@@ -532,11 +549,8 @@ impl MessageStore {
             let content_json: Option<String> = row.get(2).map_err(|err| {
                 BabataError::memory(format!("Failed to read content from row: {}", err))
             })?;
-            let reasoning_content: Option<String> = row.get(3).map_err(|err| {
-                BabataError::memory(format!(
-                    "Failed to read reasoning_content from row: {}",
-                    err
-                ))
+            let signature: Option<String> = row.get(3).map_err(|err| {
+                BabataError::memory(format!("Failed to read signature from row: {}", err))
             })?;
             let tool_calls_json: Option<String> = row.get(4).map_err(|err| {
                 BabataError::memory(format!("Failed to read tool_calls from row: {}", err))
@@ -579,7 +593,7 @@ impl MessageStore {
                 task_id,
                 message_type,
                 content,
-                reasoning_content,
+                signature,
                 tool_calls,
                 result,
                 created_at,
@@ -672,7 +686,6 @@ mod tests {
                     tool_name: "read_file".to_string(),
                     args: r#"{"path": "README.md"}"#.to_string(),
                 }],
-                reasoning_content: None,
                 created_at: now,
             },
             Message::ToolResult {
@@ -694,7 +707,6 @@ mod tests {
                         media_type: MediaType::ImagePng,
                     },
                 ],
-                reasoning_content: None,
                 created_at: now,
             },
         ];
@@ -791,7 +803,6 @@ mod tests {
                         content: vec![Content::Text {
                             text: "m3".to_string(),
                         }],
-                        reasoning_content: None,
                         created_at: now + chrono::Duration::seconds(2),
                     },
                 ],

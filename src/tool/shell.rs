@@ -213,7 +213,7 @@ mod tests {
     fn detect_shell_type_matches_platform() {
         let shell = detect_shell_type();
         if std::env::consts::OS == "windows" {
-            assert_eq!(shell, "powershell");
+            assert_eq!(shell, "powershell.exe");
         } else {
             assert_eq!(shell, "bash");
         }

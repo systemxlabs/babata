@@ -27,7 +27,7 @@ impl QueryMessagesTool {
                 description: "Query messages from the message store using a SQL SELECT statement. \
                     Returns each row as a JSON object. \
                     The messages table has columns: task_id, message_type, content, \
-                    reasoning_content, tool_calls, result, created_at."
+                    signature, tool_calls, result, created_at."
                     .to_string(),
                 parameters: schemars::schema_for!(QueryMessagesArgs),
             },

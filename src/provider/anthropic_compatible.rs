@@ -83,53 +83,39 @@ impl AnthropicCompatibleProvider {
                     }
                     (AnthropicRole::User, blocks)
                 }
-                Message::AssistantToolCalls {
-                    calls,
-                    reasoning_content,
-                    ..
+                Message::AssistantThinking {
+                    content, signature, ..
                 } => {
-                    let mut blocks = Vec::new();
-                    if let Some(rc) = reasoning_content {
-                        // The generic Message model does not store provider-specific signatures.
-                        // Therefore we send an empty signature here. This is a design boundary:
-                        // round-tripping a thinking block through the generic Message model will
-                        // lose the original signature, and the provider may reject it on
-                        // subsequent turns. A provider-specific storage layer would be needed
-                        // to preserve signatures across turns.
-                        blocks.push(AnthropicContentBlock::Thinking {
-                            thinking: rc.clone(),
-                            signature: String::new(),
-                        });
-                    }
-                    blocks.extend(calls.iter().map(|call| {
-                        let input: Value = serde_json::from_str(&call.args)
-                            .unwrap_or_else(|_| Value::Object(Default::default()));
-                        AnthropicContentBlock::ToolUse {
-                            id: call.call_id.clone(),
-                            name: call.tool_name.clone(),
-                            input,
-                        }
-                    }));
+                    // The generic Message model does not store provider-specific signatures.
+                    // Therefore we send an empty signature when none is present. This is a design
+                    // boundary: round-tripping a thinking block through the generic Message model
+                    // may lose the original signature, and the provider may reject it on subsequent
+                    // turns. A provider-specific storage layer would be needed to preserve
+                    // signatures across turns.
+                    let sig = signature.clone().unwrap_or_default();
+                    let blocks = vec![AnthropicContentBlock::Thinking {
+                        thinking: content.clone(),
+                        signature: sig,
+                    }];
                     (AnthropicRole::Assistant, blocks)
                 }
-                Message::AssistantResponse {
-                    content,
-                    reasoning_content,
-                    ..
-                } => {
+                Message::AssistantToolCalls { calls, .. } => {
+                    let blocks = calls
+                        .iter()
+                        .map(|call| {
+                            let input: Value = serde_json::from_str(&call.args)
+                                .unwrap_or_else(|_| Value::Object(Default::default()));
+                            AnthropicContentBlock::ToolUse {
+                                id: call.call_id.clone(),
+                                name: call.tool_name.clone(),
+                                input,
+                            }
+                        })
+                        .collect();
+                    (AnthropicRole::Assistant, blocks)
+                }
+                Message::AssistantResponse { content, .. } => {
                     let mut blocks = Vec::new();
-                    if let Some(rc) = reasoning_content {
-                        // The generic Message model does not store provider-specific signatures.
-                        // Therefore we send an empty signature here. This is a design boundary:
-                        // round-tripping a thinking block through the generic Message model will
-                        // lose the original signature, and the provider may reject it on
-                        // subsequent turns. A provider-specific storage layer would be needed
-                        // to preserve signatures across turns.
-                        blocks.push(AnthropicContentBlock::Thinking {
-                            thinking: rc.clone(),
-                            signature: String::new(),
-                        });
-                    }
                     for part in content {
                         match self.format_content_block(part) {
                             Ok(block) => blocks.push(block),
@@ -196,49 +182,37 @@ impl AnthropicCompatibleProvider {
             }
         }
 
-        let reasoning_content = if !thinking_parts.is_empty() {
-            Some(thinking_parts.join("\n"))
+        let thinking = if !thinking_parts.is_empty() {
+            let content = thinking_parts.join("\n");
+            Some(Message::AssistantThinking {
+                content,
+                signature: None,
+                created_at: Utc::now(),
+            })
         } else {
             None
         };
 
         if !tool_calls.is_empty() {
-            // For tool_calls path, if no thinking block was present but there is text content,
-            // fall back to using the text as reasoning_content to preserve backward-compatible
-            // behavior (older models may emit plain text before tool_use without a thinking block).
-            let reasoning_content = reasoning_content.or_else(|| {
-                if text_content.is_empty() {
-                    None
-                } else {
-                    let texts: Vec<String> = text_content
-                        .iter()
-                        .filter_map(|c| match c {
-                            Content::Text { text } => Some(text.clone()),
-                            _ => None,
-                        })
-                        .collect();
-                    Some(texts.join("\n"))
-                }
-            });
             return Ok(GenerationResponse {
                 message: Message::AssistantToolCalls {
                     calls: tool_calls,
-                    reasoning_content,
                     created_at: Utc::now(),
                 },
+                thinking,
             });
         }
 
-        if text_content.is_empty() && reasoning_content.is_none() {
+        if text_content.is_empty() && thinking.is_none() {
             return Err(BabataError::provider("No content in assistant message"));
         }
 
         Ok(GenerationResponse {
             message: Message::AssistantResponse {
                 content: text_content,
-                reasoning_content,
                 created_at: Utc::now(),
             },
+            thinking,
         })
     }
 }
@@ -525,13 +499,11 @@ mod tests {
     }
 
     #[test]
-    fn test_format_messages_encodes_reasoning_content_as_thinking_block_for_assistant_response() {
+    fn test_format_messages_maps_assistant_thinking_to_thinking_block() {
         let provider = AnthropicCompatibleProvider::new("test-key", "http://localhost");
-        let messages = vec![Message::AssistantResponse {
-            content: vec![Content::Text {
-                text: "The answer is 42.".to_string(),
-            }],
-            reasoning_content: Some("I need to calculate...".to_string()),
+        let messages = vec![Message::AssistantThinking {
+            content: "I need to calculate...".to_string(),
+            signature: None,
             created_at: chrono::Utc::now(),
         }];
         let anthropic_messages = provider
@@ -539,7 +511,7 @@ mod tests {
             .expect("format messages");
         assert_eq!(anthropic_messages.len(), 1);
         assert_eq!(anthropic_messages[0].role, AnthropicRole::Assistant);
-        assert_eq!(anthropic_messages[0].content.len(), 2);
+        assert_eq!(anthropic_messages[0].content.len(), 1);
 
         match &anthropic_messages[0].content[0] {
             AnthropicContentBlock::Thinking {
@@ -551,26 +523,26 @@ mod tests {
             }
             other => panic!("expected Thinking block, got {other:?}"),
         }
-        match &anthropic_messages[0].content[1] {
-            AnthropicContentBlock::Text { text } => {
-                assert_eq!(text, "The answer is 42.");
-            }
-            other => panic!("expected Text block, got {other:?}"),
-        }
     }
 
     #[test]
-    fn test_format_messages_encodes_reasoning_content_as_thinking_block_for_tool_calls() {
+    fn test_format_messages_merges_assistant_thinking_with_response() {
         let provider = AnthropicCompatibleProvider::new("test-key", "http://localhost");
-        let messages = vec![Message::AssistantToolCalls {
-            calls: vec![ToolCall {
-                call_id: "call-1".to_string(),
-                tool_name: "calculator".to_string(),
-                args: "{\"a\":1,\"b\":2}".to_string(),
-            }],
-            reasoning_content: Some("I should use a tool.".to_string()),
-            created_at: chrono::Utc::now(),
-        }];
+        let messages = vec![
+            Message::AssistantThinking {
+                content: "I should use a tool.".to_string(),
+                signature: Some("sig-123".to_string()),
+                created_at: chrono::Utc::now(),
+            },
+            Message::AssistantToolCalls {
+                calls: vec![ToolCall {
+                    call_id: "call-1".to_string(),
+                    tool_name: "calculator".to_string(),
+                    args: "{\"a\":1,\"b\":2}".to_string(),
+                }],
+                created_at: chrono::Utc::now(),
+            },
+        ];
         let anthropic_messages = provider
             .format_messages(&messages)
             .expect("format messages");
@@ -584,7 +556,7 @@ mod tests {
                 signature,
             } => {
                 assert_eq!(thinking, "I should use a tool.");
-                assert!(signature.is_empty());
+                assert_eq!(signature, "sig-123");
             }
             other => panic!("expected Thinking block, got {other:?}"),
         }
@@ -598,7 +570,7 @@ mod tests {
     }
 
     #[test]
-    fn test_response_parsing_extracts_thinking_block_as_reasoning_content() {
+    fn test_response_parsing_extracts_thinking_block_as_separate_message() {
         let provider = AnthropicCompatibleProvider::new("test-key", "http://localhost");
         let response_body = AnthropicResponse {
             id: "msg-1".to_string(),
@@ -621,11 +593,7 @@ mod tests {
             .parse_response(response_body)
             .expect("parse response");
         match response.message {
-            Message::AssistantResponse {
-                content,
-                reasoning_content,
-                ..
-            } => {
+            Message::AssistantResponse { content, .. } => {
                 assert_eq!(content.len(), 1);
                 assert_eq!(
                     content[0],
@@ -633,12 +601,18 @@ mod tests {
                         text: "Here is my analysis.".to_string()
                     }
                 );
-                assert_eq!(
-                    reasoning_content,
-                    Some("Let me analyze this...".to_string())
-                );
             }
             other => panic!("expected AssistantResponse, got {other:?}"),
+        }
+        let thinking = response.thinking.expect("should have thinking");
+        match thinking {
+            Message::AssistantThinking {
+                content, signature, ..
+            } => {
+                assert_eq!(content, "Let me analyze this...");
+                assert_eq!(signature, None);
+            }
+            other => panic!("expected AssistantThinking, got {other:?}"),
         }
     }
 
@@ -671,25 +645,25 @@ mod tests {
             .parse_response(response_body)
             .expect("parse response");
         match response.message {
-            Message::AssistantToolCalls {
-                calls,
-                reasoning_content,
-                ..
-            } => {
+            Message::AssistantToolCalls { calls, .. } => {
                 assert_eq!(calls.len(), 1);
                 assert_eq!(calls[0].call_id, "tool-1");
                 assert_eq!(calls[0].tool_name, "search");
-                // thinking text goes to reasoning_content; regular text is not used as
-                // reasoning_content because a thinking block was present
-                assert_eq!(reasoning_content, Some("I need to search.".to_string()));
             }
             other => panic!("expected AssistantToolCalls, got {other:?}"),
         }
+        let thinking = response.thinking.expect("should have thinking");
+        match thinking {
+            Message::AssistantThinking { content, .. } => {
+                assert_eq!(content, "I need to search.");
+            }
+            other => panic!("expected AssistantThinking, got {other:?}"),
+        }
     }
 
-    // Regression test: plain text response (no thinking block) must have reasoning_content == None
+    // Regression test: plain text response (no thinking block) must have thinking == None
     #[test]
-    fn test_response_parsing_plain_text_has_no_reasoning_content() {
+    fn test_response_parsing_plain_text_has_no_thinking() {
         let provider = AnthropicCompatibleProvider::new("test-key", "http://localhost");
         let response_body = AnthropicResponse {
             id: "msg-1".to_string(),
@@ -706,11 +680,7 @@ mod tests {
             .parse_response(response_body)
             .expect("parse response");
         match response.message {
-            Message::AssistantResponse {
-                content,
-                reasoning_content,
-                ..
-            } => {
+            Message::AssistantResponse { content, .. } => {
                 assert_eq!(content.len(), 1);
                 assert_eq!(
                     content[0],
@@ -718,10 +688,10 @@ mod tests {
                         text: "Hello, world!".to_string()
                     }
                 );
-                assert_eq!(reasoning_content, None);
             }
             other => panic!("expected AssistantResponse, got {other:?}"),
         }
+        assert!(response.thinking.is_none());
     }
 
     // Tests for AnthropicImageSource with base64 and url types

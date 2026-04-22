@@ -79,6 +79,8 @@ impl OpenAICompatibleProvider {
             }
         }
 
+        let mut pending_reasoning: Option<String> = None;
+
         for message in prompts {
             match message {
                 Message::UserPrompt { content, .. } | Message::UserSteering { content, .. } => {
@@ -114,11 +116,13 @@ impl OpenAICompatibleProvider {
 
                     request_messages.push(ChatCompletionMessageParam::User { content: parts });
                 }
-                Message::AssistantToolCalls {
-                    calls,
-                    reasoning_content,
-                    ..
-                } => {
+                Message::AssistantThinking { content, .. } => {
+                    pending_reasoning = Some(
+                        pending_reasoning
+                            .map_or_else(|| content.clone(), |p| format!("{}\n{}", p, content)),
+                    );
+                }
+                Message::AssistantToolCalls { calls, .. } => {
                     let tool_calls = calls
                         .iter()
                         .map(|call| ChatCompletionMessageToolCall::Function {
@@ -132,15 +136,11 @@ impl OpenAICompatibleProvider {
 
                     request_messages.push(ChatCompletionMessageParam::Assistant {
                         content: None,
-                        reasoning_content: reasoning_content.clone(),
+                        reasoning_content: pending_reasoning.take(),
                         tool_calls: Some(tool_calls),
                     });
                 }
-                Message::AssistantResponse {
-                    content,
-                    reasoning_content,
-                    ..
-                } => {
+                Message::AssistantResponse { content, .. } => {
                     let mut parts = Vec::with_capacity(content.len());
                     for part in content {
                         match part {
@@ -159,7 +159,7 @@ impl OpenAICompatibleProvider {
 
                     request_messages.push(ChatCompletionMessageParam::Assistant {
                         content: Some(parts),
-                        reasoning_content: reasoning_content.clone(),
+                        reasoning_content: pending_reasoning.take(),
                         tool_calls: None,
                     });
                 }
@@ -253,6 +253,18 @@ impl Provider for OpenAICompatibleProvider {
 
         let choice = response_body.choices.remove(0);
 
+        let thinking = choice.message.reasoning_content.clone().and_then(|rc| {
+            if rc.trim().is_empty() {
+                None
+            } else {
+                Some(Message::AssistantThinking {
+                    content: rc,
+                    signature: None,
+                    created_at: Utc::now(),
+                })
+            }
+        });
+
         if let Some(tool_calls) = choice.message.tool_calls {
             let mut parsed_calls = Vec::with_capacity(tool_calls.len());
             for tool_call in tool_calls {
@@ -268,9 +280,9 @@ impl Provider for OpenAICompatibleProvider {
                 return Ok(GenerationResponse {
                     message: Message::AssistantToolCalls {
                         calls: parsed_calls,
-                        reasoning_content: choice.message.reasoning_content,
                         created_at: Utc::now(),
                     },
+                    thinking,
                 });
             }
         }
@@ -282,9 +294,9 @@ impl Provider for OpenAICompatibleProvider {
         Ok(GenerationResponse {
             message: Message::AssistantResponse {
                 content: vec![Content::Text { text: content }],
-                reasoning_content: choice.message.reasoning_content,
                 created_at: Utc::now(),
             },
+            thinking,
         })
     }
 }

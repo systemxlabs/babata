@@ -12,7 +12,7 @@ use crate::{
     error::BabataError,
     memory::Memory,
     message::{Content, Message},
-    provider::{GenerationRequest, Provider, ProviderConfig, create_provider},
+    provider::{GenerationRequest, GenerationResponse, Provider, ProviderConfig, create_provider},
     skill::load_skills,
     system_prompt::build_system_prompts,
     task::SteerQueue,
@@ -83,7 +83,7 @@ impl AgentTask {
                     conversation.push(steer_message);
                 }
             }
-            let message = generate_with_retry(
+            let response = generate_with_retry(
                 provider.as_ref(),
                 self.task_id,
                 &model,
@@ -93,7 +93,20 @@ impl AgentTask {
                 &tool_specs,
             )
             .await?;
-            crate::task_info!(self.task_id, "Provider returned message: {:?}", message);
+            crate::task_info!(
+                self.task_id,
+                "Provider returned message: {:?}, thinking: {:?}",
+                response.message,
+                response.thinking
+            );
+
+            if let Some(thinking) = response.thinking {
+                self.memory
+                    .append_messages(self.task_id, std::slice::from_ref(&thinking))?;
+                conversation.push(thinking);
+            }
+
+            let message = response.message;
             self.memory
                 .append_messages(self.task_id, std::slice::from_ref(&message))?;
             conversation.push(message.clone());
@@ -143,6 +156,11 @@ impl AgentTask {
                     self.memory.append_messages(self.task_id, &results)?;
                     conversation.extend(results);
                 }
+                Message::AssistantThinking { .. } => {
+                    return Err(BabataError::provider(
+                        "Provider returned AssistantThinking as primary message",
+                    ));
+                }
                 Message::UserPrompt { .. }
                 | Message::UserSteering { .. }
                 | Message::ToolResult { .. } => {
@@ -186,7 +204,7 @@ async fn generate_with_retry(
     prompts: &[Message],
     context: &str,
     tool_specs: &[ToolSpec],
-) -> BabataResult<Message> {
+) -> BabataResult<GenerationResponse> {
     let backoff = ExponentialBuilder::default()
         .with_min_delay(Duration::from_millis(PROVIDER_RETRY_MIN_DELAY_MS))
         .with_max_delay(Duration::from_secs(PROVIDER_RETRY_MAX_DELAY_SECS))
@@ -203,7 +221,7 @@ async fn generate_with_retry(
                 tools: tool_specs,
             })
             .await?;
-        Ok(response.message)
+        Ok(response)
     })
     .retry(backoff)
     .when(|err| matches!(err, BabataError::Provider(_, _)))
