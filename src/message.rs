@@ -14,12 +14,15 @@ pub enum Message {
     },
     AssistantResponse {
         content: Vec<Content>,
-        reasoning_content: Option<String>,
         created_at: DateTime<Utc>,
     },
     AssistantToolCalls {
         calls: Vec<ToolCall>,
-        reasoning_content: Option<String>,
+        created_at: DateTime<Utc>,
+    },
+    AssistantThinking {
+        content: String,
+        signature: Option<String>,
         created_at: DateTime<Utc>,
     },
     ToolResult {
@@ -36,6 +39,7 @@ impl Message {
             Message::UserSteering { created_at, .. } => created_at,
             Message::AssistantResponse { created_at, .. } => created_at,
             Message::AssistantToolCalls { created_at, .. } => created_at,
+            Message::AssistantThinking { created_at, .. } => created_at,
             Message::ToolResult { created_at, .. } => created_at,
         }
     }

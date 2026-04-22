@@ -88,13 +88,18 @@ This file stores important information that should persist across sessions.
     }
 
     fn render_context(messages: &[Message]) -> String {
-        if messages.is_empty() {
+        let filtered: Vec<&Message> = messages
+            .iter()
+            .filter(|m| !matches!(m, Message::AssistantThinking { .. }))
+            .collect();
+
+        if filtered.is_empty() {
             return String::new();
         }
 
-        let mut sections = Vec::with_capacity(messages.len() + 1);
+        let mut sections = Vec::with_capacity(filtered.len() + 1);
         sections.push("## Conversation History".to_string());
-        for message in messages {
+        for message in filtered {
             sections.push(Self::render_message(message));
         }
         sections.join("\n\n")
@@ -108,38 +113,21 @@ This file stores important information that should persist across sessions.
             Message::UserSteering { content, .. } => {
                 format!("[steer]\n{}", Self::render_content(content))
             }
-            Message::AssistantResponse {
-                content,
-                reasoning_content,
-                ..
-            } => {
-                let mut lines = Vec::new();
-                lines.push("[assistant]".to_string());
-                if let Some(reasoning_content) = reasoning_content
-                    && !reasoning_content.trim().is_empty()
-                {
-                    lines.push(format!("Reasoning:\n{}", reasoning_content.trim()));
-                }
-                lines.push(Self::render_content(content));
-                lines.join("\n")
+            Message::AssistantResponse { content, .. } => {
+                ["[assistant]".to_string(), Self::render_content(content)].join("\n")
             }
-            Message::AssistantToolCalls {
-                calls,
-                reasoning_content,
-                ..
-            } => {
+            Message::AssistantToolCalls { calls, .. } => {
                 let mut lines = Vec::new();
                 lines.push("[assistant_tool_calls]".to_string());
-                if let Some(reasoning_content) = reasoning_content
-                    && !reasoning_content.trim().is_empty()
-                {
-                    lines.push(format!("Reasoning:\n{}", reasoning_content.trim()));
-                }
                 for call in calls {
                     lines.push(format!("Tool: {}", call.tool_name));
                     lines.push(format!("Args: {}", call.args));
                 }
                 lines.join("\n")
+            }
+            Message::AssistantThinking { .. } => {
+                // AssistantThinking is filtered out of context, but handle it here for completeness.
+                String::new()
             }
             Message::ToolResult { call, result, .. } => {
                 format!(
@@ -264,7 +252,6 @@ mod tests {
                         content: vec![Content::Text {
                             text: "world".to_string(),
                         }],
-                        reasoning_content: None,
                         created_at: now,
                     },
                 ],
@@ -279,5 +266,50 @@ mod tests {
         assert!(context.contains("## Conversation History"));
         assert!(context.contains("[user]\nhello"));
         assert!(context.contains("[assistant]\nworld"));
+    }
+
+    #[test]
+    fn render_context_filters_out_assistant_thinking() {
+        let messages = vec![
+            Message::UserPrompt {
+                content: vec![Content::Text {
+                    text: "hello".to_string(),
+                }],
+                created_at: Utc::now(),
+            },
+            Message::AssistantThinking {
+                content: "thinking...".to_string(),
+                signature: None,
+                created_at: Utc::now(),
+            },
+            Message::AssistantResponse {
+                content: vec![Content::Text {
+                    text: "world".to_string(),
+                }],
+                created_at: Utc::now(),
+            },
+        ];
+
+        let context = Memory::render_context(&messages);
+        assert!(context.contains("[user]\nhello"));
+        assert!(context.contains("[assistant]\nworld"));
+        assert!(!context.contains("thinking"));
+    }
+
+    #[test]
+    fn assistant_thinking_serde_roundtrip() {
+        let message = Message::AssistantThinking {
+            content: "I need to calculate...".to_string(),
+            signature: Some("sig-xyz".to_string()),
+            created_at: Utc::now(),
+        };
+
+        let json = serde_json::to_string(&message).expect("serialize");
+        assert!(json.contains("\"type\":\"assistant_thinking\""));
+        assert!(json.contains("\"content\":\"I need to calculate...\""));
+        assert!(json.contains("\"signature\":\"sig-xyz\""));
+
+        let deserialized: Message = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(message, deserialized);
     }
 }
