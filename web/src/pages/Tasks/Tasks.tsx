@@ -298,8 +298,8 @@ export function Tasks() {
           </Card>
 
           <div className="space-y-6">
-            <Card className="rounded-[2rem] border-border/70 bg-card/70 shadow-[0_20px_65px_-36px_rgba(15,23,42,0.25)] backdrop-blur-xl">
-              <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <Card className="h-[840px] flex flex-col rounded-[2rem] border-border/70 bg-card/70 shadow-[0_20px_65px_-36px_rgba(15,23,42,0.25)] backdrop-blur-xl overflow-hidden">
+              <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between shrink-0">
                 <div>
                   <div className="text-[0.7rem] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
                     Tree View
@@ -316,9 +316,9 @@ export function Tasks() {
                   </Badge>
                 ) : null}
               </CardHeader>
-              <CardContent className="pt-0">
+              <CardContent className="pt-0 flex-1 overflow-hidden">
                 {selectedTree ? (
-                  <div className="space-y-4">
+                  <div className="h-full flex flex-col">
                     {treeError ? (
                       <ErrorAlert
                         message={treeError}
@@ -326,7 +326,7 @@ export function Tasks() {
                         className="rounded-[1.3rem] border-destructive/20"
                       />
                     ) : null}
-                    <div className="overflow-x-auto overflow-y-auto max-h-[720px] pb-2">
+                    <div className="overflow-x-auto overflow-y-auto flex-1 pb-2">
                       <div className="min-w-max px-4 pb-2 pt-3">
                         <TaskTreeItem
                           task={selectedTree}
