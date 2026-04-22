@@ -86,16 +86,17 @@ impl AnthropicCompatibleProvider {
                 Message::AssistantThinking {
                     content, signature, ..
                 } => {
-                    // The generic Message model does not store provider-specific signatures.
-                    // Therefore we send an empty signature when none is present. This is a design
-                    // boundary: round-tripping a thinking block through the generic Message model
-                    // may lose the original signature, and the provider may reject it on subsequent
-                    // turns. A provider-specific storage layer would be needed to preserve
-                    // signatures across turns.
-                    let sig = signature.clone().unwrap_or_default();
+                    let sig = signature.as_deref().unwrap_or("").trim();
+                    if sig.is_empty() {
+                        warn!(
+                            "Skipping AssistantThinking message with empty or missing signature: {}",
+                            content
+                        );
+                        continue;
+                    }
                     let blocks = vec![AnthropicContentBlock::Thinking {
                         thinking: content.clone(),
-                        signature: sig,
+                        signature: sig.to_string(),
                     }];
                     (AnthropicRole::Assistant, blocks)
                 }
@@ -175,18 +176,32 @@ impl AnthropicCompatibleProvider {
                         args,
                     });
                 }
-                AnthropicContentBlock::Thinking { thinking, .. } => {
-                    thinking_parts.push(thinking);
+                AnthropicContentBlock::Thinking {
+                    thinking,
+                    signature,
+                } => {
+                    let sig = signature.trim();
+                    if sig.is_empty() {
+                        return Err(BabataError::provider(
+                            "Anthropic thinking block has empty or missing signature",
+                        ));
+                    }
+                    thinking_parts.push((thinking, sig.to_string()));
                 }
                 _ => {}
             }
         }
 
         let thinking = if !thinking_parts.is_empty() {
-            let content = thinking_parts.join("\n");
+            let content = thinking_parts
+                .iter()
+                .map(|(thinking, _)| thinking.as_str())
+                .collect::<Vec<_>>()
+                .join("\n");
+            let signature = thinking_parts.first().map(|(_, sig)| sig.clone());
             Some(Message::AssistantThinking {
                 content,
-                signature: None,
+                signature,
                 created_at: Utc::now(),
             })
         } else {
@@ -503,7 +518,7 @@ mod tests {
         let provider = AnthropicCompatibleProvider::new("test-key", "http://localhost");
         let messages = vec![Message::AssistantThinking {
             content: "I need to calculate...".to_string(),
-            signature: None,
+            signature: Some("sig-abc".to_string()),
             created_at: chrono::Utc::now(),
         }];
         let anthropic_messages = provider
@@ -519,9 +534,47 @@ mod tests {
                 signature,
             } => {
                 assert_eq!(thinking, "I need to calculate...");
-                assert!(signature.is_empty());
+                assert_eq!(signature, "sig-abc");
             }
             other => panic!("expected Thinking block, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_format_messages_skips_empty_signature_thinking() {
+        let provider = AnthropicCompatibleProvider::new("test-key", "http://localhost");
+        let messages = vec![
+            Message::AssistantThinking {
+                content: "No signature here.".to_string(),
+                signature: None,
+                created_at: chrono::Utc::now(),
+            },
+            Message::AssistantThinking {
+                content: "Empty signature.".to_string(),
+                signature: Some("".to_string()),
+                created_at: chrono::Utc::now(),
+            },
+            Message::AssistantThinking {
+                content: "Whitespace signature.".to_string(),
+                signature: Some("   ".to_string()),
+                created_at: chrono::Utc::now(),
+            },
+            Message::AssistantResponse {
+                content: vec![Content::Text {
+                    text: "Final answer.".to_string(),
+                }],
+                created_at: chrono::Utc::now(),
+            },
+        ];
+        let anthropic_messages = provider
+            .format_messages(&messages)
+            .expect("format messages");
+        assert_eq!(anthropic_messages.len(), 1);
+        assert_eq!(anthropic_messages[0].role, AnthropicRole::Assistant);
+        assert_eq!(anthropic_messages[0].content.len(), 1);
+        match &anthropic_messages[0].content[0] {
+            AnthropicContentBlock::Text { text } => assert_eq!(text, "Final answer."),
+            other => panic!("expected Text block, got {other:?}"),
         }
     }
 
@@ -610,9 +663,43 @@ mod tests {
                 content, signature, ..
             } => {
                 assert_eq!(content, "Let me analyze this...");
-                assert_eq!(signature, None);
+                assert_eq!(signature, Some("sig-xyz".to_string()));
             }
             other => panic!("expected AssistantThinking, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_response_parsing_rejects_empty_signature_thinking() {
+        let provider = AnthropicCompatibleProvider::new("test-key", "http://localhost");
+        let response_body = AnthropicResponse {
+            id: "msg-1".to_string(),
+            response_type: "message".to_string(),
+            role: "assistant".to_string(),
+            content: vec![
+                AnthropicContentBlock::Thinking {
+                    thinking: "Let me analyze this...".to_string(),
+                    signature: "".to_string(),
+                },
+                AnthropicContentBlock::Text {
+                    text: "Here is my analysis.".to_string(),
+                },
+            ],
+            model: "claude-3-7-sonnet".to_string(),
+            stop_reason: Some("end_turn".to_string()),
+        };
+
+        let result = provider.parse_response(response_body);
+        match result {
+            Ok(_) => panic!("expected error for empty signature thinking block"),
+            Err(e) => {
+                let err_msg = format!("{}", e);
+                assert!(
+                    err_msg.contains("empty or missing signature"),
+                    "Expected error about empty signature, got: {}",
+                    err_msg
+                );
+            }
         }
     }
 
@@ -654,8 +741,11 @@ mod tests {
         }
         let thinking = response.thinking.expect("should have thinking");
         match thinking {
-            Message::AssistantThinking { content, .. } => {
+            Message::AssistantThinking {
+                content, signature, ..
+            } => {
                 assert_eq!(content, "I need to search.");
+                assert_eq!(signature, Some("sig-abc".to_string()));
             }
             other => panic!("expected AssistantThinking, got {other:?}"),
         }
