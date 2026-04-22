@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState, type UIEvent } from "react"
-import { LoaderCircle, MessageSquare, RefreshCw, Wrench } from "lucide-react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type UIEvent } from "react"
+import { ChevronDown, ChevronUp, LoaderCircle, MessageSquare, RefreshCw, Wrench } from "lucide-react"
 
 import { getTaskMessages } from "@/api"
 import { Badge } from "@/components/ui/badge"
@@ -41,16 +41,71 @@ function formatTime(timestamp: string) {
   })
 }
 
+function TruncatedPre({ children, className = "" }: { children: ReactNode; className?: string }) {
+  const contentRef = useRef<HTMLPreElement>(null)
+  const [isExpanded, setIsExpanded] = useState(false)
+  const [shouldShowButton, setShouldShowButton] = useState(false)
+
+  useEffect(() => {
+    if (contentRef.current) {
+      const hasOverflow = contentRef.current.scrollHeight > 240
+      setShouldShowButton(hasOverflow)
+    }
+  }, [children])
+
+  return (
+    <div className="relative">
+      <pre
+        ref={contentRef}
+        className={`overflow-x-auto whitespace-pre-wrap break-words rounded-[1rem] bg-card/80 px-4 py-3 font-mono text-[13px] leading-6 text-foreground transition-all ${
+          !isExpanded ? "max-h-[240px] overflow-hidden" : ""
+        } ${className}`}
+      >
+        {children}
+      </pre>
+
+      {shouldShowButton && !isExpanded && (
+        <div className="absolute bottom-0 left-0 right-0 flex items-end justify-center">
+          <div className="h-12 w-full bg-gradient-to-t from-background/90 via-background/60 to-transparent rounded-b-[1rem]" />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="absolute bottom-2 h-7 px-3 text-xs bg-background/80 backdrop-blur-sm border border-border/50 rounded-full hover:bg-background"
+            onClick={() => setIsExpanded(true)}
+          >
+            <ChevronDown className="mr-1 size-3" />
+            展开
+          </Button>
+        </div>
+      )}
+
+      {isExpanded && shouldShowButton && (
+        <div className="flex justify-center pt-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-3 text-xs rounded-full hover:bg-background/50"
+            onClick={() => setIsExpanded(false)}
+          >
+            <ChevronUp className="mr-1 size-3" />
+            收起
+          </Button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function renderContentPart(part: MessageContentPart, index: number) {
   switch (part.type) {
     case "text":
       return (
-        <pre
+        <TruncatedPre
           key={`text-${index}`}
           className="overflow-x-auto whitespace-pre-wrap break-words rounded-[1rem] bg-card/80 px-4 py-3 font-mono text-[13px] leading-6 text-foreground"
         >
           <code>{part.text}</code>
-        </pre>
+        </TruncatedPre>
       )
     case "image_url":
       return (
@@ -83,9 +138,9 @@ function renderToolCall(call: ToolCall, index: number) {
         </Badge>
         <span className="text-xs text-muted-foreground">{call.call_id}</span>
       </div>
-      <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-[13px] leading-6 text-foreground">
+      <TruncatedPre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-[13px] leading-6 text-foreground">
         <code>{call.args}</code>
-      </pre>
+      </TruncatedPre>
     </div>
   )
 }
@@ -108,9 +163,9 @@ function renderToolResult(message: MessageRecord) {
             <span className="text-xs text-muted-foreground">{call.call_id}</span>
           </div>
         ) : null}
-        <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-[13px] leading-6 text-foreground">
+        <TruncatedPre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-[13px] leading-6 text-foreground">
           <code>{message.result}</code>
-        </pre>
+        </TruncatedPre>
       </div>
     </div>
   )
@@ -148,9 +203,9 @@ function MessageCard({ message, index }: { message: MessageRecord; index: number
           <div className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
             Reasoning
           </div>
-          <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-[1rem] bg-card/80 px-4 py-3 font-mono text-[13px] leading-6 text-foreground">
+          <TruncatedPre className="overflow-x-auto whitespace-pre-wrap break-words rounded-[1rem] bg-card/80 px-4 py-3 font-mono text-[13px] leading-6 text-foreground">
             <code>{message.reasoning_content}</code>
-          </pre>
+          </TruncatedPre>
         </div>
       ) : null}
 
