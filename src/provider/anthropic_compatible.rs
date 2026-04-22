@@ -45,17 +45,12 @@ impl AnthropicCompatibleProvider {
     fn format_content_block(&self, content: &Content) -> BabataResult<AnthropicContentBlock> {
         match content {
             Content::Text { text } => Ok(AnthropicContentBlock::Text { text: text.clone() }),
-            Content::ImageUrl { .. } => {
-                warn!(
-                    "Anthropic-compatible API does not support image URL source, only base64 - skipping image content"
-                );
-                Err(BabataError::provider(
-                    "Anthropic-compatible API does not support image URL source, only base64",
-                ))
-            }
+            Content::ImageUrl { url } => Ok(AnthropicContentBlock::Image {
+                source: AnthropicImageSource::Url { url: url.clone() },
+            }),
             Content::ImageData { data, media_type } => Ok(AnthropicContentBlock::Image {
                 source: AnthropicImageSource::Base64 {
-                    media_type: media_type.as_mime_str(),
+                    media_type: *media_type,
                     data: data.clone(),
                 },
             }),
@@ -356,8 +351,13 @@ enum AnthropicContentBlock {
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum AnthropicImageSource {
-    Base64 { media_type: String, data: String },
-    Url { url: String },
+    Base64 {
+        media_type: crate::message::MediaType,
+        data: String,
+    },
+    Url {
+        url: String,
+    },
 }
 
 #[derive(Debug, Serialize)]
@@ -451,8 +451,10 @@ mod tests {
     // Tests for AnthropicImageSource with base64 and url types
     #[test]
     fn test_base64_image_source_serde() {
+        use crate::message::MediaType;
+
         let source = AnthropicImageSource::Base64 {
-            media_type: "image/jpeg".to_string(),
+            media_type: MediaType::ImageJpeg,
             data: "base64encodeddata".to_string(),
         };
         let json_value = serde_json::to_value(&source).expect("serialize base64 source");
@@ -470,7 +472,7 @@ mod tests {
             serde_json::from_value(json_value).expect("deserialize base64 source");
         match deserialized {
             AnthropicImageSource::Base64 { media_type, data } => {
-                assert_eq!(media_type, "image/jpeg");
+                assert_eq!(media_type, MediaType::ImageJpeg);
                 assert_eq!(data, "base64encodeddata");
             }
             _ => panic!("expected Base64 variant"),
@@ -544,9 +546,11 @@ mod tests {
 
     #[test]
     fn test_image_content_block_with_base64_source() {
+        use crate::message::MediaType;
+
         let block = AnthropicContentBlock::Image {
             source: AnthropicImageSource::Base64 {
-                media_type: "image/png".to_string(),
+                media_type: MediaType::ImagePng,
                 data: "pngdata".to_string(),
             },
         };
@@ -642,6 +646,103 @@ mod tests {
             ]
         });
 
+        assert_eq!(json_value, expected);
+    }
+
+    // Regression test: ensure Content::ImageUrl is correctly mapped to AnthropicImageSource::Url
+    #[test]
+    fn test_format_content_block_maps_image_url_to_anthropic_url_source() {
+        let provider = AnthropicCompatibleProvider::new("test-key", "http://localhost");
+        let content = Content::ImageUrl {
+            url: "https://example.com/image.jpg".to_string(),
+        };
+        let block = provider
+            .format_content_block(&content)
+            .expect("should map image URL");
+        match block {
+            AnthropicContentBlock::Image {
+                source: AnthropicImageSource::Url { url },
+            } => {
+                assert_eq!(url, "https://example.com/image.jpg");
+            }
+            other => panic!("expected Image block with Url source, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_format_content_block_maps_image_data_to_anthropic_base64_source() {
+        use crate::message::MediaType;
+
+        let provider = AnthropicCompatibleProvider::new("test-key", "http://localhost");
+        let content = Content::ImageData {
+            data: "base64data".to_string(),
+            media_type: MediaType::ImageWebp,
+        };
+        let block = provider
+            .format_content_block(&content)
+            .expect("should map image data");
+        match block {
+            AnthropicContentBlock::Image {
+                source: AnthropicImageSource::Base64 { media_type, data },
+            } => {
+                assert_eq!(media_type, MediaType::ImageWebp);
+                assert_eq!(data, "base64data");
+            }
+            other => panic!("expected Image block with Base64 source, got {other:?}"),
+        }
+    }
+
+    // Regression test: ensure a full UserPrompt with ImageUrl serializes correctly
+    #[test]
+    fn test_format_messages_with_image_url_content() {
+        use crate::message::MediaType;
+
+        let provider = AnthropicCompatibleProvider::new("test-key", "http://localhost");
+        let messages = vec![Message::UserPrompt {
+            content: vec![
+                Content::Text {
+                    text: "What's in this image?".to_string(),
+                },
+                Content::ImageUrl {
+                    url: "https://cdn.example.com/photo.png".to_string(),
+                },
+                Content::ImageData {
+                    data: "abc123".to_string(),
+                    media_type: MediaType::ImagePng,
+                },
+            ],
+            created_at: chrono::Utc::now(),
+        }];
+        let anthropic_messages = provider
+            .format_messages(&messages)
+            .expect("format messages");
+        assert_eq!(anthropic_messages.len(), 1);
+        assert_eq!(anthropic_messages[0].role, AnthropicRole::User);
+        assert_eq!(anthropic_messages[0].content.len(), 3);
+
+        // Verify serialization produces correct JSON
+        let json_value = serde_json::to_value(&anthropic_messages[0]).expect("serialize message");
+        let expected = json!({
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "What's in this image?"},
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "url",
+                        "url": "https://cdn.example.com/photo.png"
+                    }
+                },
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "image/png",
+                        "data": "abc123"
+                    }
+                }
+            ]
+        });
         assert_eq!(json_value, expected);
     }
 }
