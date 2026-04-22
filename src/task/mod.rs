@@ -59,6 +59,69 @@ pub struct CreateTaskRequest {
     pub never_ends: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum TaskStatus {
+    #[default]
+    Running,
+    Completed,
+    Failed,
+    Canceled,
+    Paused,
+}
+
+impl TaskStatus {
+    pub fn is_terminal_status(self) -> bool {
+        matches!(
+            self,
+            TaskStatus::Completed | TaskStatus::Failed | TaskStatus::Canceled
+        )
+    }
+}
+
+impl std::fmt::Display for TaskStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let value = match self {
+            TaskStatus::Running => "running",
+            TaskStatus::Completed => "completed",
+            TaskStatus::Failed => "failed",
+            TaskStatus::Canceled => "canceled",
+            TaskStatus::Paused => "paused",
+        };
+        f.write_str(value)
+    }
+}
+
+impl std::str::FromStr for TaskStatus {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "running" => Ok(TaskStatus::Running),
+            "completed" => Ok(TaskStatus::Completed),
+            "failed" => Ok(TaskStatus::Failed),
+            "canceled" => Ok(TaskStatus::Canceled),
+            "paused" => Ok(TaskStatus::Paused),
+            _ => Err(format!("Unknown task status '{}'", s)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum CollaborationTaskState {
+    NonExisting,
+    Running,
+    Failed { reason: String },
+    Succeed { result: Vec<Content> },
+}
+
+#[derive(Debug)]
+pub enum TaskExitEvent {
+    Completed { task_id: Uuid },
+    Failed { task_id: Uuid, error: BabataError },
+}
+
 #[cfg(test)]
 mod tests {
     use super::{CreateTaskRequest, TaskStatus};
@@ -122,67 +185,4 @@ mod tests {
         assert!(TaskStatus::Failed.is_terminal_status());
         assert!(TaskStatus::Canceled.is_terminal_status());
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "lowercase")]
-pub enum TaskStatus {
-    #[default]
-    Running,
-    Completed,
-    Failed,
-    Canceled,
-    Paused,
-}
-
-impl TaskStatus {
-    pub fn is_terminal_status(self) -> bool {
-        matches!(
-            self,
-            TaskStatus::Completed | TaskStatus::Failed | TaskStatus::Canceled
-        )
-    }
-}
-
-impl std::fmt::Display for TaskStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let value = match self {
-            TaskStatus::Running => "running",
-            TaskStatus::Completed => "completed",
-            TaskStatus::Failed => "failed",
-            TaskStatus::Canceled => "canceled",
-            TaskStatus::Paused => "paused",
-        };
-        f.write_str(value)
-    }
-}
-
-impl std::str::FromStr for TaskStatus {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "running" => Ok(TaskStatus::Running),
-            "completed" => Ok(TaskStatus::Completed),
-            "failed" => Ok(TaskStatus::Failed),
-            "canceled" => Ok(TaskStatus::Canceled),
-            "paused" => Ok(TaskStatus::Paused),
-            _ => Err(format!("Unknown task status '{}'", s)),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "state", rename_all = "snake_case")]
-pub enum CollaborationTaskState {
-    NonExisting,
-    Running,
-    Failed { reason: String },
-    Succeed { result: Vec<Content> },
-}
-
-#[derive(Debug)]
-pub enum TaskExitEvent {
-    Completed { task_id: Uuid },
-    Failed { task_id: Uuid, error: BabataError },
 }
