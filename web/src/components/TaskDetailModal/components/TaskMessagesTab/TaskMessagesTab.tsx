@@ -23,13 +23,25 @@ const MESSAGE_TYPE_LABELS: Record<MessageType, string> = {
   tool_result: "工具结果",
 }
 
+const DEFAULT_MESSAGE_STYLE = "border-slate-500/20 bg-slate-500/10 text-slate-700 dark:text-slate-300"
+
 const MESSAGE_TYPE_STYLES: Record<MessageType, string> = {
   user_prompt: "border-sky-500/20 bg-sky-500/10 text-sky-700 dark:text-sky-300",
   user_steering: "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300",
   assistant_response: "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
   assistant_tool_calls: "border-violet-500/20 bg-violet-500/10 text-violet-700 dark:text-violet-300",
   assistant_thinking: "border-orange-500/20 bg-orange-500/10 text-orange-700 dark:text-orange-300",
-  tool_result: "border-slate-500/20 bg-slate-500/10 text-slate-700 dark:text-slate-300",
+  tool_result: DEFAULT_MESSAGE_STYLE,
+}
+
+function getMessageTypeLabel(type: MessageType): string {
+  // Fallback for runtime type mismatch or future message types
+  return MESSAGE_TYPE_LABELS[type] ?? type
+}
+
+function getMessageTypeStyle(type: MessageType): string {
+  // Fallback for runtime type mismatch or future message types
+  return MESSAGE_TYPE_STYLES[type] ?? DEFAULT_MESSAGE_STYLE
 }
 
 function formatTime(timestamp: string) {
@@ -181,9 +193,9 @@ function MessageCard({ message, index }: { message: MessageRecord; index: number
           <div className="text-xs font-medium text-muted-foreground">#{index + 1}</div>
           <Badge
             variant="outline"
-            className={`rounded-full ${MESSAGE_TYPE_STYLES[message.message_type]}`}
+            className={`rounded-full ${getMessageTypeStyle(message.message_type)}`}
           >
-            {MESSAGE_TYPE_LABELS[message.message_type]}
+            {getMessageTypeLabel(message.message_type)}
           </Badge>
         </div>
         <div className="text-xs text-muted-foreground">{formatTime(message.created_at)}</div>
