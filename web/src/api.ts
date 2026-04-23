@@ -25,6 +25,8 @@ import type {
   TestProviderConnectionResponse,
   TasksResponse,
   UpdateAgentRequest,
+  LogLevel,
+  MessageType,
 } from './types';
 
 const API_BASE_URL = '/api';
