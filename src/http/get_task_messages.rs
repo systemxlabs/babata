@@ -3,6 +3,7 @@ use axum::{
     extract::{Path, Query, State},
 };
 use serde::Deserialize;
+use std::str::FromStr;
 
 use crate::{BabataResult, error::BabataError, memory::MessageRecord};
 
@@ -15,7 +16,23 @@ pub(crate) struct MessageQueryParams {
     limit: usize,
     #[serde(default)]
     offset: usize,
+    #[serde(deserialize_with = "deserialize_message_type")]
     message_type: Option<crate::memory::MessageType>,
+}
+
+fn deserialize_message_type<'de, D>(
+    deserializer: D,
+) -> Result<Option<crate::memory::MessageType>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = Option::<String>::deserialize(deserializer)?;
+    match s {
+        Some(val) => crate::memory::MessageType::from_str(&val)
+            .map(Some)
+            .map_err(serde::de::Error::custom),
+        None => Ok(None),
+    }
 }
 
 pub(super) async fn handle(
@@ -43,4 +60,29 @@ pub(super) async fn handle(
             .task_manager
             .get_task_messages(task_id, params.offset, params.limit, message_type)?;
     Ok(Json(messages))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_message_query_params_deserialization() {
+        let json_valid = r#"{"limit": 10, "message_type": "user_prompt"}"#;
+        let res1: Result<MessageQueryParams, _> = serde_json::from_str(json_valid);
+        assert!(res1.is_ok());
+        assert_eq!(
+            res1.unwrap().message_type,
+            Some(crate::memory::MessageType::UserPrompt)
+        );
+
+        let json_invalid = r#"{"limit": 10, "message_type": "unknown"}"#;
+        let res2: Result<MessageQueryParams, _> = serde_json::from_str(json_invalid);
+        assert!(res2.is_err());
+
+        let json_none = r#"{"limit": 10}"#;
+        let res3: Result<MessageQueryParams, _> = serde_json::from_str(json_none);
+        assert!(res3.is_ok());
+        assert_eq!(res3.unwrap().message_type, None);
+    }
 }
