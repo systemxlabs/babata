@@ -25,8 +25,6 @@ import type {
   TestProviderConnectionResponse,
   TasksResponse,
   UpdateAgentRequest,
-  LogLevel,
-  MessageType,
 } from './types';
 
 const API_BASE_URL = '/api';
@@ -133,12 +131,12 @@ export function getTaskLogs(
   taskId: string,
   limit?: number,
   offset?: number,
-  level?: LogLevel
+  level?: string
 ): Promise<string[]> {
   const params = new URLSearchParams();
   if (limit !== undefined) params.append('limit', limit.toString());
   if (offset !== undefined) params.append('offset', offset.toString());
-  if (level) params.append('level', level);
+  if (level && level !== 'all') params.append('level', level);
 
   const queryString = params.toString();
   return fetchApi<string[]>(`/tasks/${taskId}/logs${queryString ? `?${queryString}` : ''}`);
@@ -161,12 +159,12 @@ export async function getTaskMessages(
   taskId: string,
   limit: number,
   offset?: number,
-  messageType?: MessageType
+  messageType?: string
 ): Promise<MessageRecord[]> {
   const params = new URLSearchParams();
   params.append('limit', limit.toString());
   if (offset !== undefined) params.append('offset', offset.toString());
-  if (messageType) params.append('message_type', messageType);
+  if (messageType && messageType !== 'all') params.append('message_type', messageType);
 
   const queryString = params.toString();
   const response = await fetchApi<MessageRecordApiResponse[]>(

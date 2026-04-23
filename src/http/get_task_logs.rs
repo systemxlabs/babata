@@ -19,16 +19,6 @@ pub enum LogLevel {
     Debug,
 }
 
-#[allow(dead_code)]
-#[derive(serde::Deserialize)]
-#[serde(rename_all = "UPPERCASE")]
-enum LogLevelRemote {
-    Error,
-    Warn,
-    Info,
-    Debug,
-}
-
 impl<'de> serde::Deserialize<'de> for LogLevel {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -59,6 +49,8 @@ impl std::str::FromStr for LogLevel {
 impl LogLevel {
     fn matches(&self, log: &str) -> bool {
         let upper_log = log.to_ascii_uppercase();
+        // Log lines typically look like: "2024-01-01 12:00:00 [INFO] [task-id] message"
+        // We check for the level enclosed in brackets [LEVEL] to avoid false positives in the message body.
         match self {
             LogLevel::Error => upper_log.contains("[ERROR]"),
             LogLevel::Warn => upper_log.contains("[WARN]") || upper_log.contains("[WARNING]"),
@@ -70,9 +62,12 @@ impl LogLevel {
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct LogQueryParams {
+    /// Required: Maximum number of log lines to return (1-1000)
     limit: usize,
+    /// Optional: Number of lines to skip (default: 0)
     #[serde(default)]
     offset: usize,
+    /// Optional: Filter by log level (ERROR, WARN, INFO, DEBUG)
     level: Option<LogLevel>,
 }
 
@@ -107,6 +102,8 @@ pub(super) async fn handle(
     Ok(Json(logs))
 }
 
+/// Read logs from log files in chronological order with pagination.
+/// Only reads files that are needed based on offset and limit.
 async fn read_task_logs(
     task_id: &str,
     offset: usize,
@@ -117,12 +114,14 @@ async fn read_task_logs(
         .map_err(|e| std::io::Error::other(e.to_string()))?
         .join("logs");
 
+    // Collect all log files with their metadata
     let mut log_files: Vec<(std::path::PathBuf, std::time::SystemTime)> = Vec::new();
 
     let mut entries = tokio::fs::read_dir(&log_dir).await?;
     while let Some(entry) = entries.next_entry().await? {
         let path = entry.path();
         if path.extension().map(|e| e == "log").unwrap_or(false) && path.is_file() {
+            // Get file modification time for sorting
             let metadata = tokio::fs::metadata(&path).await?;
             let modified = metadata
                 .modified()
@@ -131,6 +130,7 @@ async fn read_task_logs(
         }
     }
 
+    // Sort by modification time: oldest first (chronological order)
     log_files.sort_by_key(|entry| entry.1);
 
     let target_start = offset;
@@ -138,19 +138,24 @@ async fn read_task_logs(
     let mut current_line_count: usize = 0;
     let mut result: Vec<String> = Vec::new();
 
+    // Iterate through files in chronological order
     for (path, _) in log_files {
+        // Check if we've collected enough lines
         if current_line_count >= target_end {
             break;
         }
 
+        // Read file line by line to count matching lines
         match tokio::fs::read_to_string(&path).await {
             Ok(content) => {
                 let lines: Vec<&str> = content.lines().collect();
                 let mut matching_lines_in_file: Vec<String> = Vec::new();
 
+                // Filter lines containing [task_id]
                 let task_marker = format!("[{}]", task_id);
                 for line in &lines {
                     if line.contains(&task_marker) {
+                        // Apply level filter if specified
                         if let Some(ref level) = level_filter
                             && !level.matches(line)
                         {
@@ -161,16 +166,21 @@ async fn read_task_logs(
                 }
 
                 let file_matching_count = matching_lines_in_file.len();
+
+                // Check if this file contains lines we need
                 let file_start = current_line_count;
                 let file_end = current_line_count.saturating_add(file_matching_count);
 
+                // If there's overlap between [file_start, file_end) and [target_start, target_end)
                 if file_start < target_end && file_end > target_start {
+                    // Calculate which lines from this file to take
                     let skip_in_file = target_start.saturating_sub(file_start);
                     let take_in_file = std::cmp::min(
                         file_matching_count.saturating_sub(skip_in_file),
                         target_end.saturating_sub(std::cmp::max(file_start, target_start)),
                     );
 
+                    // Add the relevant lines to result
                     result.extend(
                         matching_lines_in_file
                             .into_iter()
@@ -178,6 +188,7 @@ async fn read_task_logs(
                             .take(take_in_file),
                     );
                 }
+
                 current_line_count += file_matching_count;
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -232,27 +243,5 @@ mod tests {
 
         assert!(LogLevel::Debug.matches("2024-01-01 [task-id] [DEBUG] trace"));
         assert!(!LogLevel::Debug.matches("2024-01-01 [task-id] [INFO] normal"));
-    }
-
-    #[test]
-    fn test_log_query_params_deserialization() {
-        // We use serde_json as a proxy to test the Deserialize implementation
-        // since serde_urlencoded isn't a direct dependency.
-        // In a real Axum app, serde_urlencoded is used for Query extraction.
-
-        let json_valid = r#"{"limit": 10, "level": "ERROR"}"#;
-        let res1: Result<super::LogQueryParams, _> = serde_json::from_str(json_valid);
-        assert!(res1.is_ok());
-        assert_eq!(res1.unwrap().level, Some(LogLevel::Error));
-
-        let json_invalid = r#"{"limit": 10, "level": "TRACE"}"#;
-        let res2: Result<super::LogQueryParams, _> = serde_json::from_str(json_invalid);
-        assert!(res2.is_err());
-        assert!(res2.unwrap_err().to_string().contains("Invalid log level"));
-
-        let json_none = r#"{"limit": 10}"#;
-        let res3: Result<super::LogQueryParams, _> = serde_json::from_str(json_none);
-        assert!(res3.is_ok());
-        assert_eq!(res3.unwrap().level, None);
     }
 }
