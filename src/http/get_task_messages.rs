@@ -16,7 +16,7 @@ pub(crate) struct MessageQueryParams {
     limit: usize,
     #[serde(default)]
     offset: usize,
-    #[serde(deserialize_with = "deserialize_message_type")]
+    #[serde(default, deserialize_with = "deserialize_message_type")]
     message_type: Option<crate::memory::MessageType>,
 }
 
