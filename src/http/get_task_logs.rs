@@ -12,7 +12,7 @@ const MAX_LIMIT: usize = 1000;
 
 /// Supported log levels for filtering.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
-#[serde(rename_all = "uppercase")]
+#[serde(rename_all = "UPPERCASE")]
 pub enum LogLevel {
     Error,
     Warn,
