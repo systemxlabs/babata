@@ -200,13 +200,13 @@ function MessageCard({ message, index }: { message: MessageRecord; index: number
         </div>
       ) : null}
 
-      {message.reasoning_content ? (
+      {message.signature ? (
         <div className="space-y-2">
           <div className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-            Reasoning
+            Signature
           </div>
           <TruncatedPre className="overflow-x-auto whitespace-pre-wrap break-words rounded-[1rem] bg-card/80 px-4 py-3 font-mono text-[13px] leading-6 text-foreground">
-            <code>{message.reasoning_content}</code>
+            <code>{message.signature}</code>
           </TruncatedPre>
         </div>
       ) : null}
