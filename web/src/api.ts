@@ -131,12 +131,12 @@ export function getTaskLogs(
   taskId: string,
   limit?: number,
   offset?: number,
-  level?: string
+  level?: LogLevel
 ): Promise<string[]> {
   const params = new URLSearchParams();
   if (limit !== undefined) params.append('limit', limit.toString());
   if (offset !== undefined) params.append('offset', offset.toString());
-  if (level && level !== 'all') params.append('level', level);
+  if (level) params.append('level', level);
 
   const queryString = params.toString();
   return fetchApi<string[]>(`/tasks/${taskId}/logs${queryString ? `?${queryString}` : ''}`);
@@ -159,12 +159,12 @@ export async function getTaskMessages(
   taskId: string,
   limit: number,
   offset?: number,
-  messageType?: string
+  messageType?: MessageType
 ): Promise<MessageRecord[]> {
   const params = new URLSearchParams();
   params.append('limit', limit.toString());
   if (offset !== undefined) params.append('offset', offset.toString());
-  if (messageType && messageType !== 'all') params.append('message_type', messageType);
+  if (messageType) params.append('message_type', messageType);
 
   const queryString = params.toString();
   const response = await fetchApi<MessageRecordApiResponse[]>(

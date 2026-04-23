@@ -11,7 +11,8 @@ use super::{HttpApp, ensure_task_exists, parse_task_id};
 const MAX_LIMIT: usize = 1000;
 
 /// Supported log levels for filtering.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
 pub enum LogLevel {
     Error,
     Warn,
@@ -58,7 +59,7 @@ pub(crate) struct LogQueryParams {
     #[serde(default)]
     offset: usize,
     /// Optional: Filter by log level (ERROR, WARN, INFO, DEBUG)
-    level: Option<String>,
+    level: Option<LogLevel>,
 }
 
 pub(super) async fn handle(
@@ -79,10 +80,7 @@ pub(super) async fn handle(
         )));
     }
 
-    let level_filter = match params.level {
-        Some(ref s) => Some(s.parse::<LogLevel>()?),
-        None => None,
-    };
+    let level_filter = params.level;
 
     let logs = read_task_logs(
         &task_id.to_string(),
