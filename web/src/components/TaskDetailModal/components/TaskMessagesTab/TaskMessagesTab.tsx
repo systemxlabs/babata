@@ -200,17 +200,6 @@ function MessageCard({ message, index }: { message: MessageRecord; index: number
         </div>
       ) : null}
 
-      {message.signature ? (
-        <div className="space-y-2">
-          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-            Signature
-          </div>
-          <TruncatedPre className="overflow-x-auto whitespace-pre-wrap break-words rounded-[1rem] bg-card/80 px-4 py-3 font-mono text-[13px] leading-6 text-foreground">
-            <code>{message.signature}</code>
-          </TruncatedPre>
-        </div>
-      ) : null}
-
       {message.tool_calls && message.tool_calls.length > 0 ? (
         <div className="space-y-2">
           <div className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
