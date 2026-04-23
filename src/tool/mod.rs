@@ -7,6 +7,7 @@ mod glob;
 mod grep;
 mod query_messages;
 mod query_tasks;
+mod query_truncation;
 mod read_file;
 mod shell;
 mod sleep;

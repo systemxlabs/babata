@@ -41,7 +41,7 @@ impl Tool for QueryMessagesTool {
         &self.spec
     }
 
-    async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
+    async fn execute(&self, args: &str, context: &ToolContext<'_>) -> BabataResult<String> {
         let QueryMessagesArgs { agent, sql } = parse_tool_args(args)?;
 
         // Basic validation to ensure it's a SELECT query
@@ -55,7 +55,11 @@ impl Tool for QueryMessagesTool {
         let agent_home = agent_dir(&agent)?;
         let store = MessageStore::new(&agent_home)?;
         let results = store.query_sql(&sql)?;
-        serde_json::to_string(&results).map_err(Into::into)
+        crate::tool::query_truncation::process_query_results_with_truncation(
+            &results,
+            context,
+            "query_messages",
+        )
     }
 }
 

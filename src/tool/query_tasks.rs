@@ -36,7 +36,7 @@ impl Tool for QueryTasksTool {
         &self.spec
     }
 
-    async fn execute(&self, args: &str, _context: &ToolContext<'_>) -> BabataResult<String> {
+    async fn execute(&self, args: &str, context: &ToolContext<'_>) -> BabataResult<String> {
         let QueryTasksArgs { sql } = parse_tool_args(args)?;
 
         // Basic validation to ensure it's a SELECT query
@@ -48,7 +48,11 @@ impl Tool for QueryTasksTool {
         }
 
         let results = self.task_store.query_sql(&sql)?;
-        serde_json::to_string(&results).map_err(Into::into)
+        crate::tool::query_truncation::process_query_results_with_truncation(
+            &results,
+            context,
+            "query_tasks",
+        )
     }
 }
 

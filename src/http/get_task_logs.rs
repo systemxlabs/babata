@@ -151,7 +151,9 @@ async fn read_task_logs(
                 for line in &lines {
                     if line.contains(&task_marker) {
                         // Apply level filter if specified
-                        if let Some(ref level) = level_filter && !level.matches(line) {
+                        if let Some(ref level) = level_filter
+                            && !level.matches(line)
+                        {
                             continue;
                         }
                         matching_lines_in_file.push(line.to_string());
