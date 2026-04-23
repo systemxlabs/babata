@@ -59,6 +59,7 @@ export type MessageType =
   | 'user_steering'
   | 'assistant_response'
   | 'assistant_tool_calls'
+  | 'assistant_thinking'
   | 'tool_result';
 
 export type MessageContentPart =
@@ -71,7 +72,7 @@ export interface MessageRecord {
   task_id: string;
   message_type: MessageType;
   content: MessageContentPart[] | null;
-  reasoning_content: string | null;
+  signature: string | null;
   tool_calls: ToolCall[] | null;
   result: string | null;
   created_at: string;

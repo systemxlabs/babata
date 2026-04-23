@@ -19,6 +19,7 @@ const MESSAGE_TYPE_LABELS: Record<MessageType, string> = {
   user_steering: "Steer 消息",
   assistant_response: "助手回复",
   assistant_tool_calls: "工具调用",
+  assistant_thinking: "思考过程",
   tool_result: "工具结果",
 }
 
@@ -27,6 +28,7 @@ const MESSAGE_TYPE_STYLES: Record<MessageType, string> = {
   user_steering: "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300",
   assistant_response: "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
   assistant_tool_calls: "border-violet-500/20 bg-violet-500/10 text-violet-700 dark:text-violet-300",
+  assistant_thinking: "border-orange-500/20 bg-orange-500/10 text-orange-700 dark:text-orange-300",
   tool_result: "border-slate-500/20 bg-slate-500/10 text-slate-700 dark:text-slate-300",
 }
 
