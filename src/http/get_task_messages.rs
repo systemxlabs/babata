@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use axum::{
     Json,
     extract::{Path, Query, State},
@@ -15,6 +17,7 @@ pub(crate) struct MessageQueryParams {
     limit: usize,
     #[serde(default)]
     offset: usize,
+    message_type: Option<String>,
 }
 
 pub(super) async fn handle(
@@ -35,8 +38,17 @@ pub(super) async fn handle(
         )));
     }
 
-    let messages = state
-        .task_manager
-        .get_task_messages(task_id, params.offset, params.limit)?;
+    let message_type = match params.message_type {
+        Some(ref s) => Some(
+            crate::memory::MessageType::from_str(s)
+                .map_err(|_| BabataError::invalid_input(format!("Invalid message_type '{}'", s)))?,
+        ),
+        None => None,
+    };
+
+    let messages =
+        state
+            .task_manager
+            .get_task_messages(task_id, params.offset, params.limit, message_type)?;
     Ok(Json(messages))
 }

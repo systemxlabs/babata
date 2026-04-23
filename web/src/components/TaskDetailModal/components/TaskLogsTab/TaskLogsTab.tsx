@@ -5,6 +5,15 @@ import { getTaskLogs } from "@/api"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import type { LogLevel } from "@/types"
+import { LOG_LEVEL_OPTIONS } from "@/types"
 
 const PAGE_SIZE = 100
 const LOAD_MORE_THRESHOLD = 120
@@ -57,6 +66,7 @@ export function TaskLogsTab({ taskId }: TaskLogsTabProps) {
   const [error, setError] = useState<string | null>(null)
   const [hasMore, setHasMore] = useState(true)
   const [copied, setCopied] = useState(false)
+  const [levelFilter, setLevelFilter] = useState<LogLevel | 'all'>('all')
 
   const loadLogs = useCallback(async (offset: number, reset: boolean) => {
     if (reset) {
@@ -67,7 +77,7 @@ export function TaskLogsTab({ taskId }: TaskLogsTabProps) {
     }
 
     try {
-      const nextLogs = await getTaskLogs(taskId, PAGE_SIZE, offset)
+      const nextLogs = await getTaskLogs(taskId, PAGE_SIZE, offset, levelFilter)
 
       setLogs((current) => (reset ? nextLogs : [...current, ...nextLogs]))
       setHasMore(nextLogs.length === PAGE_SIZE)
@@ -77,14 +87,14 @@ export function TaskLogsTab({ taskId }: TaskLogsTabProps) {
       setLoading(false)
       setLoadingMore(false)
     }
-  }, [taskId])
+  }, [taskId, levelFilter])
 
   useEffect(() => {
     setLogs([])
     setHasMore(true)
     setError(null)
     void loadLogs(0, true)
-  }, [loadLogs, taskId])
+  }, [loadLogs, taskId, levelFilter])
 
   const handleScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
     const target = event.currentTarget
@@ -196,6 +206,21 @@ export function TaskLogsTab({ taskId }: TaskLogsTabProps) {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <Select
+              value={levelFilter}
+              onValueChange={(value) => setLevelFilter(value as LogLevel | 'all')}
+            >
+              <SelectTrigger className="h-8 w-[140px] rounded-full text-xs">
+                <SelectValue placeholder="日志级别" />
+              </SelectTrigger>
+              <SelectContent>
+                {LOG_LEVEL_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Button
               variant="outline"
               size="sm"

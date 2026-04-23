@@ -212,3 +212,23 @@ export const STATUS_LABELS: Record<TaskStatus | 'all', string> = {
 };
 
 export type LogEntry = string;
+
+export type LogLevel = 'ERROR' | 'WARN' | 'INFO' | 'DEBUG';
+
+export const MESSAGE_TYPE_OPTIONS: { value: MessageType | 'all'; label: string }[] = [
+  { value: 'all', label: '全部' },
+  { value: 'user_prompt', label: '用户输入' },
+  { value: 'user_steering', label: 'Steer 消息' },
+  { value: 'assistant_response', label: '助手回复' },
+  { value: 'assistant_tool_calls', label: '工具调用' },
+  { value: 'assistant_thinking', label: '思考过程' },
+  { value: 'tool_result', label: '工具结果' },
+];
+
+export const LOG_LEVEL_OPTIONS: { value: LogLevel | 'all'; label: string }[] = [
+  { value: 'all', label: '全部' },
+  { value: 'ERROR', label: 'ERROR' },
+  { value: 'WARN', label: 'WARN' },
+  { value: 'INFO', label: 'INFO' },
+  { value: 'DEBUG', label: 'DEBUG' },
+];

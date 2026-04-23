@@ -400,17 +400,25 @@ impl MessageStore {
         task_id: Uuid,
         offset: usize,
         limit: usize,
+        message_type: Option<MessageType>,
     ) -> BabataResult<Vec<MessageRecord>> {
         if limit == 0 {
             return Ok(Vec::new());
         }
 
-        let query =
+        let query = if message_type.is_some() {
+            "SELECT task_id, message_type, content, signature, tool_calls, result, created_at
+            FROM messages
+            WHERE task_id = ?1 AND message_type = ?2
+            ORDER BY datetime(created_at), rowid
+            LIMIT ?3 OFFSET ?4"
+        } else {
             "SELECT task_id, message_type, content, signature, tool_calls, result, created_at
             FROM messages
             WHERE task_id = ?1
             ORDER BY datetime(created_at), rowid
-            LIMIT ?2 OFFSET ?3";
+            LIMIT ?2 OFFSET ?3"
+        };
 
         let task_id_param = task_id.to_string();
         let limit_param = limit.min(i64::MAX as usize) as i64;
@@ -424,14 +432,22 @@ impl MessageStore {
             ))
         })?;
 
-        let mut rows = stmt
-            .query(params![task_id_param, limit_param, offset_param])
-            .map_err(|err| {
-                BabataError::memory(format!(
-                    "Failed to query task messages from sqlite: {}",
-                    err
-                ))
-            })?;
+        let mut rows = if let Some(mt) = message_type {
+            stmt.query(params![
+                task_id_param,
+                mt.to_string(),
+                limit_param,
+                offset_param
+            ])
+        } else {
+            stmt.query(params![task_id_param, limit_param, offset_param])
+        }
+        .map_err(|err| {
+            BabataError::memory(format!(
+                "Failed to query task messages from sqlite: {}",
+                err
+            ))
+        })?;
 
         let mut records = Vec::new();
         while let Some(row) = rows.next().map_err(|err| {
@@ -827,7 +843,7 @@ mod tests {
             .expect("insert other task message");
 
         let records = store
-            .scan_task_message_records(task_id, 1, 2)
+            .scan_task_message_records(task_id, 1, 2, None)
             .expect("scan paginated task message records");
 
         assert_eq!(records.len(), 2);
@@ -835,6 +851,100 @@ mod tests {
         assert_eq!(records[0].message_type, MessageType::UserSteering);
         assert_eq!(records[1].task_id, task_id);
         assert_eq!(records[1].message_type, MessageType::AssistantResponse);
+
+        let _ = std::fs::remove_file(db_path);
+    }
+
+    #[test]
+    fn scan_task_message_records_with_message_type_filter() {
+        let db_path = std::env::temp_dir()
+            .join("babata-tests")
+            .join(format!("message-store-filter-{}.db", Uuid::new_v4()));
+
+        let store = MessageStore::open(&db_path).expect("open sqlite message store");
+        let task_id = Uuid::new_v4();
+        let now = Utc::now();
+
+        store
+            .append_messages(
+                task_id,
+                &[
+                    Message::UserPrompt {
+                        content: vec![Content::Text {
+                            text: "user message 1".to_string(),
+                        }],
+                        created_at: now,
+                    },
+                    Message::AssistantResponse {
+                        content: vec![Content::Text {
+                            text: "assistant response 1".to_string(),
+                        }],
+                        created_at: now + chrono::Duration::seconds(1),
+                    },
+                    Message::UserPrompt {
+                        content: vec![Content::Text {
+                            text: "user message 2".to_string(),
+                        }],
+                        created_at: now + chrono::Duration::seconds(2),
+                    },
+                    Message::AssistantToolCalls {
+                        calls: vec![ToolCall {
+                            call_id: "call-1".to_string(),
+                            tool_name: "read_file".to_string(),
+                            args: r#"{"path": "README.md"}"#.to_string(),
+                        }],
+                        created_at: now + chrono::Duration::seconds(3),
+                    },
+                ],
+            )
+            .expect("insert messages");
+
+        // Filter by user_prompt - should return 2 messages
+        let user_records = store
+            .scan_task_message_records(task_id, 0, 10, Some(MessageType::UserPrompt))
+            .expect("scan with user_prompt filter");
+        assert_eq!(user_records.len(), 2);
+        assert!(
+            user_records
+                .iter()
+                .all(|r| r.message_type == MessageType::UserPrompt)
+        );
+
+        // Filter by assistant_response - should return 1 message
+        let assistant_records = store
+            .scan_task_message_records(task_id, 0, 10, Some(MessageType::AssistantResponse))
+            .expect("scan with assistant_response filter");
+        assert_eq!(assistant_records.len(), 1);
+        assert_eq!(
+            assistant_records[0].message_type,
+            MessageType::AssistantResponse
+        );
+
+        // Filter by assistant_tool_calls - should return 1 message
+        let tool_call_records = store
+            .scan_task_message_records(task_id, 0, 10, Some(MessageType::AssistantToolCalls))
+            .expect("scan with assistant_tool_calls filter");
+        assert_eq!(tool_call_records.len(), 1);
+        assert_eq!(
+            tool_call_records[0].message_type,
+            MessageType::AssistantToolCalls
+        );
+
+        // No filter - should return all 4 messages
+        let all_records = store
+            .scan_task_message_records(task_id, 0, 10, None)
+            .expect("scan without filter");
+        assert_eq!(all_records.len(), 4);
+
+        // Filter with pagination
+        let paginated_user_records = store
+            .scan_task_message_records(task_id, 1, 10, Some(MessageType::UserPrompt))
+            .expect("scan with filter and offset");
+        assert_eq!(paginated_user_records.len(), 1);
+        assert_eq!(
+            paginated_user_records[0].message_type,
+            MessageType::UserPrompt
+        );
 
         let _ = std::fs::remove_file(db_path);
     }
