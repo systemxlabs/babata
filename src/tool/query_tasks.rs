@@ -48,7 +48,7 @@ impl Tool for QueryTasksTool {
         }
 
         let results = self.task_store.query_sql(&sql)?;
-        crate::tool::query_truncation::process_query_results_with_truncation(
+        crate::tool::query_messages::process_query_results_with_truncation(
             &results,
             context,
             "query_tasks",
