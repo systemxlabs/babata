@@ -5,7 +5,15 @@ import { getTaskMessages } from "@/api"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import type { MessageContentPart, MessageRecord, MessageType, ToolCall } from "@/types"
+import { MESSAGE_TYPE_OPTIONS } from "@/types"
 
 const PAGE_SIZE = 50
 const LOAD_MORE_THRESHOLD = 120
@@ -234,6 +242,7 @@ export function TaskMessagesTab({ taskId }: TaskMessagesTabProps) {
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hasMore, setHasMore] = useState(true)
+  const [messageTypeFilter, setMessageTypeFilter] = useState<MessageType | 'all'>('all')
 
   const loadMessages = useCallback(async (offset: number, reset: boolean) => {
     if (reset) {
@@ -244,7 +253,12 @@ export function TaskMessagesTab({ taskId }: TaskMessagesTabProps) {
     }
 
     try {
-      const nextMessages = await getTaskMessages(taskId, PAGE_SIZE, offset)
+      const nextMessages = await getTaskMessages(
+        taskId,
+        PAGE_SIZE,
+        offset,
+        messageTypeFilter
+      )
 
       setMessages((current) => (reset ? nextMessages : [...current, ...nextMessages]))
       setHasMore(nextMessages.length === PAGE_SIZE)
@@ -254,14 +268,14 @@ export function TaskMessagesTab({ taskId }: TaskMessagesTabProps) {
       setLoading(false)
       setLoadingMore(false)
     }
-  }, [taskId])
+  }, [taskId, messageTypeFilter])
 
   useEffect(() => {
     setMessages([])
     setHasMore(true)
     setError(null)
     void loadMessages(0, true)
-  }, [loadMessages, taskId])
+  }, [loadMessages, taskId, messageTypeFilter])
 
   const handleScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
     const target = event.currentTarget
@@ -347,16 +361,33 @@ export function TaskMessagesTab({ taskId }: TaskMessagesTabProps) {
             </div>
           </div>
 
-          <Button
-            variant="outline"
-            size="sm"
-            className="rounded-full"
-            onClick={() => void loadMessages(0, true)}
-            disabled={loading || loadingMore}
-          >
-            <RefreshCw className={`mr-1.5 size-3.5 ${loading ? "animate-spin" : ""}`} />
-            刷新
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select
+              value={messageTypeFilter}
+              onValueChange={(value) => setMessageTypeFilter(value as MessageType | 'all')}
+            >
+              <SelectTrigger className="h-8 w-[160px] rounded-full text-xs">
+                <SelectValue placeholder="消息类型" />
+              </SelectTrigger>
+              <SelectContent>
+                {MESSAGE_TYPE_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-full"
+              onClick={() => void loadMessages(0, true)}
+              disabled={loading || loadingMore}
+            >
+              <RefreshCw className={`mr-1.5 size-3.5 ${loading ? "animate-spin" : ""}`} />
+              刷新
+            </Button>
+          </div>
         </div>
 
         {error && messages.length > 0 ? (

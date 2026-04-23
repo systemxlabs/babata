@@ -372,11 +372,12 @@ impl TaskManager {
         task_id: Uuid,
         offset: usize,
         limit: usize,
+        message_type: Option<crate::memory::MessageType>,
     ) -> BabataResult<Vec<MessageRecord>> {
         let task = self.store.get_task(task_id)?;
         let agent_dir = agent_dir(&task.agent)?;
         let memory = Memory::new(agent_dir)?;
-        memory.scan_task_message_records(task_id, offset, limit)
+        memory.scan_task_message_records(task_id, offset, limit, message_type)
     }
 
     pub fn get_pending_steer_messages(&self, task_id: Uuid) -> Vec<SteerMessage> {

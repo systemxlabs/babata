@@ -10,6 +10,46 @@ use super::{HttpApp, ensure_task_exists, parse_task_id};
 
 const MAX_LIMIT: usize = 1000;
 
+/// Supported log levels for filtering.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LogLevel {
+    Error,
+    Warn,
+    Info,
+    Debug,
+}
+
+impl std::str::FromStr for LogLevel {
+    type Err = BabataError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_uppercase().as_str() {
+            "ERROR" => Ok(LogLevel::Error),
+            "WARN" | "WARNING" => Ok(LogLevel::Warn),
+            "INFO" => Ok(LogLevel::Info),
+            "DEBUG" => Ok(LogLevel::Debug),
+            _ => Err(BabataError::invalid_input(format!(
+                "Invalid log level '{}'. Supported: ERROR, WARN, INFO, DEBUG",
+                s
+            ))),
+        }
+    }
+}
+
+impl LogLevel {
+    fn matches(&self, log: &str) -> bool {
+        let upper_log = log.to_ascii_uppercase();
+        // Log lines typically look like: "2024-01-01 12:00:00 [INFO] [task-id] message"
+        // We check for the level enclosed in brackets [LEVEL] to avoid false positives in the message body.
+        match self {
+            LogLevel::Error => upper_log.contains("[ERROR]"),
+            LogLevel::Warn => upper_log.contains("[WARN]") || upper_log.contains("[WARNING]"),
+            LogLevel::Info => upper_log.contains("[INFO]"),
+            LogLevel::Debug => upper_log.contains("[DEBUG]"),
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub(crate) struct LogQueryParams {
     /// Required: Maximum number of log lines to return (1-1000)
@@ -17,6 +57,8 @@ pub(crate) struct LogQueryParams {
     /// Optional: Number of lines to skip (default: 0)
     #[serde(default)]
     offset: usize,
+    /// Optional: Filter by log level (ERROR, WARN, INFO, DEBUG)
+    level: Option<String>,
 }
 
 pub(super) async fn handle(
@@ -37,9 +79,19 @@ pub(super) async fn handle(
         )));
     }
 
-    let logs = read_task_logs(&task_id.to_string(), params.offset, params.limit)
-        .await
-        .map_err(|err| BabataError::invalid_input(format!("Failed to read logs: {}", err)))?;
+    let level_filter = match params.level {
+        Some(ref s) => Some(s.parse::<LogLevel>()?),
+        None => None,
+    };
+
+    let logs = read_task_logs(
+        &task_id.to_string(),
+        params.offset,
+        params.limit,
+        level_filter,
+    )
+    .await
+    .map_err(|err| BabataError::invalid_input(format!("Failed to read logs: {}", err)))?;
     Ok(Json(logs))
 }
 
@@ -49,6 +101,7 @@ async fn read_task_logs(
     task_id: &str,
     offset: usize,
     limit: usize,
+    level_filter: Option<LogLevel>,
 ) -> Result<Vec<String>, std::io::Error> {
     let log_dir = babata_dir()
         .map_err(|e| std::io::Error::other(e.to_string()))?
@@ -95,6 +148,12 @@ async fn read_task_logs(
                 let task_marker = format!("[{}]", task_id);
                 for line in &lines {
                     if line.contains(&task_marker) {
+                        // Apply level filter if specified
+                        if let Some(ref level) = level_filter
+                            && !level.matches(line)
+                        {
+                            continue;
+                        }
                         matching_lines_in_file.push(line.to_string());
                     }
                 }
@@ -136,4 +195,46 @@ async fn read_task_logs(
     }
 
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::LogLevel;
+
+    #[test]
+    fn log_level_from_str_parses_case_insensitive() {
+        assert_eq!("ERROR".parse::<LogLevel>().unwrap(), LogLevel::Error);
+        assert_eq!("error".parse::<LogLevel>().unwrap(), LogLevel::Error);
+        assert_eq!("WARN".parse::<LogLevel>().unwrap(), LogLevel::Warn);
+        assert_eq!("warn".parse::<LogLevel>().unwrap(), LogLevel::Warn);
+        assert_eq!("WARNING".parse::<LogLevel>().unwrap(), LogLevel::Warn);
+        assert_eq!("INFO".parse::<LogLevel>().unwrap(), LogLevel::Info);
+        assert_eq!("info".parse::<LogLevel>().unwrap(), LogLevel::Info);
+        assert_eq!("DEBUG".parse::<LogLevel>().unwrap(), LogLevel::Debug);
+        assert_eq!("debug".parse::<LogLevel>().unwrap(), LogLevel::Debug);
+    }
+
+    #[test]
+    fn log_level_from_str_rejects_invalid() {
+        let err = "TRACE".parse::<LogLevel>().expect_err("TRACE should fail");
+        assert!(err.to_string().contains("Invalid log level"));
+    }
+
+    #[test]
+    fn log_level_matches_correctly() {
+        assert!(LogLevel::Error.matches("2024-01-01 [task-id] [ERROR] something failed"));
+        assert!(!LogLevel::Error.matches("2024-01-01 [task-id] [INFO] ERROR in request body"));
+        assert!(!LogLevel::Error.matches("2024-01-01 [task-id] [WARN] error sending request"));
+        assert!(!LogLevel::Error.matches("2024-01-01 [task-id] [INFO] all good"));
+
+        assert!(LogLevel::Warn.matches("2024-01-01 [task-id] [WARN] caution"));
+        assert!(LogLevel::Warn.matches("2024-01-01 [task-id] [WARNING] caution"));
+        assert!(!LogLevel::Warn.matches("2024-01-01 [task-id] [ERROR] failed"));
+
+        assert!(LogLevel::Info.matches("2024-01-01 [task-id] [INFO] started"));
+        assert!(!LogLevel::Info.matches("2024-01-01 [task-id] [DEBUG] trace"));
+
+        assert!(LogLevel::Debug.matches("2024-01-01 [task-id] [DEBUG] trace"));
+        assert!(!LogLevel::Debug.matches("2024-01-01 [task-id] [INFO] normal"));
+    }
 }
