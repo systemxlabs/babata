@@ -28,6 +28,7 @@ This document outlines the engineering preferences and cultural principles for a
 
 - **Tests are guard rails**: Add or update tests alongside code changes.
 - **Consistency matters**: Follow existing patterns unless they violate the principles above.
+- **Prefer simplicity**: Keep implementations simple and direct. Do not add defensive code, duplicate fallback branches, or premature abstractions unless they are justified by explicit requirements, known failure modes, or external interface constraints.
 - **Security by default**: Validate inputs, sanitize outputs, and never log secrets.
 - **Code in English**: All variable names, function names, type names, comments, and doc strings must be written in **English**. Even when the project serves Chinese-speaking users, the codebase itself should remain in English to maintain international readability and a uniform developer experience.
 
