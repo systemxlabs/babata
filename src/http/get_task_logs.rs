@@ -39,15 +39,13 @@ impl std::str::FromStr for LogLevel {
 impl LogLevel {
     fn matches(&self, log: &str) -> bool {
         let upper_log = log.to_ascii_uppercase();
+        // Log lines typically look like: "2024-01-01 12:00:00 [INFO] [task-id] message"
+        // We check for the level enclosed in brackets [LEVEL] to avoid false positives in the message body.
         match self {
-            LogLevel::Error => upper_log.contains("[ERROR]") || upper_log.contains(" ERROR "),
-            LogLevel::Warn => {
-                upper_log.contains("[WARN]")
-                    || upper_log.contains(" WARNING ")
-                    || upper_log.contains(" WARN ")
-            }
-            LogLevel::Info => upper_log.contains("[INFO]") || upper_log.contains(" INFO "),
-            LogLevel::Debug => upper_log.contains("[DEBUG]") || upper_log.contains(" DEBUG "),
+            LogLevel::Error => upper_log.contains("[ERROR]"),
+            LogLevel::Warn => upper_log.contains("[WARN]") || upper_log.contains("[WARNING]"),
+            LogLevel::Info => upper_log.contains("[INFO]"),
+            LogLevel::Debug => upper_log.contains("[DEBUG]"),
         }
     }
 }
@@ -151,7 +149,9 @@ async fn read_task_logs(
                 for line in &lines {
                     if line.contains(&task_marker) {
                         // Apply level filter if specified
-                        if let Some(ref level) = level_filter && !level.matches(line) {
+                        if let Some(ref level) = level_filter
+                            && !level.matches(line)
+                        {
                             continue;
                         }
                         matching_lines_in_file.push(line.to_string());
@@ -223,20 +223,18 @@ mod tests {
     #[test]
     fn log_level_matches_correctly() {
         assert!(LogLevel::Error.matches("2024-01-01 [task-id] [ERROR] something failed"));
-        assert!(LogLevel::Error.matches("2024-01-01 ERROR something failed"));
-        assert!(!LogLevel::Error.matches("2024-01-01 [INFO] all good"));
+        assert!(!LogLevel::Error.matches("2024-01-01 [task-id] [INFO] ERROR in request body"));
+        assert!(!LogLevel::Error.matches("2024-01-01 [task-id] [WARN] error sending request"));
+        assert!(!LogLevel::Error.matches("2024-01-01 [task-id] [INFO] all good"));
 
         assert!(LogLevel::Warn.matches("2024-01-01 [task-id] [WARN] caution"));
-        assert!(LogLevel::Warn.matches("2024-01-01 WARNING caution"));
-        assert!(LogLevel::Warn.matches("2024-01-01 WARN caution"));
-        assert!(!LogLevel::Warn.matches("2024-01-01 [ERROR] failed"));
+        assert!(LogLevel::Warn.matches("2024-01-01 [task-id] [WARNING] caution"));
+        assert!(!LogLevel::Warn.matches("2024-01-01 [task-id] [ERROR] failed"));
 
         assert!(LogLevel::Info.matches("2024-01-01 [task-id] [INFO] started"));
-        assert!(LogLevel::Info.matches("2024-01-01 INFO started"));
-        assert!(!LogLevel::Info.matches("2024-01-01 [DEBUG] trace"));
+        assert!(!LogLevel::Info.matches("2024-01-01 [task-id] [DEBUG] trace"));
 
         assert!(LogLevel::Debug.matches("2024-01-01 [task-id] [DEBUG] trace"));
-        assert!(LogLevel::Debug.matches("2024-01-01 DEBUG trace"));
-        assert!(!LogLevel::Debug.matches("2024-01-01 [INFO] normal"));
+        assert!(!LogLevel::Debug.matches("2024-01-01 [task-id] [INFO] normal"));
     }
 }
