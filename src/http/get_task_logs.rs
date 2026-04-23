@@ -201,10 +201,22 @@ mod tests {
 
     #[test]
     fn log_level_deserialization_standard_case() {
-        assert_eq!(serde_json::from_str::<LogLevel>("\"ERROR\"").unwrap(), LogLevel::Error);
-        assert_eq!(serde_json::from_str::<LogLevel>("\"WARN\"").unwrap(), LogLevel::Warn);
-        assert_eq!(serde_json::from_str::<LogLevel>("\"INFO\"").unwrap(), LogLevel::Info);
-        assert_eq!(serde_json::from_str::<LogLevel>("\"DEBUG\"").unwrap(), LogLevel::Debug);
+        assert_eq!(
+            serde_json::from_str::<LogLevel>("\"ERROR\"").unwrap(),
+            LogLevel::Error
+        );
+        assert_eq!(
+            serde_json::from_str::<LogLevel>("\"WARN\"").unwrap(),
+            LogLevel::Warn
+        );
+        assert_eq!(
+            serde_json::from_str::<LogLevel>("\"INFO\"").unwrap(),
+            LogLevel::Info
+        );
+        assert_eq!(
+            serde_json::from_str::<LogLevel>("\"DEBUG\"").unwrap(),
+            LogLevel::Debug
+        );
     }
 
     #[test]
