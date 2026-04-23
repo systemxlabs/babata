@@ -86,14 +86,9 @@ impl AnthropicCompatibleProvider {
                 Message::AssistantThinking {
                     content, signature, ..
                 } => {
-                    let sig = signature.as_deref().unwrap_or("").trim();
-                    if sig.is_empty() {
-                        warn!(
-                            "Skipping AssistantThinking message with empty or missing signature: {}",
-                            content
-                        );
+                    let Some(sig) = signature else {
                         continue;
-                    }
+                    };
                     let blocks = vec![AnthropicContentBlock::Thinking {
                         thinking: content.clone(),
                         signature: sig.to_string(),
@@ -161,7 +156,7 @@ impl AnthropicCompatibleProvider {
     fn parse_response(&self, response_body: AnthropicResponse) -> BabataResult<GenerationResponse> {
         let mut tool_calls = Vec::new();
         let mut text_content = Vec::new();
-        let mut thinking_parts = Vec::new();
+        let mut thinking_messages = Vec::new();
 
         for block in response_body.content {
             match block {
@@ -180,33 +175,15 @@ impl AnthropicCompatibleProvider {
                     thinking,
                     signature,
                 } => {
-                    let sig = signature.trim();
-                    if sig.is_empty() {
-                        return Err(BabataError::provider(
-                            "Anthropic thinking block has empty or missing signature",
-                        ));
-                    }
-                    thinking_parts.push((thinking, sig.to_string()));
+                    thinking_messages.push(Message::AssistantThinking {
+                        content: thinking,
+                        signature: Some(signature),
+                        created_at: Utc::now(),
+                    });
                 }
                 _ => {}
             }
         }
-
-        let thinking = if !thinking_parts.is_empty() {
-            let content = thinking_parts
-                .iter()
-                .map(|(thinking, _)| thinking.as_str())
-                .collect::<Vec<_>>()
-                .join("\n");
-            let signature = thinking_parts.first().map(|(_, sig)| sig.clone());
-            Some(Message::AssistantThinking {
-                content,
-                signature,
-                created_at: Utc::now(),
-            })
-        } else {
-            None
-        };
 
         if !tool_calls.is_empty() {
             return Ok(GenerationResponse {
@@ -214,11 +191,11 @@ impl AnthropicCompatibleProvider {
                     calls: tool_calls,
                     created_at: Utc::now(),
                 },
-                thinking,
+                thinking: thinking_messages,
             });
         }
 
-        if text_content.is_empty() && thinking.is_none() {
+        if text_content.is_empty() {
             return Err(BabataError::provider("No content in assistant message"));
         }
 
@@ -227,7 +204,7 @@ impl AnthropicCompatibleProvider {
                 content: text_content,
                 created_at: Utc::now(),
             },
-            thinking,
+            thinking: thinking_messages,
         })
     }
 }
@@ -541,44 +518,6 @@ mod tests {
     }
 
     #[test]
-    fn test_format_messages_skips_empty_signature_thinking() {
-        let provider = AnthropicCompatibleProvider::new("test-key", "http://localhost");
-        let messages = vec![
-            Message::AssistantThinking {
-                content: "No signature here.".to_string(),
-                signature: None,
-                created_at: chrono::Utc::now(),
-            },
-            Message::AssistantThinking {
-                content: "Empty signature.".to_string(),
-                signature: Some("".to_string()),
-                created_at: chrono::Utc::now(),
-            },
-            Message::AssistantThinking {
-                content: "Whitespace signature.".to_string(),
-                signature: Some("   ".to_string()),
-                created_at: chrono::Utc::now(),
-            },
-            Message::AssistantResponse {
-                content: vec![Content::Text {
-                    text: "Final answer.".to_string(),
-                }],
-                created_at: chrono::Utc::now(),
-            },
-        ];
-        let anthropic_messages = provider
-            .format_messages(&messages)
-            .expect("format messages");
-        assert_eq!(anthropic_messages.len(), 1);
-        assert_eq!(anthropic_messages[0].role, AnthropicRole::Assistant);
-        assert_eq!(anthropic_messages[0].content.len(), 1);
-        match &anthropic_messages[0].content[0] {
-            AnthropicContentBlock::Text { text } => assert_eq!(text, "Final answer."),
-            other => panic!("expected Text block, got {other:?}"),
-        }
-    }
-
-    #[test]
     fn test_format_messages_merges_assistant_thinking_with_response() {
         let provider = AnthropicCompatibleProvider::new("test-key", "http://localhost");
         let messages = vec![
@@ -642,7 +581,7 @@ mod tests {
             stop_reason: Some("end_turn".to_string()),
         };
 
-        let response = provider
+        let mut response = provider
             .parse_response(response_body)
             .expect("parse response");
         match response.message {
@@ -657,7 +596,7 @@ mod tests {
             }
             other => panic!("expected AssistantResponse, got {other:?}"),
         }
-        let thinking = response.thinking.expect("should have thinking");
+        let thinking = response.thinking.remove(0);
         match thinking {
             Message::AssistantThinking {
                 content, signature, ..
@@ -666,40 +605,6 @@ mod tests {
                 assert_eq!(signature, Some("sig-xyz".to_string()));
             }
             other => panic!("expected AssistantThinking, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn test_response_parsing_rejects_empty_signature_thinking() {
-        let provider = AnthropicCompatibleProvider::new("test-key", "http://localhost");
-        let response_body = AnthropicResponse {
-            id: "msg-1".to_string(),
-            response_type: "message".to_string(),
-            role: "assistant".to_string(),
-            content: vec![
-                AnthropicContentBlock::Thinking {
-                    thinking: "Let me analyze this...".to_string(),
-                    signature: "".to_string(),
-                },
-                AnthropicContentBlock::Text {
-                    text: "Here is my analysis.".to_string(),
-                },
-            ],
-            model: "claude-3-7-sonnet".to_string(),
-            stop_reason: Some("end_turn".to_string()),
-        };
-
-        let result = provider.parse_response(response_body);
-        match result {
-            Ok(_) => panic!("expected error for empty signature thinking block"),
-            Err(e) => {
-                let err_msg = format!("{}", e);
-                assert!(
-                    err_msg.contains("empty or missing signature"),
-                    "Expected error about empty signature, got: {}",
-                    err_msg
-                );
-            }
         }
     }
 
@@ -728,7 +633,7 @@ mod tests {
             stop_reason: Some("tool_use".to_string()),
         };
 
-        let response = provider
+        let mut response = provider
             .parse_response(response_body)
             .expect("parse response");
         match response.message {
@@ -739,7 +644,7 @@ mod tests {
             }
             other => panic!("expected AssistantToolCalls, got {other:?}"),
         }
-        let thinking = response.thinking.expect("should have thinking");
+        let thinking = response.thinking.remove(0);
         match thinking {
             Message::AssistantThinking {
                 content, signature, ..
@@ -781,7 +686,7 @@ mod tests {
             }
             other => panic!("expected AssistantResponse, got {other:?}"),
         }
-        assert!(response.thinking.is_none());
+        assert!(response.thinking.is_empty());
     }
 
     // Tests for AnthropicImageSource with base64 and url types

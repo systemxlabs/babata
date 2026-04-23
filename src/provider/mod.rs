@@ -73,7 +73,7 @@ pub struct GenerationRequest<'a> {
 
 pub struct GenerationResponse {
     pub message: Message,
-    pub thinking: Option<Message>,
+    pub thinking: Vec<Message>,
 }
 
 #[derive(Debug, Clone, Copy)]

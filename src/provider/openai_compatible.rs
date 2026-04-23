@@ -260,17 +260,15 @@ impl Provider for OpenAICompatibleProvider {
 
         let choice = response_body.choices.remove(0);
 
-        let thinking = choice.message.reasoning_content.clone().and_then(|rc| {
-            if rc.trim().is_empty() {
-                None
-            } else {
-                Some(Message::AssistantThinking {
-                    content: rc,
-                    signature: None,
-                    created_at: Utc::now(),
-                })
-            }
-        });
+        let thinking = if let Some(rc) = choice.message.reasoning_content {
+            vec![Message::AssistantThinking {
+                content: rc,
+                signature: None,
+                created_at: Utc::now(),
+            }]
+        } else {
+            vec![]
+        };
 
         if let Some(tool_calls) = choice.message.tool_calls {
             let mut parsed_calls = Vec::with_capacity(tool_calls.len());
