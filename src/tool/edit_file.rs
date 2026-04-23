@@ -8,6 +8,17 @@ use crate::{
     tool::{Tool, ToolContext, ToolSpec, parse_tool_args},
 };
 
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct EditFileArgs {
+    #[schemars(description = "Path to the file to edit")]
+    file_path: String,
+    #[schemars(description = "Exact text to find (must be unique in file)")]
+    old_string: String,
+    #[schemars(description = "Replacement text")]
+    new_string: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct EditFileTool {
     spec: ToolSpec,
@@ -82,17 +93,6 @@ impl Tool for EditFileTool {
 
         Ok(format!("Edited {}\n{}", file_path, diff))
     }
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-struct EditFileArgs {
-    #[schemars(description = "Path to the file to edit")]
-    file_path: String,
-    #[schemars(description = "Exact text to find (must be unique in file)")]
-    old_string: String,
-    #[schemars(description = "Replacement text")]
-    new_string: String,
 }
 
 /// Generate a compact unified diff between old and new file content
