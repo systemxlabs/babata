@@ -59,10 +59,11 @@ mod tests {
         let context = ToolContext::test();
         let _ = setup_test_dir(&context);
         let results = vec![1, 2, 3];
-        let output = process_query_results_with_truncation(&results, &context, "test_tool").unwrap();
-        
+        let output =
+            process_query_results_with_truncation(&results, &context, "test_tool").unwrap();
+
         assert_eq!(output, "[1,2,3]");
-        
+
         // Verify no file was created
         let log_path = get_query_log_path(&context, "test_tool").unwrap();
         assert!(!log_path.exists());
@@ -74,30 +75,30 @@ mod tests {
         let _ = setup_test_dir(&context);
         let results: Vec<i32> = (0..110).collect();
         let tool_name = "test_tool_trunc";
-        
+
         let output = process_query_results_with_truncation(&results, &context, tool_name).unwrap();
-        
+
         // Check header
         assert!(output.contains("results truncated"));
         assert!(output.contains("showing last 100 rows"));
-        
+
         // Check truncated content (last 100: 10 to 109)
         let json_part = output.split('\n').next_back().unwrap();
         let decoded: Vec<i32> = serde_json::from_str(json_part).unwrap();
         assert_eq!(decoded.len(), 100);
         assert_eq!(decoded[0], 10);
         assert_eq!(decoded[99], 109);
-        
+
         // Verify file creation and content
         let log_path = get_query_log_path(&context, tool_name).unwrap();
         assert!(log_path.exists());
-        
+
         let file_content = fs::read_to_string(&log_path).unwrap();
         let full_results: Vec<i32> = serde_json::from_str(&file_content).unwrap();
         assert_eq!(full_results.len(), 110);
         assert_eq!(full_results[0], 0);
         assert_eq!(full_results[109], 109);
-        
+
         // Cleanup
         let _ = fs::remove_file(log_path);
     }
@@ -107,10 +108,11 @@ mod tests {
         let context = ToolContext::test();
         let _ = setup_test_dir(&context);
         let results: Vec<i32> = vec![];
-        let output = process_query_results_with_truncation(&results, &context, "test_tool_empty").unwrap();
-        
+        let output =
+            process_query_results_with_truncation(&results, &context, "test_tool_empty").unwrap();
+
         assert_eq!(output, "[]");
-        
+
         let log_path = get_query_log_path(&context, "test_tool_empty").unwrap();
         assert!(!log_path.exists());
     }
