@@ -3,7 +3,6 @@ use axum::{
     extract::{Path, Query, State},
 };
 use serde::Deserialize;
-use std::str::FromStr;
 
 use crate::{BabataResult, error::BabataError, memory::MessageRecord};
 
@@ -16,23 +15,8 @@ pub(crate) struct MessageQueryParams {
     limit: usize,
     #[serde(default)]
     offset: usize,
-    #[serde(default, deserialize_with = "deserialize_message_type")]
+    #[serde(default)]
     message_type: Option<crate::memory::MessageType>,
-}
-
-fn deserialize_message_type<'de, D>(
-    deserializer: D,
-) -> Result<Option<crate::memory::MessageType>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let s = Option::<String>::deserialize(deserializer)?;
-    match s {
-        Some(val) => crate::memory::MessageType::from_str(&val)
-            .map(Some)
-            .map_err(serde::de::Error::custom),
-        None => Ok(None),
-    }
 }
 
 pub(super) async fn handle(

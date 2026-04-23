@@ -11,22 +11,13 @@ use super::{HttpApp, ensure_task_exists, parse_task_id};
 const MAX_LIMIT: usize = 1000;
 
 /// Supported log levels for filtering.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
 pub enum LogLevel {
     Error,
     Warn,
     Info,
     Debug,
-}
-
-impl<'de> serde::Deserialize<'de> for LogLevel {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        s.parse::<LogLevel>().map_err(serde::de::Error::custom)
-    }
 }
 
 impl std::str::FromStr for LogLevel {
@@ -209,22 +200,18 @@ mod tests {
     use super::LogLevel;
 
     #[test]
-    fn log_level_from_str_parses_case_insensitive() {
-        assert_eq!("ERROR".parse::<LogLevel>().unwrap(), LogLevel::Error);
-        assert_eq!("error".parse::<LogLevel>().unwrap(), LogLevel::Error);
-        assert_eq!("WARN".parse::<LogLevel>().unwrap(), LogLevel::Warn);
-        assert_eq!("warn".parse::<LogLevel>().unwrap(), LogLevel::Warn);
-        assert_eq!("WARNING".parse::<LogLevel>().unwrap(), LogLevel::Warn);
-        assert_eq!("INFO".parse::<LogLevel>().unwrap(), LogLevel::Info);
-        assert_eq!("info".parse::<LogLevel>().unwrap(), LogLevel::Info);
-        assert_eq!("DEBUG".parse::<LogLevel>().unwrap(), LogLevel::Debug);
-        assert_eq!("debug".parse::<LogLevel>().unwrap(), LogLevel::Debug);
+    fn log_level_deserialization_standard_case() {
+        assert_eq!(serde_json::from_str::<LogLevel>("\"ERROR\"").unwrap(), LogLevel::Error);
+        assert_eq!(serde_json::from_str::<LogLevel>("\"WARN\"").unwrap(), LogLevel::Warn);
+        assert_eq!(serde_json::from_str::<LogLevel>("\"INFO\"").unwrap(), LogLevel::Info);
+        assert_eq!(serde_json::from_str::<LogLevel>("\"DEBUG\"").unwrap(), LogLevel::Debug);
     }
 
     #[test]
-    fn log_level_from_str_rejects_invalid() {
-        let err = "TRACE".parse::<LogLevel>().expect_err("TRACE should fail");
-        assert!(err.to_string().contains("Invalid log level"));
+    fn log_level_deserialization_rejects_invalid_or_lowercase() {
+        assert!(serde_json::from_str::<LogLevel>("\"error\"").is_err());
+        assert!(serde_json::from_str::<LogLevel>("\"WARNING\"").is_err());
+        assert!(serde_json::from_str::<LogLevel>("\"TRACE\"").is_err());
     }
 
     #[test]
