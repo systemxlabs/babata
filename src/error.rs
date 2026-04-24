@@ -61,18 +61,17 @@ impl BabataError {
 
 impl std::fmt::Display for BabataError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            BabataError::InvalidInput(msg, loc) => {
-                write!(f, "Invalid input error at {}: {}", loc, msg)
-            }
-            BabataError::NotFound(msg, loc) => write!(f, "Not found error at {}: {}", loc, msg),
-            BabataError::Config(msg, loc) => write!(f, "Config error at {}: {}", loc, msg),
-            BabataError::Provider(msg, loc) => write!(f, "Provider error at {}: {}", loc, msg),
-            BabataError::Memory(msg, loc) => write!(f, "Memory error at {}: {}", loc, msg),
-            BabataError::Tool(msg, loc) => write!(f, "Tool error at {}: {}", loc, msg),
-            BabataError::Channel(msg, loc) => write!(f, "Channel error at {}: {}", loc, msg),
-            BabataError::Internal(msg, loc) => write!(f, "Internal error at {}: {}", loc, msg),
-        }
+        let (category, msg, loc) = match self {
+            BabataError::InvalidInput(msg, loc) => ("Invalid input", msg, loc),
+            BabataError::NotFound(msg, loc) => ("Not found", msg, loc),
+            BabataError::Config(msg, loc) => ("Config", msg, loc),
+            BabataError::Provider(msg, loc) => ("Provider", msg, loc),
+            BabataError::Memory(msg, loc) => ("Memory", msg, loc),
+            BabataError::Tool(msg, loc) => ("Tool", msg, loc),
+            BabataError::Channel(msg, loc) => ("Channel", msg, loc),
+            BabataError::Internal(msg, loc) => ("Internal", msg, loc),
+        };
+        write!(f, "{} error at {}: {}", category, loc, msg)
     }
 }
 
