@@ -115,6 +115,8 @@ pub fn detect_shell_type() -> &'static str {
 
 fn create_command(command: &str) -> tokio::process::Command {
     let mut shell_cmd = tokio::process::Command::new(detect_shell_type());
+    shell_cmd.kill_on_drop(true);
+
     match std::env::consts::OS {
         "windows" => {
             let utf8_session_setup = r#"$utf8NoBom = [System.Text.UTF8Encoding]::new($false);
