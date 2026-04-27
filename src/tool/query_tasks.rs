@@ -39,13 +39,7 @@ impl Tool for QueryTasksTool {
     async fn execute(&self, args: &str, context: &ToolContext<'_>) -> BabataResult<String> {
         let QueryTasksArgs { sql } = parse_tool_args(args)?;
 
-        // Basic validation to ensure it's a SELECT query
-        let trimmed = sql.trim().to_uppercase();
-        if !trimmed.starts_with("SELECT") {
-            return Err(crate::error::BabataError::tool(
-                "Only SELECT queries are allowed".to_string(),
-            ));
-        }
+        crate::tool::query_messages::validate_select_query(&sql)?;
 
         let results = self.task_store.query_sql(&sql)?;
         crate::tool::query_messages::process_query_results_with_truncation(
