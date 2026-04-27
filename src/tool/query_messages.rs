@@ -11,6 +11,16 @@ use crate::{
 
 const MAX_ROWS: usize = 100;
 
+pub(crate) fn validate_select_query(sql: &str) -> BabataResult<()> {
+    let trimmed = sql.trim().to_uppercase();
+    if !trimmed.starts_with("SELECT") {
+        return Err(crate::error::BabataError::tool(
+            "Only SELECT queries are allowed".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 pub fn process_query_results_with_truncation<T: serde::Serialize>(
     results: &[T],
     context: &ToolContext<'_>,
@@ -89,13 +99,7 @@ impl Tool for QueryMessagesTool {
     async fn execute(&self, args: &str, context: &ToolContext<'_>) -> BabataResult<String> {
         let QueryMessagesArgs { agent, sql } = parse_tool_args(args)?;
 
-        // Basic validation to ensure it's a SELECT query
-        let trimmed = sql.trim().to_uppercase();
-        if !trimmed.starts_with("SELECT") {
-            return Err(crate::error::BabataError::tool(
-                "Only SELECT queries are allowed".to_string(),
-            ));
-        }
+        validate_select_query(&sql)?;
 
         let agent_home = agent_dir(&agent)?;
         let store = MessageStore::new(&agent_home)?;
