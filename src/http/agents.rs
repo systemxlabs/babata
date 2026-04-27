@@ -19,6 +19,7 @@ use crate::{
 use super::{
     HttpApp,
     file_browser::{BrowsedPath, FileEntry, browse_path, build_file_request},
+    require_non_empty,
 };
 
 pub(super) async fn list() -> BabataResult<Json<ListAgentsResponse>> {
@@ -50,9 +51,7 @@ pub(super) async fn create(
     State(_state): State<HttpApp>,
     Json(request): Json<CreateAgentRequest>,
 ) -> BabataResult<()> {
-    if request.name.trim().is_empty() {
-        return Err(BabataError::invalid_input("name cannot be empty"));
-    }
+    require_non_empty(&request.name, "name")?;
 
     validate_provider_model_selection(&request.provider, &request.model)?;
 

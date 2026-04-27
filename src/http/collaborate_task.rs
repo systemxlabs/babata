@@ -6,21 +6,17 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{BabataResult, error::BabataError, task::CollaborationTaskState};
+use crate::{BabataResult, task::CollaborationTaskState};
 
-use super::HttpApp;
+use super::{HttpApp, require_non_empty};
 
 pub(super) async fn create(
     State(state): State<HttpApp>,
     Path(task_id): Path<Uuid>,
     Json(request): Json<CollaborateTaskRequest>,
 ) -> BabataResult<()> {
-    if request.agent.trim().is_empty() {
-        return Err(BabataError::invalid_input("agent cannot be empty"));
-    }
-    if request.prompt.trim().is_empty() {
-        return Err(BabataError::invalid_input("prompt cannot be empty"));
-    }
+    require_non_empty(&request.agent, "agent")?;
+    require_non_empty(&request.prompt, "prompt")?;
 
     state.task_manager.collaborate_task(task_id, request)?;
     Ok(())

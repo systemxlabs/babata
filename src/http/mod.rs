@@ -204,6 +204,16 @@ pub(crate) fn ensure_task_exists(task_manager: &TaskManager, task_id: Uuid) -> B
     Ok(())
 }
 
+/// Validate that a string field is not empty or whitespace-only.
+pub(crate) fn require_non_empty(field: &str, name: &str) -> BabataResult<()> {
+    if field.trim().is_empty() {
+        return Err(BabataError::invalid_input(format!(
+            "{name} cannot be empty"
+        )));
+    }
+    Ok(())
+}
+
 fn parse_http_addr(raw: &str) -> BabataResult<SocketAddr> {
     raw.parse::<SocketAddr>().map_err(|err| {
         BabataError::config(format!(

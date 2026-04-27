@@ -5,9 +5,9 @@ use axum::{
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::{BabataResult, error::BabataError};
+use crate::BabataResult;
 
-use super::{HttpApp, parse_task_id};
+use super::{HttpApp, parse_task_id, require_non_empty};
 
 pub(super) async fn handle(
     State(state): State<HttpApp>,
@@ -15,12 +15,11 @@ pub(super) async fn handle(
     Json(request): Json<RelaunchTaskRequest>,
 ) -> BabataResult<()> {
     let task_id = parse_task_id(&task_id)?;
-    let reason = request.reason.trim();
-    if reason.is_empty() {
-        return Err(BabataError::invalid_input("reason cannot be empty"));
-    }
+    require_non_empty(&request.reason, "reason")?;
 
-    state.task_manager.relaunch_task(task_id, reason)?;
+    state
+        .task_manager
+        .relaunch_task(task_id, request.reason.trim())?;
     Ok(())
 }
 

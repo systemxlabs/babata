@@ -8,7 +8,7 @@ use crate::{
     task::{CreateTaskRequest, TaskStatus},
 };
 
-use super::HttpApp;
+use super::{HttpApp, require_non_empty};
 
 pub(super) async fn handle(
     State(state): State<HttpApp>,
@@ -17,12 +17,8 @@ pub(super) async fn handle(
     if request.prompt.is_empty() {
         return Err(BabataError::invalid_input("prompt cannot be empty"));
     }
-    if request.description.trim().is_empty() {
-        return Err(BabataError::invalid_input("description cannot be empty"));
-    }
-    if request.agent.trim().is_empty() {
-        return Err(BabataError::invalid_input("agent cannot be empty"));
-    }
+    require_non_empty(&request.description, "description")?;
+    require_non_empty(&request.agent, "agent")?;
 
     let task_id = state.task_manager.create_task(request)?;
     Ok(Json(CreateTaskResponse {
