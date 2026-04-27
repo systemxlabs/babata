@@ -7,7 +7,7 @@ use crate::{
     BabataResult,
     error::BabataError,
     http::http_base_url,
-    tool::{Tool, ToolContext, ToolSpec, parse_tool_args},
+    tool::{Tool, ToolContext, ToolSpec, internal_http_client, parse_tool_args},
 };
 
 #[derive(Debug)]
@@ -24,7 +24,7 @@ impl DeleteTasksTool {
                 description: "Delete multiple tasks by their IDs. Each deletion is attempted and the result (success or failure) is returned for each task.".to_string(),
                 parameters: schemars::schema_for!(DeleteTasksArgs),
             },
-            http_client: Client::new(),
+            http_client: internal_http_client(),
         })
     }
 }

@@ -10,7 +10,7 @@ use crate::{
     http::{CollaborateTaskRequest, http_base_url},
     message::Content,
     task::CollaborationTaskState,
-    tool::{Tool, ToolContext, ToolSpec, parse_tool_args},
+    tool::{Tool, ToolContext, ToolSpec, internal_http_client, parse_tool_args},
 };
 
 const COLLABORATE_POLL_INTERVAL_MS: u64 = 200;
@@ -31,7 +31,7 @@ impl CollaborateTool {
                         .to_string(),
                 parameters: schemars::schema_for!(CollaborateArgs),
             },
-            http_client: Client::new(),
+            http_client: internal_http_client(),
         }
     }
 }

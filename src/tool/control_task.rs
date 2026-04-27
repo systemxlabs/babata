@@ -7,7 +7,7 @@ use crate::{
     BabataResult,
     error::BabataError,
     http::{ControlTaskRequest, TaskAction, http_base_url},
-    tool::{Tool, ToolContext, ToolSpec, parse_tool_args},
+    tool::{Tool, ToolContext, ToolSpec, internal_http_client, parse_tool_args},
 };
 
 #[derive(Debug)]
@@ -26,7 +26,7 @@ impl ControlTaskTool {
                         .to_string(),
                 parameters: schemars::schema_for!(ControlTaskArgs),
             },
-            http_client: Client::new(),
+            http_client: internal_http_client(),
         })
     }
 }

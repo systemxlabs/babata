@@ -26,6 +26,7 @@ pub use grep::*;
 pub use query_messages::*;
 pub use query_tasks::*;
 pub use read_file::*;
+use reqwest::Client;
 pub use shell::*;
 pub use sleep::*;
 pub use steer_task::*;
@@ -122,4 +123,13 @@ pub fn build_tools(
     }
 
     Ok(tool_map)
+}
+
+pub(crate) fn internal_http_client() -> Client {
+    // These requests are always server self-calls and should never be routed
+    // through system proxy settings.
+    Client::builder()
+        .no_proxy()
+        .build()
+        .expect("internal HTTP client configuration should be valid")
 }

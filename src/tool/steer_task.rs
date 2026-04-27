@@ -8,7 +8,7 @@ use crate::{
     error::BabataError,
     http::{SteerTaskRequest, http_base_url},
     message::Content,
-    tool::{Tool, ToolContext, ToolSpec, parse_tool_args},
+    tool::{Tool, ToolContext, ToolSpec, internal_http_client, parse_tool_args},
 };
 
 #[derive(Debug)]
@@ -26,7 +26,7 @@ impl SteerTaskTool {
                     .to_string(),
                 parameters: schemars::schema_for!(SteerTaskArgs),
             },
-            http_client: Client::new(),
+            http_client: internal_http_client(),
         }
     }
 }
