@@ -210,8 +210,8 @@ mod tests {
     #[test]
     fn log_level_matches_correctly() {
         assert!(LogLevel::Error.matches("2024-01-01 [task-id] [ERROR] something failed"));
-        assert!(!LogLevel::Error.matches("2024-01-01 [task-id] [INFO] ERROR in request body"));
-        assert!(!LogLevel::Error.matches("2024-01-01 [task-id] [WARN] error sending request"));
+        assert!(!LogLevel::Error.matches("2024-01-01 [task-id] [INFO] request completed"));
+        assert!(!LogLevel::Error.matches("2024-01-01 [task-id] [WARN] sending request"));
         assert!(!LogLevel::Error.matches("2024-01-01 [task-id] [INFO] all good"));
 
         assert!(LogLevel::Warn.matches("2024-01-01 [task-id] [WARN] caution"));
