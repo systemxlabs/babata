@@ -10,22 +10,9 @@ use crate::{
     BabataResult,
     error::BabataError,
     tool::{Tool, ToolContext, ToolSpec, parse_tool_args, resolve_tool_path},
+    utils::SKIP_DIRS,
 };
 
-// skip these dirs to avoid noise
-const SKIP_DIRS: &[&str] = &[
-    ".git",
-    "node_modules",
-    "__pycache__",
-    ".venv",
-    "venv",
-    ".tox",
-    "dist",
-    "build",
-    "target",
-    ".idea",
-    ".vscode",
-];
 const MAX_MATCHES: usize = 200;
 const MAX_FILES: usize = 5000;
 

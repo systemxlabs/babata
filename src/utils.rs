@@ -51,3 +51,19 @@ pub const fn build_commit() -> Option<&'static str> {
         _ => None,
     }
 }
+
+/// Directories to skip when scanning or listing files (e.g., build artifacts,
+/// dependency caches, IDE metadata).
+pub const SKIP_DIRS: &[&str] = &[
+    ".git",
+    "node_modules",
+    "__pycache__",
+    ".venv",
+    "venv",
+    ".tox",
+    "dist",
+    "build",
+    "target",
+    ".idea",
+    ".vscode",
+];

@@ -3,22 +3,7 @@ use std::path::Path;
 use axum::{body::Body, extract::Request, http::Uri};
 use serde::Serialize;
 
-use crate::{BabataResult, error::BabataError};
-
-// Directories to skip when listing files (same as grep tool)
-const SKIP_DIRS: &[&str] = &[
-    ".git",
-    "node_modules",
-    "__pycache__",
-    ".venv",
-    "venv",
-    ".tox",
-    "dist",
-    "build",
-    "target",
-    ".idea",
-    ".vscode",
-];
+use crate::{BabataResult, error::BabataError, utils::SKIP_DIRS};
 
 /// File or directory entry
 #[derive(Debug, Serialize)]
