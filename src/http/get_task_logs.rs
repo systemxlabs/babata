@@ -20,33 +20,14 @@ pub enum LogLevel {
     Debug,
 }
 
-impl std::str::FromStr for LogLevel {
-    type Err = BabataError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_ascii_uppercase().as_str() {
-            "ERROR" => Ok(LogLevel::Error),
-            "WARN" | "WARNING" => Ok(LogLevel::Warn),
-            "INFO" => Ok(LogLevel::Info),
-            "DEBUG" => Ok(LogLevel::Debug),
-            _ => Err(BabataError::invalid_input(format!(
-                "Invalid log level '{}'. Supported: ERROR, WARN, INFO, DEBUG",
-                s
-            ))),
-        }
-    }
-}
-
 impl LogLevel {
     fn matches(&self, log: &str) -> bool {
         let upper_log = log.to_ascii_uppercase();
-        // Log lines typically look like: "2024-01-01 12:00:00 [INFO] [task-id] message"
-        // We check for the level enclosed in brackets [LEVEL] to avoid false positives in the message body.
         match self {
-            LogLevel::Error => upper_log.contains("[ERROR]"),
-            LogLevel::Warn => upper_log.contains("[WARN]") || upper_log.contains("[WARNING]"),
-            LogLevel::Info => upper_log.contains("[INFO]"),
-            LogLevel::Debug => upper_log.contains("[DEBUG]"),
+            LogLevel::Error => upper_log.contains("ERROR"),
+            LogLevel::Warn => upper_log.contains("WARN"),
+            LogLevel::Info => upper_log.contains("INFO"),
+            LogLevel::Debug => upper_log.contains("DEBUG"),
         }
     }
 }
