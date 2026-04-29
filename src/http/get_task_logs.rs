@@ -23,11 +23,20 @@ pub enum LogLevel {
 impl LogLevel {
     fn matches(&self, log: &str) -> bool {
         let upper_log = log.to_ascii_uppercase();
+        // Log lines may be in logforth default format:
+        //   "2024-01-01T12:00:00   INFO module:file:line [task-id] message"
+        // or bracketed format (tests/back-compat):
+        //   "2024-01-01 [task-id] [INFO] message"
+        let second_token = upper_log.split_whitespace().nth(1);
         match self {
-            LogLevel::Error => upper_log.contains("ERROR"),
-            LogLevel::Warn => upper_log.contains("WARN"),
-            LogLevel::Info => upper_log.contains("INFO"),
-            LogLevel::Debug => upper_log.contains("DEBUG"),
+            LogLevel::Error => upper_log.contains("[ERROR]") || second_token == Some("ERROR"),
+            LogLevel::Warn => {
+                upper_log.contains("[WARN]")
+                    || upper_log.contains("[WARNING]")
+                    || second_token == Some("WARN")
+            }
+            LogLevel::Info => upper_log.contains("[INFO]") || second_token == Some("INFO"),
+            LogLevel::Debug => upper_log.contains("[DEBUG]") || second_token == Some("DEBUG"),
         }
     }
 }
@@ -223,5 +232,38 @@ mod tests {
 
         assert!(LogLevel::Debug.matches("2024-01-01 [task-id] [DEBUG] trace"));
         assert!(!LogLevel::Debug.matches("2024-01-01 [task-id] [INFO] normal"));
+    }
+
+    #[test]
+    fn log_level_matches_logforth_default_format() {
+        // logforth TextLayout default: "2026-04-28T00:00:07.638041+08:00   INFO module:file:line [task-id] message"
+        let info_line = "2026-04-28T00:00:07.638041+08:00   INFO babata::agent::runner: runner.rs:96 [task-id] Provider returned message";
+        let warn_line = "2026-04-28T00:00:07.638041+08:00   WARN babata::http: get_task_logs.rs:42 [task-id] caution";
+        let error_line = "2026-04-28T00:00:07.638041+08:00   ERROR babata::task: manager.rs:15 [task-id] something failed";
+        let debug_line =
+            "2026-04-28T00:00:07.638041+08:00   DEBUG babata::tool: shell.rs:8 [task-id] trace";
+
+        assert!(LogLevel::Info.matches(info_line));
+        assert!(!LogLevel::Error.matches(info_line));
+        assert!(!LogLevel::Warn.matches(info_line));
+        assert!(!LogLevel::Debug.matches(info_line));
+
+        assert!(LogLevel::Warn.matches(warn_line));
+        assert!(!LogLevel::Error.matches(warn_line));
+        assert!(!LogLevel::Info.matches(warn_line));
+
+        assert!(LogLevel::Error.matches(error_line));
+        assert!(!LogLevel::Info.matches(error_line));
+
+        assert!(LogLevel::Debug.matches(debug_line));
+        assert!(!LogLevel::Info.matches(debug_line));
+    }
+
+    #[test]
+    fn log_level_does_not_match_level_in_message_body_for_logforth_format() {
+        // The word "ERROR" appears in the message body, but the actual level is INFO.
+        let line = "2026-04-28T00:00:07.638041+08:00   INFO babata::agent::runner: runner.rs:96 [task-id] ERROR in request body";
+        assert!(!LogLevel::Error.matches(line));
+        assert!(LogLevel::Info.matches(line));
     }
 }
