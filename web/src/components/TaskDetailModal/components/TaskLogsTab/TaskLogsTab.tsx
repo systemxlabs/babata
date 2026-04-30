@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import type { LogLevel } from "@/types"
+import type { LogEntry, LogLevel } from "@/types"
 import { LOG_LEVEL_OPTIONS } from "@/types"
 
 const PAGE_SIZE = 100
@@ -22,45 +22,27 @@ interface TaskLogsTabProps {
   taskId: string
 }
 
-function getLogTone(log: string) {
-  const upperLog = log.toUpperCase()
-
-  if (upperLog.includes("[ERROR]") || upperLog.includes(" ERROR ")) {
-    return {
-      level: "ERROR",
-      className: "border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-300",
-    }
-  }
-
-  if (upperLog.includes("[WARN]") || upperLog.includes(" WARNING ") || upperLog.includes(" WARN ")) {
-    return {
-      level: "WARN",
-      className: "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-    }
-  }
-
-  if (upperLog.includes("[INFO]") || upperLog.includes(" INFO ")) {
-    return {
-      level: "INFO",
-      className: "border-sky-500/20 bg-sky-500/10 text-sky-700 dark:text-sky-300",
-    }
-  }
-
-  if (upperLog.includes("[DEBUG]") || upperLog.includes(" DEBUG ")) {
-    return {
-      level: "DEBUG",
-      className: "border-violet-500/20 bg-violet-500/10 text-violet-700 dark:text-violet-300",
-    }
-  }
-
-  return {
-    level: "LOG",
-    className: "border-slate-500/20 bg-slate-500/10 text-slate-700 dark:text-slate-300",
+function getLevelStyle(level: string) {
+  switch (level.toUpperCase()) {
+    case "ERROR":
+      return "border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-300"
+    case "WARN":
+      return "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+    case "INFO":
+      return "border-sky-500/20 bg-sky-500/10 text-sky-700 dark:text-sky-300"
+    case "DEBUG":
+      return "border-violet-500/20 bg-violet-500/10 text-violet-700 dark:text-violet-300"
+    default:
+      return "border-slate-500/20 bg-slate-500/10 text-slate-700 dark:text-slate-300"
   }
 }
 
+function formatLogLine(log: LogEntry): string {
+  return `${log.timestamp} [${log.level}] ${log.target} (${log.file}:${log.line}) ${log.message}`
+}
+
 export function TaskLogsTab({ taskId }: TaskLogsTabProps) {
-  const [logs, setLogs] = useState<string[]>([])
+  const [logs, setLogs] = useState<LogEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -107,7 +89,8 @@ export function TaskLogsTab({ taskId }: TaskLogsTabProps) {
 
   const handleCopyLogs = async () => {
     try {
-      await navigator.clipboard.writeText(logs.join("\n"))
+      const text = logs.map(formatLogLine).join("\n")
+      await navigator.clipboard.writeText(text)
       setCopied(true)
       window.setTimeout(() => setCopied(false), 1600)
     } catch {
@@ -150,24 +133,31 @@ export function TaskLogsTab({ taskId }: TaskLogsTabProps) {
         onScroll={handleScroll}
       >
         <div className="space-y-3 p-4">
-          {logs.map((log, index) => {
-            const tone = getLogTone(log)
-
-            return (
-              <div
-                key={`${index}-${log}`}
-                className="grid gap-3 rounded-[1.2rem] border border-border/70 bg-background/70 p-4 md:grid-cols-[56px_80px_minmax(0,1fr)]"
-              >
-                <div className="text-xs font-medium text-muted-foreground">#{index + 1}</div>
-                <Badge variant="outline" className={`w-fit rounded-full ${tone.className}`}>
-                  {tone.level}
+          {logs.map((log, index) => (
+            <div
+              key={`${index}-${log.timestamp}-${log.message.slice(0, 20)}`}
+              className="rounded-[1.2rem] border border-border/70 bg-background/70 p-4"
+            >
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <span className="text-xs font-medium text-muted-foreground">
+                  {log.timestamp}
+                </span>
+                <Badge
+                  variant="outline"
+                  className={`w-fit rounded-full ${getLevelStyle(log.level)}`}
+                >
+                  {log.level}
                 </Badge>
-                <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-[13px] leading-6 text-foreground">
-                  <code>{log}</code>
-                </pre>
+                <span className="text-xs text-muted-foreground">{log.target}</span>
+                <span className="text-xs text-muted-foreground">
+                  {log.file}:{log.line}
+                </span>
               </div>
-            )
-          })}
+              <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-[13px] leading-6 text-foreground">
+                <code>{log.message}</code>
+              </pre>
+            </div>
+          ))}
 
           {loadingMore ? (
             <div className="flex items-center justify-center py-3 text-sm text-muted-foreground">

@@ -10,6 +10,7 @@ import type {
   CreateTaskResponse,
   FileEntry,
   GetAgentResponse,
+  LogEntry,
   MessageContentPart,
   MessageRecord,
   ProviderConfig,
@@ -21,6 +22,7 @@ import type {
   TaskControlAction,
   TaskFilter,
   TaskListResponse,
+  TaskLogsResponse,
   TaskStatus,
   TestProviderConnectionResponse,
   TasksResponse,
@@ -127,19 +129,22 @@ export async function getTaskFile(taskId: string, path: string): Promise<string>
   });
 }
 
-export function getTaskLogs(
+export async function getTaskLogs(
   taskId: string,
   limit?: number,
   offset?: number,
   level?: string
-): Promise<string[]> {
+): Promise<LogEntry[]> {
   const params = new URLSearchParams();
   if (limit !== undefined) params.append('limit', limit.toString());
   if (offset !== undefined) params.append('offset', offset.toString());
   if (level && level !== 'all') params.append('level', level);
 
   const queryString = params.toString();
-  return fetchApi<string[]>(`/tasks/${taskId}/logs${queryString ? `?${queryString}` : ''}`);
+  const response = await fetchApi<TaskLogsResponse>(
+    `/tasks/${taskId}/logs${queryString ? `?${queryString}` : ''}`
+  );
+  return response.logs;
 }
 
 interface MessageRecordApiResponse extends Omit<MessageRecord, 'content' | 'tool_calls'> {

@@ -211,7 +211,18 @@ export const STATUS_LABELS: Record<TaskStatus | 'all', string> = {
   canceled: '已取消',
 };
 
-export type LogEntry = string;
+export interface LogEntry {
+  timestamp: string;
+  level: string;
+  target: string;
+  file: string;
+  line: number;
+  message: string;
+}
+
+export interface TaskLogsResponse {
+  logs: LogEntry[];
+}
 
 export type LogLevel = 'ERROR' | 'WARN' | 'INFO' | 'DEBUG';
 
