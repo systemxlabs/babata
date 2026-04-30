@@ -112,10 +112,10 @@ fn process_log_line(
 
     // Coarse filter 2: if level filter is present, do a quick
     // string check to avoid parsing lines that definitely don't match
-    if let Some(level) = level_filter {
-        if !line.contains(level.as_str()) {
-            return None;
-        }
+    if let Some(level) = level_filter
+        && !line.contains(level.as_str())
+    {
+        return None;
     }
 
     // Deserialize the JSON log line
@@ -131,7 +131,9 @@ fn process_log_line(
 
     // Precise filter 2: if level filter is present,
     // perform exact level comparison
-    if let Some(level) = level_filter && !level.matches_precise(raw_level) {
+    if let Some(level) = level_filter
+        && !level.matches_precise(raw_level)
+    {
         return None;
     }
 
