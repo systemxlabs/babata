@@ -473,16 +473,9 @@ function ProviderConnectionTestDialog({
   onTest: (provider: ProviderConfig, model: string) => Promise<{ latencyMs: number }>
 }) {
   const [testLoading, setTestLoading] = useState(false)
-  const [testModel, setTestModel] = useState("")
+  const [testModel, setTestModel] = useState(provider?.models[0]?.id ?? "")
   const [testResult, setTestResult] = useState<string | null>(null)
   const [testError, setTestError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!open || !provider) return
-    setTestModel(provider.models[0]?.id ?? "")
-    setTestResult(null)
-    setTestError(null)
-  }, [open, provider])
 
   if (!provider) return null
 
@@ -792,6 +785,7 @@ export function Providers() {
       />
 
       <ProviderConnectionTestDialog
+        key={testModalOpen ? selectedProvider?.name ?? "test" : "closed"}
         provider={selectedProvider}
         open={testModalOpen}
         onOpenChange={setTestModalOpen}

@@ -384,6 +384,7 @@ export function Tasks() {
       />
 
       <DeleteConfirmModal
+        key={taskToDelete?.task_id ?? "delete-modal"}
         isOpen={showDeleteModal}
         taskId={taskToDelete?.task_id ?? ""}
         taskDescription={taskToDelete?.description ?? ""}

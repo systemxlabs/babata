@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { AlertTriangle, LoaderCircle } from "lucide-react"
 
 import {
@@ -31,12 +31,6 @@ export function DeleteConfirmModal({
 }: DeleteConfirmModalProps) {
   const [isDeleting, setIsDeleting] = useState(false)
 
-  useEffect(() => {
-    if (isOpen) {
-      setIsDeleting(false)
-    }
-  }, [isOpen, taskId])
-
   const handleConfirm = async () => {
     setIsDeleting(true)
     try {
@@ -47,7 +41,15 @@ export function DeleteConfirmModal({
   }
 
   return (
-    <AlertDialog open={isOpen} onOpenChange={(open) => (!open ? onCancel() : undefined)}>
+    <AlertDialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) {
+          setIsDeleting(false)
+          onCancel()
+        }
+      }}
+    >
       <AlertDialogContent className="rounded-[1.75rem] border-border/70 bg-card/95 shadow-[0_24px_90px_-40px_rgba(15,23,42,0.48)] backdrop-blur-2xl">
         <AlertDialogHeader className="space-y-4">
           <div className="flex items-center gap-3">
