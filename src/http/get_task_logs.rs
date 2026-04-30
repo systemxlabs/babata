@@ -2,7 +2,7 @@ use axum::{
     Json,
     extract::{Path, Query, State},
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{BabataResult, error::BabataError, utils::babata_dir};
 
@@ -21,14 +21,17 @@ pub enum LogLevel {
 }
 
 impl LogLevel {
-    fn matches(&self, log: &str) -> bool {
-        let upper_log = log.to_ascii_uppercase();
+    fn as_str(&self) -> &'static str {
         match self {
-            LogLevel::Error => upper_log.contains("ERROR"),
-            LogLevel::Warn => upper_log.contains("WARN"),
-            LogLevel::Info => upper_log.contains("INFO"),
-            LogLevel::Debug => upper_log.contains("DEBUG"),
+            LogLevel::Error => "ERROR",
+            LogLevel::Warn => "WARN",
+            LogLevel::Info => "INFO",
+            LogLevel::Debug => "DEBUG",
         }
+    }
+
+    fn matches_precise(&self, record_level: &str) -> bool {
+        self.as_str() == record_level
     }
 }
 
@@ -43,11 +46,28 @@ pub(crate) struct LogQueryParams {
     level: Option<LogLevel>,
 }
 
+/// A single log entry returned by the task logs API.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct LogEntry {
+    pub timestamp: String,
+    pub level: String,
+    pub target: String,
+    pub file: String,
+    pub line: u32,
+    pub message: String,
+}
+
+/// Response body for the task logs endpoint (replaces `Vec<String>`).
+#[derive(Debug, Serialize, PartialEq, Eq)]
+pub struct GetTaskLogsResponse {
+    pub logs: Vec<LogEntry>,
+}
+
 pub(super) async fn handle(
     State(state): State<HttpApp>,
     Path(task_id): Path<String>,
     Query(params): Query<LogQueryParams>,
-) -> BabataResult<Json<Vec<String>>> {
+) -> BabataResult<Json<GetTaskLogsResponse>> {
     let task_id = parse_task_id(&task_id)?;
     ensure_task_exists(&state.task_manager, task_id)?;
 
@@ -71,7 +91,58 @@ pub(super) async fn handle(
     )
     .await
     .map_err(|err| BabataError::invalid_input(format!("Failed to read logs: {}", err)))?;
-    Ok(Json(logs))
+    Ok(Json(GetTaskLogsResponse { logs }))
+}
+
+/// Process a single log line through the "coarse filter → deserialize → precise filter" pipeline.
+///
+/// Returns `Some(LogEntry)` when the line belongs to the requested task and passes the level filter.
+/// Non-JSON lines or lines that fail any filter stage are silently dropped.
+fn process_log_line(
+    line: &str,
+    task_id: &str,
+    level_filter: Option<&LogLevel>,
+) -> Option<LogEntry> {
+    let task_marker = format!("[{}]", task_id);
+
+    // Coarse filter 1: check if line contains the task marker
+    if !line.contains(&task_marker) {
+        return None;
+    }
+
+    // Coarse filter 2: if level filter is present, do a quick
+    // string check to avoid parsing lines that definitely don't match
+    if let Some(level) = level_filter {
+        if !line.contains(level.as_str()) {
+            return None;
+        }
+    }
+
+    // Deserialize the JSON log line
+    let value: serde_json::Value = serde_json::from_str(line).ok()?;
+
+    let raw_level = value.get("level")?.as_str()?;
+    let raw_message = value.get("message")?.as_str()?;
+
+    // Precise filter 1: confirm message contains task_id
+    if !raw_message.contains(&task_marker) {
+        return None;
+    }
+
+    // Precise filter 2: if level filter is present,
+    // perform exact level comparison
+    if let Some(level) = level_filter && !level.matches_precise(raw_level) {
+        return None;
+    }
+
+    Some(LogEntry {
+        timestamp: value.get("timestamp")?.as_str()?.to_string(),
+        level: raw_level.to_string(),
+        target: value.get("target")?.as_str()?.to_string(),
+        file: value.get("file")?.as_str()?.to_string(),
+        line: value.get("line")?.as_u64()? as u32,
+        message: raw_message.to_string(),
+    })
 }
 
 /// Read logs from log files in chronological order with pagination.
@@ -81,7 +152,7 @@ async fn read_task_logs(
     offset: usize,
     limit: usize,
     level_filter: Option<LogLevel>,
-) -> Result<Vec<String>, std::io::Error> {
+) -> Result<Vec<LogEntry>, std::io::Error> {
     let log_dir = babata_dir()
         .map_err(|e| std::io::Error::other(e.to_string()))?
         .join("logs");
@@ -108,7 +179,7 @@ async fn read_task_logs(
     let target_start = offset;
     let target_end = offset.saturating_add(limit);
     let mut current_line_count: usize = 0;
-    let mut result: Vec<String> = Vec::new();
+    let mut result: Vec<LogEntry> = Vec::new();
 
     // Iterate through files in chronological order
     for (path, _) in log_files {
@@ -121,19 +192,11 @@ async fn read_task_logs(
         match tokio::fs::read_to_string(&path).await {
             Ok(content) => {
                 let lines: Vec<&str> = content.lines().collect();
-                let mut matching_lines_in_file: Vec<String> = Vec::new();
+                let mut matching_lines_in_file: Vec<LogEntry> = Vec::new();
 
-                // Filter lines containing [task_id]
-                let task_marker = format!("[{}]", task_id);
                 for line in &lines {
-                    if line.contains(&task_marker) {
-                        // Apply level filter if specified
-                        if let Some(ref level) = level_filter
-                            && !level.matches(line)
-                        {
-                            continue;
-                        }
-                        matching_lines_in_file.push(line.to_string());
+                    if let Some(entry) = process_log_line(line, task_id, level_filter.as_ref()) {
+                        matching_lines_in_file.push(entry);
                     }
                 }
 
@@ -178,7 +241,7 @@ async fn read_task_logs(
 
 #[cfg(test)]
 mod tests {
-    use super::LogLevel;
+    use super::{LogEntry, LogLevel};
 
     #[test]
     fn log_level_deserialization_standard_case() {
@@ -208,20 +271,150 @@ mod tests {
     }
 
     #[test]
-    fn log_level_matches_correctly() {
-        assert!(LogLevel::Error.matches("2024-01-01 [task-id] [ERROR] something failed"));
-        assert!(!LogLevel::Error.matches("2024-01-01 [task-id] [INFO] request completed"));
-        assert!(!LogLevel::Error.matches("2024-01-01 [task-id] [WARN] sending request"));
-        assert!(!LogLevel::Error.matches("2024-01-01 [task-id] [INFO] all good"));
+    fn precise_level_filtering_matches_correctly() {
+        assert!(LogLevel::Error.matches_precise("ERROR"));
+        assert!(!LogLevel::Error.matches_precise("INFO"));
+        assert!(LogLevel::Warn.matches_precise("WARN"));
+        assert!(!LogLevel::Warn.matches_precise("WARNING"));
+        assert!(LogLevel::Info.matches_precise("INFO"));
+        assert!(LogLevel::Debug.matches_precise("DEBUG"));
+    }
 
-        assert!(LogLevel::Warn.matches("2024-01-01 [task-id] [WARN] caution"));
-        assert!(LogLevel::Warn.matches("2024-01-01 [task-id] [WARNING] caution"));
-        assert!(!LogLevel::Warn.matches("2024-01-01 [task-id] [ERROR] failed"));
+    #[test]
+    fn message_keyword_false_positive_is_avoided() {
+        // A log line where the message body contains "ERROR" but the real level is INFO.
+        // With the old substring matching this would be a false positive for LogLevel::Error.
+        let line = r#"{"timestamp":"2026-04-29T10:00:00+08:00","level":"INFO","target":"t","file":"f.rs","line":1,"message":"[task-1] ERROR in request body"}"#;
+        let value: serde_json::Value = serde_json::from_str(line).unwrap();
+        assert!(!LogLevel::Error.matches_precise(value["level"].as_str().unwrap()));
+        assert_eq!(value["level"].as_str().unwrap(), "INFO");
+    }
 
-        assert!(LogLevel::Info.matches("2024-01-01 [task-id] [INFO] started"));
-        assert!(!LogLevel::Info.matches("2024-01-01 [task-id] [DEBUG] trace"));
+    #[test]
+    fn non_json_line_is_dropped() {
+        let legacy = "2024-01-01 [task-id] [INFO] old format log line";
+        let result = super::process_log_line(legacy, "task-id", None);
+        assert!(
+            result.is_none(),
+            "non-JSON lines must be dropped without legacy fallback"
+        );
+    }
 
-        assert!(LogLevel::Debug.matches("2024-01-01 [task-id] [DEBUG] trace"));
-        assert!(!LogLevel::Debug.matches("2024-01-01 [task-id] [INFO] normal"));
+    #[test]
+    fn log_entry_serialization_roundtrip() {
+        let entry = LogEntry {
+            timestamp: "2026-04-29T10:00:00+08:00".to_string(),
+            level: "INFO".to_string(),
+            target: "babata::test".to_string(),
+            file: "test.rs".to_string(),
+            line: 42,
+            message: "[task-1] hello".to_string(),
+        };
+        let json = serde_json::to_string(&entry).expect("serialize");
+        assert!(json.contains("\"level\":\"INFO\""));
+        assert!(json.contains("\"message\":\"[task-1] hello\""));
+    }
+
+    #[test]
+    fn log_level_as_str_returns_uppercase() {
+        assert_eq!(LogLevel::Error.as_str(), "ERROR");
+        assert_eq!(LogLevel::Warn.as_str(), "WARN");
+        assert_eq!(LogLevel::Info.as_str(), "INFO");
+        assert_eq!(LogLevel::Debug.as_str(), "DEBUG");
+    }
+
+    #[test]
+    fn process_log_line_json_parsing_and_filtering() {
+        let info_line = r#"{"timestamp":"2026-04-29T10:00:00+08:00","level":"INFO","target":"t","file":"f.rs","line":1,"message":"[abc] started"}"#;
+        let error_line = r#"{"timestamp":"2026-04-29T10:00:01+08:00","level":"ERROR","target":"t","file":"f.rs","line":2,"message":"[abc] failed"}"#;
+        let other_task = r#"{"timestamp":"2026-04-29T10:00:02+08:00","level":"INFO","target":"t","file":"f.rs","line":3,"message":"[xyz] other task"}"#;
+
+        // No level filter
+        let e1 = super::process_log_line(info_line, "abc", None);
+        assert!(e1.is_some());
+        assert_eq!(e1.unwrap().level, "INFO");
+
+        let e2 = super::process_log_line(error_line, "abc", None);
+        assert!(e2.is_some());
+        assert_eq!(e2.unwrap().level, "ERROR");
+
+        let e3 = super::process_log_line(other_task, "abc", None);
+        assert!(e3.is_none());
+
+        // With level filter = Error
+        let e4 = super::process_log_line(info_line, "abc", Some(&LogLevel::Error));
+        assert!(
+            e4.is_none(),
+            "INFO line should be filtered out by Error level"
+        );
+
+        let e5 = super::process_log_line(error_line, "abc", Some(&LogLevel::Error));
+        assert!(e5.is_some());
+        assert_eq!(e5.unwrap().level, "ERROR");
+    }
+
+    #[test]
+    fn process_log_line_message_keyword_false_positive() {
+        // Message contains "ERROR" but actual level is WARN.
+        let line = r#"{"timestamp":"2026-04-29T10:00:00+08:00","level":"WARN","target":"t","file":"f.rs","line":1,"message":"[abc] Failed to parse ERROR response"}"#;
+
+        let result = super::process_log_line(line, "abc", Some(&LogLevel::Error));
+        assert!(
+            result.is_none(),
+            "should not match Error level when actual level is WARN"
+        );
+
+        let result_warn = super::process_log_line(line, "abc", Some(&LogLevel::Warn));
+        assert!(result_warn.is_some());
+        assert_eq!(result_warn.unwrap().level, "WARN");
+    }
+
+    #[test]
+    fn process_log_line_non_json_is_dropped() {
+        let legacy = "2024-01-01 [abc] [INFO] old format log line";
+
+        // Without level filter: must return None (no legacy UNKNOWN fallback)
+        let result = super::process_log_line(legacy, "abc", None);
+        assert!(
+            result.is_none(),
+            "legacy line must be dropped, not returned as UNKNOWN"
+        );
+
+        // With level filter: also None
+        let result_filtered = super::process_log_line(legacy, "abc", Some(&LogLevel::Info));
+        assert!(
+            result_filtered.is_none(),
+            "legacy line must be dropped when level filter is active"
+        );
+    }
+
+    #[test]
+    fn process_log_line_task_id_filtering() {
+        let line = r#"{"timestamp":"2026-04-29T10:00:00+08:00","level":"INFO","target":"t","file":"f.rs","line":1,"message":"[task-a] hello"}"#;
+
+        assert!(super::process_log_line(line, "task-a", None).is_some());
+        assert!(super::process_log_line(line, "task-b", None).is_none());
+    }
+
+    #[test]
+    fn process_log_line_pagination_semantics_preserved() {
+        // process_log_line itself does not implement pagination;
+        // we verify that the filtering pipeline does not drop or reorder lines
+        // in a way that would break the caller's offset/limit arithmetic.
+        let lines: Vec<&str> = vec![
+            r#"{"timestamp":"2026-04-29T10:00:00+08:00","level":"INFO","target":"t","file":"f.rs","line":1,"message":"[t1] line 1"}"#,
+            r#"{"timestamp":"2026-04-29T10:00:01+08:00","level":"INFO","target":"t","file":"f.rs","line":2,"message":"[t1] line 2"}"#,
+            r#"{"timestamp":"2026-04-29T10:00:02+08:00","level":"INFO","target":"t","file":"f.rs","line":3,"message":"[t1] line 3"}"#,
+        ];
+
+        let filtered: Vec<_> = lines
+            .iter()
+            .filter_map(|line| super::process_log_line(line, "t1", None))
+            .collect();
+
+        assert_eq!(filtered.len(), 3);
+        assert_eq!(filtered[0].message, "[t1] line 1");
+        assert_eq!(filtered[1].message, "[t1] line 2");
+        assert_eq!(filtered[2].message, "[t1] line 3");
     }
 }
