@@ -47,7 +47,7 @@ pub(crate) struct LogQueryParams {
 }
 
 /// A single log entry returned by the task logs API.
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct LogEntry {
     pub timestamp: String,
     pub level: String,
@@ -118,33 +118,23 @@ fn process_log_line(
         return None;
     }
 
-    // Deserialize the JSON log line
-    let value: serde_json::Value = serde_json::from_str(line).ok()?;
-
-    let raw_level = value.get("level")?.as_str()?;
-    let raw_message = value.get("message")?.as_str()?;
+    // Deserialize the JSON log line directly into LogEntry
+    let entry: LogEntry = serde_json::from_str(line).ok()?;
 
     // Precise filter 1: confirm message contains task_id
-    if !raw_message.contains(&task_marker) {
+    if !entry.message.contains(&task_marker) {
         return None;
     }
 
     // Precise filter 2: if level filter is present,
     // perform exact level comparison
     if let Some(level) = level_filter
-        && !level.matches_precise(raw_level)
+        && !level.matches_precise(&entry.level)
     {
         return None;
     }
 
-    Some(LogEntry {
-        timestamp: value.get("timestamp")?.as_str()?.to_string(),
-        level: raw_level.to_string(),
-        target: value.get("target")?.as_str()?.to_string(),
-        file: value.get("file")?.as_str()?.to_string(),
-        line: value.get("line")?.as_u64()? as u32,
-        message: raw_message.to_string(),
-    })
+    Some(entry)
 }
 
 /// Read logs from log files in chronological order with pagination.
@@ -287,9 +277,9 @@ mod tests {
         // A log line where the message body contains "ERROR" but the real level is INFO.
         // With the old substring matching this would be a false positive for LogLevel::Error.
         let line = r#"{"timestamp":"2026-04-29T10:00:00+08:00","level":"INFO","target":"t","file":"f.rs","line":1,"message":"[task-1] ERROR in request body"}"#;
-        let value: serde_json::Value = serde_json::from_str(line).unwrap();
-        assert!(!LogLevel::Error.matches_precise(value["level"].as_str().unwrap()));
-        assert_eq!(value["level"].as_str().unwrap(), "INFO");
+        let entry: LogEntry = serde_json::from_str(line).unwrap();
+        assert!(!LogLevel::Error.matches_precise(&entry.level));
+        assert_eq!(entry.level, "INFO");
     }
 
     #[test]
