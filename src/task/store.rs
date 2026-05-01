@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::{BabataResult, error::BabataError, task::TaskStatus, utils::babata_dir};
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TaskRecord {
     pub task_id: Uuid,
     pub description: String,

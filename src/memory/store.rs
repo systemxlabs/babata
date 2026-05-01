@@ -16,7 +16,7 @@ use crate::{
 };
 
 /// Database record structure that maps 1:1 with the messages table schema.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MessageRecord {
     pub task_id: Uuid,
     pub message_type: MessageType,

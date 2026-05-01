@@ -18,7 +18,7 @@ pub enum ChannelConfig {
     Wechat(WechatChannelConfig),
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct TelegramChannelConfig {
     pub name: String,
     pub bot_token: String,
