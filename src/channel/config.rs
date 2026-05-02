@@ -45,7 +45,7 @@ impl TelegramChannelConfig {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct WechatChannelConfig {
     pub name: String,
     pub bot_token: String,
