@@ -10,7 +10,7 @@ use crate::{
 
 const PROVIDER_CONFIG_FILE_NAME: &str = "config.json";
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct ProviderConfig {
     pub name: String,
     pub api_key: String,

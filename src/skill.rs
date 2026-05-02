@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{BabataResult, error::BabataError, utils::babata_dir};
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct SkillFrontmatter {
     pub name: String,
     pub description: String,
@@ -41,7 +41,7 @@ pub fn delete_skill(name: &str) -> BabataResult<()> {
     Ok(())
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Skill {
     pub path: PathBuf,
     pub frontmatter: SkillFrontmatter,
